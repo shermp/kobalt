@@ -1,0 +1,33 @@
+# Separate glibc-2.35 dependency sysroot for the M0 WebKit helper.
+# Kobalt application builds continue to use the prepared kobuild SDK.
+FROM docker.io/library/ubuntu@sha256:281c5745f657873d78e5531fc5ba8575f46ab7769b94550ac99543f122679986
+ARG DEBIAN_FRONTEND=noninteractive
+RUN sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list \
+    && dpkg --add-architecture armhf \
+    && for pocket in jammy jammy-updates jammy-security; do \
+         echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports $pocket main universe"; \
+       done > /etc/apt/sources.list.d/armhf.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+       ca-certificates cmake ninja-build make gcc g++ binutils pkg-config \
+       bison flex gperf ruby perl python3 patch unifdef gettext file time \
+       libglib2.0-bin:amd64 \
+       libc6-dev:armhf linux-libc-dev:armhf libglib2.0-dev:armhf \
+       libharfbuzz-dev:armhf libicu-dev:armhf libjpeg-dev:armhf libepoxy-dev:armhf \
+       libgcrypt20-dev:armhf libsoup-3.0-dev:armhf libtasn1-6-dev:armhf \
+       libxkbcommon-dev:armhf libxml2-dev:armhf libpng-dev:armhf \
+       libsqlite3-dev:armhf libwebp-dev:armhf zlib1g-dev:armhf \
+       libfreetype-dev:armhf libfontconfig-dev:armhf liblcms2-dev:armhf \
+       libwoff-dev:armhf libhyphen-dev:armhf libseccomp-dev:armhf libxslt1-dev:armhf \
+    && mkdir -p /opt/wpe-armhf-sysroot \
+    && dpkg-query -W -f='${binary:Package} ${Architecture}\n' \
+       | awk '$2 == "armhf" {print $1}' > /opt/wpe-armhf-packages.txt \
+    && while read package; do \
+         dpkg-query -L "$package" | while read path; do \
+           if [ -f "$path" ] || [ -L "$path" ]; then \
+             cp --parents -a "$path" /opt/wpe-armhf-sysroot/; \
+           fi; \
+         done; \
+       done < /opt/wpe-armhf-packages.txt \
+    && dpkg-query -W > /opt/wpe-armhf-package-versions.tsv \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /work

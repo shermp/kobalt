@@ -1,0 +1,13 @@
+# M0 helper build tools only. This does not build or replace a Kobalt/Qt SDK.
+FROM docker.io/library/ubuntu@sha256:78d4744ead1f5b19b04d0df558ab182a5300903900755e515b2ca4d10eb2044d
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates cmake ninja-build make gcc g++ binutils pkg-config \
+    bison flex gperf ruby perl python3 patch unifdef gettext file time \
+    libglib2.0-dev libharfbuzz-dev libicu-dev libjpeg-dev libepoxy-dev \
+    libgcrypt20-dev libsoup-3.0-dev libtasn1-6-dev libxkbcommon-dev \
+    libxml2-dev libpng-dev libsqlite3-dev libwebp-dev zlib1g-dev \
+    libfreetype-dev libfontconfig-dev liblcms2-dev libwoff-dev libhyphen-dev \
+    libseccomp-dev bubblewrap xdg-dbus-proxy libxslt1-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /work

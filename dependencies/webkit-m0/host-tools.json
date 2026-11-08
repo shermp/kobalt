@@ -1,0 +1,7 @@
+{
+  "cmake-host": {
+    "url": "https://github.com/Kitware/CMake/releases/download/v3.31.8/cmake-3.31.8-linux-x86_64.tar.gz",
+    "sha256": "630615d8e98ac33eba7fbe472626dff5c899c85af3c024585ae109166a6909d0",
+    "directory": "cmake-3.31.8-linux-x86_64"
+  }
+}

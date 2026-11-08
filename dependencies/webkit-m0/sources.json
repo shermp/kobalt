@@ -1,0 +1,12 @@
+{
+  "wpewebkit": {
+    "url": "https://wpewebkit.org/releases/wpewebkit-2.54.2.tar.xz",
+    "sha256": "f3284e19e47fcb5ac8c63c2e1c113dbd65b2423eb8a545f5b345707829004f56",
+    "directory": "wpewebkit-2.54.2"
+  },
+  "kobov5": {
+    "url": "https://github.com/koreader/koxtoolchain/releases/download/2026.08/kobov5.tar.zst",
+    "sha256": "a9eba0aaf17e5cc94fdabb46c2ae06d9bb41936b869ea6479d325c9f79b14a64",
+    "directory": "x-tools/arm-kobov5-linux-gnueabihf"
+  }
+}
