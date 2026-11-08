@@ -2,6 +2,8 @@
 
 Application code lives in `src/` and `platforms/`. Shared assets live in root `assets/`. Pinned third-party source URLs, checksums, patches and CMake recipes live in `dependencies/`. Each platform owns its CMake project, presets and toolchain definitions. Generated files and incremental application objects stay under ignored `build/` in this worktree. Compiled third-party dependencies and their downloads live in the shared [dependency cache](#dependency-cache), which belongs to no worktree.
 
+The optional standalone WPE renderer has separate [M1 build and runtime instructions](webkit-wpe/m1.md). It uses the shared cache and a pinned ARM build image; ordinary application builds do not configure or link it.
+
 Install CMake 3.22 or later on the build host. The Kobo and Android launchers also use it to read source provenance before starting their prepared container.
 
 Application builds do not use Python, compile Qt or read prepared libraries or assets from another checkout. The shared dependency cache is the only exception. Configuration selects the dependency set for the compiler and SDK. When the cache does not have that set yet, configuration downloads the selected third-party archives, verifies their SHA-256 checksums and compiles the libraries before it continues. Exported source bundles use their local `application/upstream/` archives instead. Missing or changed bundled archives fail configuration without a network fallback, also when the cache already has the set. For another local archive directory, set the CMake `KOBALT_SOURCE_ARCHIVES` path. Network access is required for uncached sources and Android Gradle packages.

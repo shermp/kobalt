@@ -1,0 +1,6 @@
+{
+  "image": "sha256:32211887c07ac767d606cca9df82250a24b5c2f1938c48f687aaf8ae353ff7b2",
+  "platform": "linux/amd64",
+  "sysroot": "/opt/wpe-armhf-sysroot",
+  "source_date_epoch": "1786147200"
+}

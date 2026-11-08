@@ -1,0 +1,198 @@
+"""Run inside the existing offline firmware container; no application build logic."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import selectors
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import time
+
+bundle, destination = map(Path, sys.argv[1:3])
+destination.mkdir(parents=True, exist_ok=True)
+records = []
+
+
+def descendants(root):
+    table = {}
+    for path in Path('/proc').glob('[0-9]*/stat'):
+        try:
+            fields = path.read_text().rsplit(')', 1)[1].split()
+            table[int(path.parent.name)] = int(fields[1])
+        except (OSError, ValueError, IndexError):
+            pass
+    selected = {root}
+    while True:
+        more = {pid for pid, parent in table.items() if parent in selected}
+        if more <= selected:
+            return selected - {root}
+        selected |= more
+
+
+class Client:
+    def __init__(self, name):
+        self.name = name
+        self.log = (destination / (name + '.stderr')).open('w')
+        self.process = subprocess.Popen(
+            ['/usr/bin/vn-offline', '/usr/bin/qemu-arm', '-cpu', 'cortex-a7',
+             '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD', str(bundle / 'bin/kobalt-webkit'),
+             '--qemu-prefix', '/firmware/rootfs', '--allow-unsandboxed-experiment'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
+            env=dict(os.environ, WEBKIT_EXEC_PATH='/poison', DISPLAY='poison',
+                     WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS='0'),
+            start_new_session=True,
+        )
+        self.selector = selectors.DefaultSelector()
+        self.selector.register(self.process.stdout, selectors.EVENT_READ)
+        self.pending = b''
+        self.lines = []
+        self.tracked = set()
+        self.runtime = None
+
+    def receive(self, timeout=75):
+        deadline = time.monotonic() + timeout
+        while b'\n' not in self.pending:
+            if not self.selector.select(max(0, deadline - time.monotonic())):
+                raise TimeoutError(self.name + ': protocol deadline')
+            chunk = os.read(self.process.stdout.fileno(), 65536)
+            if not chunk:
+                raise EOFError(self.name + ': renderer closed output')
+            self.pending += chunk
+        line, self.pending = self.pending.split(b'\n', 1)
+        text = line.decode('ascii')
+        self.lines.append(text)
+        assert text.startswith('KWRP/1 '), text
+        return text
+
+    def send(self, commands):
+        self.process.stdin.write(commands.encode('ascii'))
+        self.process.stdin.flush()
+
+    def render(self):
+        assert self.receive() == 'KWRP/1 0 READY experiment'
+        self.send('KWRP/1 1 PING\nKWRP/1 2 RENDER 800 1100\n'
+                  'KWRP/1 3 PING\nKWRP/1 4 RENDER 800 1100\n')
+        answers = [self.receive() for _ in range(4)]
+        assert 'KWRP/1 1 OK PONG' in answers
+        assert 'KWRP/1 3 OK PONG' in answers
+        assert 'KWRP/1 4 ERROR busy' in answers
+        snapshot = next(line for line in answers if line.startswith('KWRP/1 2 OK SNAPSHOT 800 1100 '))
+        assert answers.index('KWRP/1 3 OK PONG') < answers.index(snapshot), answers
+        path = Path(snapshot.split()[-1])
+        assert path.is_file() and path.name == 'snapshot.png'
+        self.runtime = path.parent
+        image = path.read_bytes()
+        assert image[:8] == b'\x89PNG\r\n\x1a\n' and struct.unpack('>II', image[16:24]) == (800, 1100)
+        shutil.copy2(path, destination / (self.name + '.png'))
+        self.tracked |= descendants(self.process.pid)
+        for pid in self.tracked:
+            try:
+                modules = {Path(line.split()[-1]).name for line in Path('/proc', str(pid), 'maps').read_text().splitlines() if '/' in line}
+                unexpected = [name for name in modules if name.startswith(('libEGL', 'libGLES', 'libGL.', 'libGLX', 'libvulkan', 'libgbm', 'libdrm', 'libgst'))]
+                assert not unexpected, (pid, unexpected)
+            except FileNotFoundError:
+                pass
+        return hashlib.sha256(image).hexdigest()
+
+    def kill_named(self, name):
+        selected = []
+        for pid in descendants(self.process.pid):
+            try:
+                arguments = Path('/proc', str(pid), 'cmdline').read_bytes().split(b'\0')
+                if any(Path(arg.decode(errors='replace')).name == name for arg in arguments if arg):
+                    selected.append(pid)
+            except OSError:
+                pass
+        assert len(selected) == 1, (name, selected)
+        self.tracked |= descendants(self.process.pid)
+        os.kill(selected[0], signal.SIGKILL)
+
+    def close(self, expected):
+        self.process.stdin.close()
+        result = self.process.wait(timeout=10)
+        assert result == expected, (self.name, result, self.log.name)
+        assert not any(Path('/proc', str(pid)).exists() for pid in self.tracked), self.tracked
+        assert self.runtime is None or not self.runtime.exists(), self.runtime
+        self.selector.close()
+        self.process.stdout.close()
+        self.log.close()
+        assert 'CRITICAL' not in Path(self.log.name).read_text(), self.log.name
+        (destination / (self.name + '.protocol')).write_text('\n'.join(self.lines) + '\n')
+        records.append(dict(case=self.name, result=result, cleanup=True))
+
+    def abort(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=3)
+        self.log.close()
+
+
+active = None
+try:
+    checksums = []
+    for label in ('cold', 'repeat', 'web-crash', 'worker-crash', 'after-crash'):
+        active = Client(label)
+        checksums.append(active.render())
+        if label == 'web-crash':
+            active.kill_named('WPEWebProcess')
+            assert active.receive() == 'KWRP/1 0 ERROR web-process-terminated'
+            active.close(1)
+        elif label == 'worker-crash':
+            active.kill_named('kobalt-webkit-worker')
+            active.close(137)
+        else:
+            active.send('KWRP/1 5 RENDER 600 800\n')
+            resize = active.receive()
+            assert resize.startswith('KWRP/1 5 OK SNAPSHOT 600 800 '), resize
+            active.send('KWRP/1 6 SHUTDOWN\n')
+            assert active.receive() == 'KWRP/1 6 OK BYE'
+            active.close(0)
+        active = None
+    assert len(set(checksums)) == 1, checksums
+    for label, request, response in (
+        ('version', 'KWRP/2 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
+        ('oversized', 'X' * 300 + '\n', 'KWRP/1 0 ERROR oversized-request'),
+        ('duplicate', 'KWRP/1 1 PING\nKWRP/1 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
+    ):
+        active = Client(label)
+        assert active.receive() == 'KWRP/1 0 READY experiment'
+        active.send(request)
+        if label == 'duplicate':
+            assert active.receive() == 'KWRP/1 1 OK PONG'
+        assert active.receive() == response
+        active.close(2)
+        active = None
+    active = Client('eof')
+    assert active.receive() == 'KWRP/1 0 READY experiment'
+    active.send('KWRP/1 1 RENDER 800 1100\n')
+    active.tracked |= descendants(active.process.pid)
+    active.close(0)
+    active = Client('backpressure')
+    assert active.receive() == 'KWRP/1 0 READY experiment'
+    os.set_blocking(active.process.stdin.fileno(), False)
+    payload = ''.join('KWRP/1 ' + str(index) + ' PING\n' for index in range(1, 10001)).encode('ascii')
+    offset = 0
+    deadline = time.monotonic() + 15
+    while active.process.poll() is None and time.monotonic() < deadline:
+        try:
+            if offset < len(payload):
+                offset += os.write(active.process.stdin.fileno(), payload[offset:])
+        except BlockingIOError:
+            pass
+        except BrokenPipeError:
+            break
+        time.sleep(.01)
+    active.close(1)
+    active = None
+    (destination / 'results.json').write_text(json.dumps(dict(runs=records, snapshot_sha256=checksums[0]), indent=2))
+    print('WEBKIT_FIRMWARE_OK ' + json.dumps(records), flush=True)
+finally:
+    if active is not None:
+        active.abort()

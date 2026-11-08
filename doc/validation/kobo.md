@@ -1,5 +1,7 @@
 # Kobo adapter checks
 
+The optional standalone WebKit helper has separate [M1 runtime checks](../webkit-wpe/m1.md#verification). These do not replace the application adapter checks below.
+
 Label `kobo`. Build `mac-tests`, then run `ctest --preset mac -L kobo` from `platforms/desktop/`. `ctest --preset mac -N -L kobo` lists its tests.
 
 These checks cover startup recovery, the native startup wait, Nickel Screensaver discovery, native dialogs above the reader, the Nickel book menu, session and font-scale adapters and Qt5 compatibility helpers. Sleep, USB and shutdown adapters are in [Sleep, USB and power](sleep.md).

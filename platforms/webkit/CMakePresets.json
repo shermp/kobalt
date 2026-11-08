@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "armhf",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/webkit/arm",
+      "toolchainFile": "${sourceDir}/../../dependencies/webkit/arm.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "OFF" }
+    },
+    {
+      "name": "native-supervisor",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/webkit/native-tools",
+      "cacheVariables": { "KOBALT_WEBKIT_WORKER": "OFF", "BUILD_TESTING": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "armhf", "configurePreset": "armhf" },
+    { "name": "native-supervisor", "configurePreset": "native-supervisor" }
+  ],
+  "testPresets": [
+    {
+      "name": "native-supervisor",
+      "configurePreset": "native-supervisor",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
