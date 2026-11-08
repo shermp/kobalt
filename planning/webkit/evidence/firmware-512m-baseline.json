@@ -1,0 +1,7 @@
+{
+  "memory.current": "344641536\n",
+  "memory.peak": "349081600\n",
+  "memory.max": "536870912\n",
+  "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "cpu.max": "100000 100000\n"
+}

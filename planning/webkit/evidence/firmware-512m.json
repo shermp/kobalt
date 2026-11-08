@@ -1,0 +1,358 @@
+[
+  {
+    "case": "cold-1",
+    "returncode": 0,
+    "wall_s": 4.891121488999488,
+    "cgroup": {
+      "memory.current": "323608576\n",
+      "memory.peak": "524963840\n",
+      "memory.max": "536870912\n",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "cpu.max": "100000 100000\n"
+    },
+    "resources": {
+      "controller_to_idle_s": 2.4260781409975607,
+      "elapsed_s": 1.0067201029996795,
+      "idle_cpu_percent": 0.0,
+      "pss_kib": 240352,
+      "rss_kib": 306184,
+      "processes": [
+        {
+          "pid": 203,
+          "parent": 202,
+          "ticks": 0,
+          "name": "timeout",
+          "Rss": 1916,
+          "Pss": 843,
+          "Private_Clean": 116,
+          "Private_Dirty": 96,
+          "graphics_modules": []
+        },
+        {
+          "pid": 204,
+          "parent": 203,
+          "ticks": 63,
+          "name": "qemu-arm",
+          "Rss": 73456,
+          "Pss": 50850,
+          "Private_Clean": 1292,
+          "Private_Dirty": 38352,
+          "graphics_modules": []
+        },
+        {
+          "pid": 209,
+          "parent": 204,
+          "ticks": 22,
+          "name": "WPENetworkProce",
+          "Rss": 43704,
+          "Pss": 24360,
+          "Private_Clean": 200,
+          "Private_Dirty": 16184,
+          "graphics_modules": []
+        },
+        {
+          "pid": 215,
+          "parent": 204,
+          "ticks": 146,
+          "name": "WPEWebProcess",
+          "Rss": 187108,
+          "Pss": 164299,
+          "Private_Clean": 25032,
+          "Private_Dirty": 127936,
+          "graphics_modules": []
+        }
+      ],
+      "errors": [],
+      "process_set_changed": false
+    },
+    "cleanup": "SUBPROCESS_CLEANUP_OK",
+    "temporary_disk_kib": 0,
+    "ping": "dispatched",
+    "sha256.png": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008"
+  },
+  {
+    "case": "cold-2",
+    "returncode": 0,
+    "wall_s": 5.097800143998029,
+    "cgroup": {
+      "memory.current": "322998272\n",
+      "memory.peak": "528117760\n",
+      "memory.max": "536870912\n",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "cpu.max": "100000 100000\n"
+    },
+    "resources": {
+      "controller_to_idle_s": 2.5792104529973585,
+      "elapsed_s": 1.0062926999999036,
+      "idle_cpu_percent": 0.0,
+      "pss_kib": 240477,
+      "rss_kib": 306272,
+      "processes": [
+        {
+          "pid": 239,
+          "parent": 238,
+          "ticks": 0,
+          "name": "timeout",
+          "Rss": 1944,
+          "Pss": 852,
+          "Private_Clean": 108,
+          "Private_Dirty": 100,
+          "graphics_modules": []
+        },
+        {
+          "pid": 240,
+          "parent": 239,
+          "ticks": 71,
+          "name": "qemu-arm",
+          "Rss": 73540,
+          "Pss": 50914,
+          "Private_Clean": 1280,
+          "Private_Dirty": 38440,
+          "graphics_modules": []
+        },
+        {
+          "pid": 245,
+          "parent": 240,
+          "ticks": 23,
+          "name": "WPENetworkProce",
+          "Rss": 43684,
+          "Pss": 24342,
+          "Private_Clean": 204,
+          "Private_Dirty": 16188,
+          "graphics_modules": []
+        },
+        {
+          "pid": 251,
+          "parent": 240,
+          "ticks": 152,
+          "name": "WPEWebProcess",
+          "Rss": 187104,
+          "Pss": 164369,
+          "Private_Clean": 25064,
+          "Private_Dirty": 128004,
+          "graphics_modules": []
+        }
+      ],
+      "errors": [],
+      "process_set_changed": false
+    },
+    "cleanup": "SUBPROCESS_CLEANUP_OK",
+    "temporary_disk_kib": 0,
+    "ping": "dispatched",
+    "sha256.png": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008"
+  },
+  {
+    "case": "metrics",
+    "returncode": 0,
+    "wall_s": 13.02245019899783,
+    "cgroup": {
+      "memory.current": "325091328\n",
+      "memory.peak": "528117760\n",
+      "memory.max": "536870912\n",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "cpu.max": "100000 100000\n"
+    },
+    "resources": {
+      "controller_to_idle_s": 2.574369835001562,
+      "elapsed_s": 5.0119756430030975,
+      "idle_cpu_percent": 0.39904423773329256,
+      "pss_kib": 240682,
+      "rss_kib": 306592,
+      "processes": [
+        {
+          "pid": 278,
+          "parent": 277,
+          "ticks": 0,
+          "name": "timeout",
+          "Rss": 1940,
+          "Pss": 841,
+          "Private_Clean": 100,
+          "Private_Dirty": 100,
+          "graphics_modules": []
+        },
+        {
+          "pid": 279,
+          "parent": 278,
+          "ticks": 83,
+          "name": "qemu-arm",
+          "Rss": 73528,
+          "Pss": 50914,
+          "Private_Clean": 1304,
+          "Private_Dirty": 38424,
+          "graphics_modules": []
+        },
+        {
+          "pid": 284,
+          "parent": 279,
+          "ticks": 20,
+          "name": "WPENetworkProce",
+          "Rss": 43724,
+          "Pss": 24390,
+          "Private_Clean": 212,
+          "Private_Dirty": 16220,
+          "graphics_modules": []
+        },
+        {
+          "pid": 290,
+          "parent": 279,
+          "ticks": 147,
+          "name": "WPEWebProcess",
+          "Rss": 187400,
+          "Pss": 164537,
+          "Private_Clean": 25016,
+          "Private_Dirty": 128164,
+          "graphics_modules": []
+        }
+      ],
+      "errors": [],
+      "process_set_changed": false
+    },
+    "cleanup": "SUBPROCESS_CLEANUP_OK",
+    "temporary_disk_kib": 0,
+    "ping": "dispatched",
+    "sha256.png": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008",
+    "sha256.png.second.png": "33e88530cefc9501b5d96ce1f518ab406671ff7289cf0ebe0d69cbd33660a8e7"
+  },
+  {
+    "case": "crash",
+    "returncode": 1,
+    "wall_s": 3.8408205550003913,
+    "cgroup": {
+      "memory.current": "323813376\n",
+      "memory.peak": "528117760\n",
+      "memory.max": "536870912\n",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "cpu.max": "100000 100000\n"
+    },
+    "resources": {
+      "controller_to_idle_s": 2.392469420999987,
+      "elapsed_s": 1.0061477929993998,
+      "idle_cpu_percent": 0.9938897714210824,
+      "pss_kib": 240323,
+      "rss_kib": 305992,
+      "processes": [
+        {
+          "pid": 331,
+          "parent": 330,
+          "ticks": 0,
+          "name": "timeout",
+          "Rss": 1864,
+          "Pss": 811,
+          "Private_Clean": 100,
+          "Private_Dirty": 104,
+          "graphics_modules": []
+        },
+        {
+          "pid": 332,
+          "parent": 331,
+          "ticks": 68,
+          "name": "qemu-arm",
+          "Rss": 73392,
+          "Pss": 50820,
+          "Private_Clean": 1320,
+          "Private_Dirty": 38352,
+          "graphics_modules": []
+        },
+        {
+          "pid": 337,
+          "parent": 332,
+          "ticks": 21,
+          "name": "WPENetworkProce",
+          "Rss": 43696,
+          "Pss": 24400,
+          "Private_Clean": 200,
+          "Private_Dirty": 16176,
+          "graphics_modules": []
+        },
+        {
+          "pid": 343,
+          "parent": 332,
+          "ticks": 145,
+          "name": "WPEWebProcess",
+          "Rss": 187040,
+          "Pss": 164292,
+          "Private_Clean": 25016,
+          "Private_Dirty": 127980,
+          "graphics_modules": []
+        }
+      ],
+      "errors": [],
+      "process_set_changed": false
+    },
+    "cleanup": "SUBPROCESS_CLEANUP_OK",
+    "temporary_disk_kib": 0,
+    "ping": "dispatched",
+    "sha256.png": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008"
+  },
+  {
+    "case": "after-crash",
+    "returncode": 0,
+    "wall_s": 4.968066938999982,
+    "cgroup": {
+      "memory.current": "323874816\n",
+      "memory.peak": "528117760\n",
+      "memory.max": "536870912\n",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+      "cpu.max": "100000 100000\n"
+    },
+    "resources": {
+      "controller_to_idle_s": 2.5271878849998757,
+      "elapsed_s": 1.0066154000014649,
+      "idle_cpu_percent": 0.0,
+      "pss_kib": 240290,
+      "rss_kib": 305872,
+      "processes": [
+        {
+          "pid": 366,
+          "parent": 365,
+          "ticks": 0,
+          "name": "timeout",
+          "Rss": 1884,
+          "Pss": 842,
+          "Private_Clean": 116,
+          "Private_Dirty": 100,
+          "graphics_modules": []
+        },
+        {
+          "pid": 367,
+          "parent": 366,
+          "ticks": 71,
+          "name": "qemu-arm",
+          "Rss": 73388,
+          "Pss": 50834,
+          "Private_Clean": 1336,
+          "Private_Dirty": 38348,
+          "graphics_modules": []
+        },
+        {
+          "pid": 372,
+          "parent": 367,
+          "ticks": 26,
+          "name": "WPENetworkProce",
+          "Rss": 43620,
+          "Pss": 24318,
+          "Private_Clean": 196,
+          "Private_Dirty": 16156,
+          "graphics_modules": []
+        },
+        {
+          "pid": 378,
+          "parent": 367,
+          "ticks": 147,
+          "name": "WPEWebProcess",
+          "Rss": 186980,
+          "Pss": 164296,
+          "Private_Clean": 25096,
+          "Private_Dirty": 127904,
+          "graphics_modules": []
+        }
+      ],
+      "errors": [],
+      "process_set_changed": false
+    },
+    "cleanup": "SUBPROCESS_CLEANUP_OK",
+    "temporary_disk_kib": 0,
+    "ping": "dispatched",
+    "sha256.png": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008"
+  }
+]

@@ -1,0 +1,485 @@
+{
+  "elf_count": 59,
+  "elf_bytes": 100917488,
+  "bundle_bytes": 100997695,
+  "elfs": [
+    {
+      "file": "bin/wpe-snapshot",
+      "size": 18176,
+      "sha256": "d95810ccd02f9b27f81db8503aecbfde6cb08d260fb90b4c0844aedb8f989c87",
+      "required_versions": {
+        "GLIBC": "2.34",
+        "GLIBCXX": "3.4",
+        "CXXABI": "1.3.9"
+      }
+    },
+    {
+      "file": "lib/wpe-webkit-2.0/injected-bundle/libWPEInjectedBundle.so",
+      "size": 5368,
+      "sha256": "aba70dd9dc61aed5441a5d02898f4b1c3bc7204edccf7a330b2c47562b0ea30e",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "libexec/wpe-webkit-2.0/WPENetworkProcess",
+      "size": 5460,
+      "sha256": "f8698dbe11d400540c202688c02550c465e52b384a530e79e232a0ddea7e1974",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "libexec/wpe-webkit-2.0/WPEWebProcess",
+      "size": 5460,
+      "sha256": "6d33facd7c5530aacd9ea1dfbeecafced1aa4e65c6e09c265ff788dc5abbd377",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libWPEWebKit-2.0.so.1.11.5",
+      "size": 52441348,
+      "sha256": "dacbf5a2351cefe14051a03f4470e94e372c98b5a6c1521710b07576aebe27e1",
+      "required_versions": {
+        "GLIBC": "2.35",
+        "GLIBCXX": "3.4.30",
+        "CXXABI": "1.3.9"
+      }
+    },
+    {
+      "file": "private/libatomic.so.1.2.0",
+      "size": 21872,
+      "sha256": "3f697bc92812d3efce61a88215053e06f439f6a3ac78c2ba6d4013b59a8d2fd3",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libblkid.so.1.1.0",
+      "size": 214968,
+      "sha256": "58e8471e2872f14e21b150f1da7cee394de668d382a99d52cf64910e9377483a",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libbrotlicommon.so.1.0.9",
+      "size": 132592,
+      "sha256": "f2897521d6be1d047f55000683bb99c789de4fd6c4c6846953fd302c441cd17d",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libbrotlidec.so.1.0.9",
+      "size": 30184,
+      "sha256": "a79cb8b1c59210c0f4beda8fe1a8a7b1af03192f90a7d8aa6a7ffb88f4b2c8ed",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libcom_err.so.2.1",
+      "size": 9528,
+      "sha256": "d1db9cc67c19815b69618bb0542c238412624e3c52b1d44c348a68096b1943b9",
+      "required_versions": {
+        "GLIBC": "2.28"
+      }
+    },
+    {
+      "file": "private/libepoxy.so.0.0.0",
+      "size": 744580,
+      "sha256": "618dc0684d47c81ae6b762feab1d2533c5e4a34880f2a12f2f5ed0ae6a33d361",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libexpat.so.1.8.7",
+      "size": 116288,
+      "sha256": "eea9c889485292b2f8f68209c0e83d96bd87e6c378a5bb88130fd1dea51d27a2",
+      "required_versions": {
+        "GLIBC": "2.25"
+      }
+    },
+    {
+      "file": "private/libffi.so.8.1.0",
+      "size": 26280,
+      "sha256": "6d25c46b6471b9473767b846769c80258bab392ed12ec90d1cea196600501989",
+      "required_versions": {
+        "GLIBC": "2.27"
+      }
+    },
+    {
+      "file": "private/libfontconfig.so.1.12.0",
+      "size": 186224,
+      "sha256": "c0172db4f547769b3d9c8dd90cd1616f15dbf9ec51dd0ff95d385ebccf383804",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libfreetype.so.6.18.1",
+      "size": 476652,
+      "sha256": "f025768b548c748363d232a8555ff58cadc21430b2f695bb8ddad0924d91935a",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libgcc_s.so.1",
+      "size": 99916,
+      "sha256": "d67a460a83d3d191d5d434ee7d232a50b1b0627ed0698c55d24ac4751e5c569d",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libgcrypt.so.20.3.4",
+      "size": 734256,
+      "sha256": "5961d60456cd3998c558eca5ea970fa0eb3f630f0d260b9484a996bb916b4d95",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libgio-2.0.so.0.7200.4",
+      "size": 1235092,
+      "sha256": "e4908e215d298ec534279e836e2edd692b7fa3f91608a8a47f51536d2c01fabc",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libglib-2.0.so.0.7200.4",
+      "size": 936344,
+      "sha256": "6b8ae0e29e6c761cdfa6d19e94d30b4ffcbedf175f8d132080519b5e2053bfeb",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libgmodule-2.0.so.0.7200.4",
+      "size": 9644,
+      "sha256": "674d5b136f380d4189307aaa90c15145dc8dd2928c01c6035e6c5cee4291bb37",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libgobject-2.0.so.0.7200.4",
+      "size": 252280,
+      "sha256": "06d5a50025edfee7f3e52fe1bdd996f48fd069c3ebb376eae5e6a57d11376cd6",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libgpg-error.so.0.32.1",
+      "size": 95636,
+      "sha256": "b42ffb821b3504c3ca00125b9e546acfed28e6e18e7ead5ee234198cdcb4274f",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libgraphite2.so.3.2.1",
+      "size": 95700,
+      "sha256": "ffc4e2ac1595e4ac1c5d48fa8f15b3c2d861d3cbf3b4e380a0be350c597c7bc2",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libgssapi_krb5.so.2.2",
+      "size": 192604,
+      "sha256": "1b2b5f4322901375108ad1370526ef25b94d79e468fb2745c7286b41e56b7a7c",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libharfbuzz-icu.so.0.20704.0",
+      "size": 9616,
+      "sha256": "bff1f327624df0febe4e1a0e628f3db7e6dcd5d3fee2d681c68e336bf86ec2d6",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libharfbuzz.so.0.20704.0",
+      "size": 629676,
+      "sha256": "2e6deda85b9091165ae6f7602d30ee2b6dc23fece39f7ba873e9b9929005d85b",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libhyphen.so.0.3.0",
+      "size": 13576,
+      "sha256": "39a3b89ba51a94bf86c16b43b633c6215d97b7a27035345cd4e591acd3f118e1",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libicudata.so.70.1",
+      "size": 29471896,
+      "sha256": "8667834505b1ad9b965758f1bf1752730b396bdb3b48cf3484a7de545c5d63e0",
+      "required_versions": {}
+    },
+    {
+      "file": "private/libicui18n.so.70.1",
+      "size": 2111044,
+      "sha256": "27cd765570a5ecd659d9d853134230a5e89d9490588ee92af50a237030c8ca74",
+      "required_versions": {
+        "GLIBC": "2.29",
+        "GLIBCXX": "3.4",
+        "CXXABI": "1.3.8"
+      }
+    },
+    {
+      "file": "private/libicuuc.so.70.1",
+      "size": 1357380,
+      "sha256": "f67033e1fdf547f66ea4a285b4232aba7b315e509d6227af854e7cde5784858b",
+      "required_versions": {
+        "GLIBC": "2.34",
+        "GLIBCXX": "3.4.11",
+        "CXXABI": "1.3.8"
+      }
+    },
+    {
+      "file": "private/libidn2.so.0.3.7",
+      "size": 120128,
+      "sha256": "4ae60e090e67ecec10dd06fd1a88a246fd05ec2bc2b5b28c995a282c15cb7990",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libjpeg.so.8.2.2",
+      "size": 206932,
+      "sha256": "a2e6e7c928814da844cb5bde4bda01207b2fca6452824f9679fd4c289ada2627",
+      "required_versions": {
+        "GLIBC": "2.7"
+      }
+    },
+    {
+      "file": "private/libk5crypto.so.3.1",
+      "size": 141016,
+      "sha256": "70a2c9e7b53a45e1b1f8d13012edf730a3f72b1210066cc37a43e1cfad7437f7",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libkeyutils.so.1.9",
+      "size": 9536,
+      "sha256": "d054d11b083b3a7747676af528046427b892e3e264e739f0d2e95d61c4b2ded2",
+      "required_versions": {
+        "GLIBC": "2.7"
+      }
+    },
+    {
+      "file": "private/libkrb5.so.3.3",
+      "size": 558220,
+      "sha256": "4db458c75a631717a38af0a71c9656c5f53ccbb61e06018aaeeb87d3c2954c9b",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libkrb5support.so.0.1",
+      "size": 30536,
+      "sha256": "46c683f96a0cbfbd80dbcc6cf306bed49a5bb298d0fd0f64f60ae6a990bf1bc8",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/liblcms2.so.2.0.12",
+      "size": 232280,
+      "sha256": "6dc306ed6b6c145cf4900f5d58c216619735a06861f8e90843c78a33bc53c7eb",
+      "required_versions": {
+        "GLIBC": "2.29"
+      }
+    },
+    {
+      "file": "private/liblzma.so.5.2.5",
+      "size": 104024,
+      "sha256": "d87343040b4c36e7d39d2f61bc0c72a756ec92914d36bf1807e7d4825d5b6055",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libmount.so.1.1.0",
+      "size": 255760,
+      "sha256": "8f888f1957c10da0eab2ada44d6f376ae3471a80be670c92ced76caa7cef7864",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libnghttp2.so.14.20.1",
+      "size": 112148,
+      "sha256": "ffdb874f20826d38ca5f6b44015dadba9e97280877e41654a88e09f854a1b58e",
+      "required_versions": {
+        "GLIBC": "2.17"
+      }
+    },
+    {
+      "file": "private/libpcre.so.3.13.3",
+      "size": 324940,
+      "sha256": "a20e2506aa973e8e31e25eb1092212190adb937dcaa71e2a766002e0065f83c7",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libpcre2-8.so.0.10.4",
+      "size": 419632,
+      "sha256": "964352bd4b82f6001900fbe981c494c843d95aba0c4e43ed053cea5941837563",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libpng16.so.16.37.0",
+      "size": 144700,
+      "sha256": "42f6e13de92727b709bf305d2e5570e9699147798455f2ae4585b979b71bc647",
+      "required_versions": {
+        "GLIBC": "2.29"
+      }
+    },
+    {
+      "file": "private/libpsl.so.5.3.2",
+      "size": 66824,
+      "sha256": "d6de5549524ca46306213fccf26decf5b5ab25a5991ad35ff4dd42b5e380b217",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libseccomp.so.2.5.3",
+      "size": 104012,
+      "sha256": "e68d55e6cfc3cadb035cb59daf112bd364f79bf5de47c967b6d4030f135b52e2",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libselinux.so.1",
+      "size": 103940,
+      "sha256": "2235e515ee64ca7503666f8a36026bfc1cf79ef801f3952ed8a97a394fad4750",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libsoup-3.0.so.0.0.5",
+      "size": 370292,
+      "sha256": "36d7836de6e0a67250ffe89c76f20f00ec7c36cbcab4957676042e267cbc2923",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libsqlite3.so.0.8.6",
+      "size": 807640,
+      "sha256": "281ad5105b821ca6a02b6727673a2b2af9ff7b5bf786b2c459ef23dfeaf061c7",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libstdc++.so.6.0.33",
+      "size": 1651056,
+      "sha256": "895375350f97bb970fd6d13f5f575cbc362fe668b4773454d06ff49aa4daffd4",
+      "required_versions": {
+        "GLIBC": "2.35"
+      }
+    },
+    {
+      "file": "private/libtasn1.so.6.6.2",
+      "size": 50552,
+      "sha256": "bb88860a4285f6026ac0b9a06ae0a0b28854ef94d25b5bddd9dbe8c5d7d5d1b9",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libunistring.so.2.2.0",
+      "size": 1590628,
+      "sha256": "8a7f140433121d4bc6542b2b2cba1c6040770a53ec176bb22472356627c33bc3",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libuuid.so.1.3.0",
+      "size": 21968,
+      "sha256": "642ba20b41f9c12f3589bf60f83a6150d90f3b80233b6805d47f66a570337e22",
+      "required_versions": {
+        "GLIBC": "2.28"
+      }
+    },
+    {
+      "file": "private/libwebp.so.7.1.3",
+      "size": 252004,
+      "sha256": "c3d3e45191d6ed140ed27981643856c1c7882cd0b9704fd6b4145bf49e26f766",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libwebpdemux.so.2.0.9",
+      "size": 13704,
+      "sha256": "f9f94e2aef9f68a913f01609eaca6841b496520a2b7e20dd8313ab9c3e938908",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    },
+    {
+      "file": "private/libwebpmux.so.3.0.8",
+      "size": 21944,
+      "sha256": "77dfc533060abeb370194ddb9c70474f08cf58273764c446a77f21ced9dbad2e",
+      "required_versions": {
+        "GLIBC": "2.29"
+      }
+    },
+    {
+      "file": "private/libxkbcommon.so.0.0.0",
+      "size": 210544,
+      "sha256": "9d8ec78c5a7e03ab40f43418f7bff9f410246f0b5af0c8d8ca3cd460e8674d12",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libxml2.so.2.9.13",
+      "size": 1067988,
+      "sha256": "526aade40bb3948eba1edd73967b5f9509f7114a87948b22c91e50fcce4ebcef",
+      "required_versions": {
+        "GLIBC": "2.34"
+      }
+    },
+    {
+      "file": "private/libxslt.so.1.1.34",
+      "size": 169560,
+      "sha256": "c5668cc729f2d7c857628561bf597127ec5705aed7a78283bd8aac5fd41ee1aa",
+      "required_versions": {
+        "GLIBC": "2.33"
+      }
+    },
+    {
+      "file": "private/libz.so.1.2.11",
+      "size": 75340,
+      "sha256": "d9d063f1dd5cd3dad8886486e92177cba3677d8f67f53857ab83326120c7e1dc",
+      "required_versions": {
+        "GLIBC": "2.4"
+      }
+    }
+  ]
+}

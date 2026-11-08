@@ -1,0 +1,31 @@
+--- a/internal/launcher/command.go
++++ b/internal/launcher/command.go
+@@ -141,11 +141,9 @@
+ 	}
+ 	e.set("VN_EVDEV_TOUCH", touch)
+ 	e.set("VN_EVDEV_TOUCH_LAYOUT", prof.EvdevTouch)
+-	if prof.Generation() != "5" {
+-		// The observer runs ARM programs that Nickel starts under qemu-arm with
+-		// this prefix. QEMU reads the same variable as its -L option.
+-		e.set("QEMU_LD_PREFIX", guestRoot(prof))
+-	}
++	// The observer runs ARM programs that Nickel starts under qemu-arm with
++	// this prefix. QEMU reads the same variable as its -L option.
++	e.set("QEMU_LD_PREFIX", guestRoot(prof))
+ 	if prof.Generation() == "5" {
+ 		root := guestRoot(prof)
+ 		e.set("LD_LIBRARY_PATH", root+"/usr/local/Kobo:"+root+"/usr/lib:"+root+"/lib")
+--- a/internal/launcher/command_test.go
++++ b/internal/launcher/command_test.go
+@@ -304,9 +304,9 @@
+ 	}
+ }
+ 
+-func TestQt5ProgramsStartedByNickelKeepTheLibraryPrefix(t *testing.T) {
++func TestProgramsStartedByNickelKeepTheLibraryPrefix(t *testing.T) {
+ 	for _, c := range []struct{ device, firmware, prefix string }{
+-		{"libra-colour", "4", "/usr/arm-linux-gnueabihf"}, {"clara-colour", "6", ""},
++		{"libra-colour", "4", "/usr/arm-linux-gnueabihf"}, {"clara-colour", "6", "/firmware/rootfs"},
+ 	} {
+ 		command, err := Command(fakeEngine(t), resolve(t, c.device, c.firmware), filepath.Join(t.TempDir(), c.device), "volume", Args{})
+ 		if err != nil {
