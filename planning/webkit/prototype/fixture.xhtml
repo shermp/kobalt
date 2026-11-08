@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<title>Kobalt WPE software rendering probe</title>
+<style>
+@font-face { font-family: 'M0 Serif'; src: url('font.ttf'); }
+html { background: white; color: #17212b; }
+body { margin: 48px; font: 24px/1.45 'M0 Serif', serif; }
+h1 { font-size: 42px; font-weight: normal; line-height: 1.1; }
+p { text-align: justify; }
+figure { margin: 24px 0; display: flex; align-items: center; gap: 24px; }
+img { width: 96px; height: 96px; }
+small { font: 16px sans-serif; color: #456; }
+#js-status { color: #246451; }
+</style>
+</head>
+<body>
+<small>KOBALT · WPE WEBKIT M0</small>
+<h1>A page without a display</h1>
+<p>Typography begins with the shape of a letter. This local XHTML page uses an embedded font, justified paragraphs, ligatures and carefully spaced punctuation: “office”, “affinity” and café.</p>
+<figure><img id="raster" src="raster.png" alt="Blue raster checkerboard" /><img src="illustration.svg" alt="Vector landscape" /></figure>
+<p>Raster images and SVG share the page with mathematical notation:</p>
+<math id="math" xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mi>a</mi><mn>2</mn></msup><mo>+</mo><msup><mi>b</mi><mn>2</mn></msup><mo>=</mo><msup><mi>c</mi><mn>2</mn></msup></mrow></math>
+<p>Pagination, reading locations and annotations remain separate feasibility questions. This probe asks whether software painting can return a correctly sized page image.</p>
+<p id="js-status">JavaScript pending.</p>
+</body>
+</html>
