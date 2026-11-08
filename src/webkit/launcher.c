@@ -87,18 +87,26 @@ int main(int argc, char **argv)
     if (setrlimit(RLIMIT_CORE, &core_limit))
         fail("disable core files");
     const char *bundle_argument = NULL, *guest = NULL;
-    int experiment = 0;
+    const char *sandbox_mode = "required";
     for (int i = 1; i < argc; ++i) {
-        if (!strcmp(argv[i], "--allow-unsandboxed-experiment"))
-            experiment = 1;
-        else if (!strcmp(argv[i], "--bundle") && i + 1 < argc)
+        if (!strcmp(argv[i], "--allow-unsandboxed-experiment")
+            || !strcmp(argv[i], "--allow-unsandboxed-device")) {
+            const char *selected = !strcmp(argv[i], "--allow-unsandboxed-device")
+                    ? "device-unsandboxed"
+                    : "experiment";
+            if (strcmp(sandbox_mode, "required") && strcmp(sandbox_mode, selected)) {
+                fprintf(stderr, "kobalt-webkit: conflicting sandbox modes\n");
+                return 2;
+            }
+            sandbox_mode = selected;
+        } else if (!strcmp(argv[i], "--bundle") && i + 1 < argc)
             bundle_argument = argv[++i];
         else if (!strcmp(argv[i], "--qemu-prefix") && i + 1 < argc)
             guest = argv[++i];
         else {
             fprintf(stderr,
                     "Usage: kobalt-webkit [--bundle directory] [--qemu-prefix sysroot] "
-                    "[--allow-unsandboxed-experiment]\n");
+                    "[--allow-unsandboxed-experiment | --allow-unsandboxed-device]\n");
             return 2;
         }
     }
@@ -135,6 +143,9 @@ int main(int argc, char **argv)
     } else
         snprintf(libraries, sizeof(libraries), "LD_LIBRARY_PATH=%s/private", bundle);
 
+    fprintf(stderr, "kobalt-webkit: sandbox-mode=%s\n", sandbox_mode);
+    if (!strcmp(sandbox_mode, "device-unsandboxed"))
+        fprintf(stderr, "kobalt-webkit: WebKit sandbox disabled by explicit device opt-in\n");
     char scratch[] = "/tmp/kobalt-webkit-XXXXXX";
     if (!mkdtemp(scratch))
         fail("runtime directory");
@@ -177,10 +188,9 @@ int main(int argc, char **argv)
         environment("WEBKIT_EXEC_PATH", path);
         join_path(path, bundle, "/lib/wpe-webkit-2.0/injected-bundle");
         environment("WEBKIT_INJECTED_BUNDLE_PATH", path);
-        if (experiment) {
+        environment("KOBALT_WEBKIT_SANDBOX_MODE", sandbox_mode);
+        if (strcmp(sandbox_mode, "required"))
             environment("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
-            environment("KOBALT_WEBKIT_EXPERIMENT", "1");
-        }
         if (guest) {
             environment("QEMU_LD_PREFIX", guest);
             environment("QEMU_CPU", "cortex-a7");

@@ -32,9 +32,14 @@ int main(void)
     if (symlink(target, link_path))
         return 16;
     const char *disabled = getenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS");
-    if (!strcmp(mode, "experiment"))
-        return disabled && !strcmp(disabled, "1") && getenv("KOBALT_WEBKIT_EXPERIMENT") ? 0 : 12;
-    if (disabled || getenv("KOBALT_WEBKIT_EXPERIMENT"))
+    const char *selected = getenv("KOBALT_WEBKIT_SANDBOX_MODE");
+    if (!selected || getenv("KOBALT_WEBKIT_EXPERIMENT"))
+        return 18;
+    if (!strcmp(mode, "experiment") || !strcmp(mode, "device")) {
+        const char *expected = !strcmp(mode, "device") ? "device-unsandboxed" : "experiment";
+        return disabled && !strcmp(disabled, "1") && !strcmp(selected, expected) ? 0 : 12;
+    }
+    if (disabled || strcmp(selected, "required"))
         return 13;
     pid_t child = fork();
     if (child < 0)

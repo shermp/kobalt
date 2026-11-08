@@ -1,0 +1,31 @@
+{
+  "milestone": "M1",
+  "base_commit": "dee2d2c",
+  "changes_uncommitted_at_validation": true,
+  "status": "kernel-compatibility-diagnostic-verified",
+  "published_kernel_audit": "kernel-audit.json",
+  "runtime_dependency_set": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+  "package_sha256": "8e1c83bb0da0ea8368db57618829697054bf9deba42b1a55d4591fa8794ff928",
+  "runtime_binaries_and_private_libraries_unchanged": true,
+  "native_tests": "platform-probe: real operations; injected missing syscalls, permission denial and hung-child timeout/reaping",
+  "firmware": {
+    "version": "6.0.274403",
+    "profile": "Libra Colour",
+    "context": "qemu-user",
+    "kernel_release": "6.18.54.1-microsoft-standard-WSL2",
+    "summary": "unavailable",
+    "namespace_and_seccomp_errno": 22,
+    "sandbox_verified": false,
+    "renderer_started": false,
+    "internal_sandbox_exception_used": false,
+    "package_checksums": "passed",
+    "nickel_responsive": true,
+    "disposable_device_and_volume_deleted": true,
+    "raw_evidence": "build/webkit/firmware-f9c2661ea8/"
+  },
+  "validation_reused": "Supervisor/source/SDK tests and renderer firmware render/crash/cleanup from prior slice; corresponding executables and private libraries are byte-identical.",
+  "physical_device_probe": "not run",
+  "policy": "required sandbox remains default; no new device exception or automatic fallback",
+  "remaining": "Physical kernel report, supported-device isolation policy, private sandbox helper packaging and actual sandbox launch/denial tests.",
+  "scope": "Probe-only checkpoint before the separately authorized device opt-in; see device-mode-results.json for subsequent runtime changes."
+}

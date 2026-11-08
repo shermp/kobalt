@@ -14,7 +14,7 @@ if(NOT EXISTS "${entry}/complete")
     message(FATAL_ERROR "WebKit dependency set is not published")
 endif()
 set(inputs "${entry}")
-foreach(path "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker"
+foreach(path "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker" "${build}/arm/kobalt-webkit-probe"
         "${CMAKE_CURRENT_LIST_FILE}" "${root}/LICENSE" "${root}/assets/fonts/OFL.txt"
         "${root}/platforms/webkit/runtime-sources.json"
         "${root}/platforms/webkit/source-provenance.json" "${root}/tests/webkit/fixture.xhtml"
@@ -39,7 +39,7 @@ endif()
 set(roots "${KOBALT_WEBKIT_PREFIX}/lib" "${tc}/arm-kobov5-linux-gnueabihf/sysroot/lib"
     "${sysroot}/usr/lib/arm-linux-gnueabihf" "${sysroot}/lib/arm-linux-gnueabihf")
 file(MAKE_DIRECTORY "${output}/bin" "${output}/private" "${output}/share/fixture" "${output}/share/licenses")
-file(COPY "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker" DESTINATION "${output}/bin")
+file(COPY "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker" "${build}/arm/kobalt-webkit-probe" DESTINATION "${output}/bin")
 file(COPY "${KOBALT_WEBKIT_PREFIX}/libexec" DESTINATION "${output}")
 file(COPY "${KOBALT_WEBKIT_PREFIX}/lib/wpe-webkit-2.0" DESTINATION "${output}/lib")
 file(COPY "${root}/tests/webkit/fixture.xhtml" "${root}/tests/webkit/illustration.svg" DESTINATION "${output}/share/fixture")

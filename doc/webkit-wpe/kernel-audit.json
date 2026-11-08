@@ -1,0 +1,97 @@
+{
+  "repository": "https://github.com/kobolabs/Kobo-Reader",
+  "repository_commit": "7a762964e7fa71ad8e8df50dd1b6eee721a43217",
+  "scope": "Published source configurations only. Not a running-device kernel/config measurement or a firmware 6 guarantee.",
+  "archives": [
+    {
+      "name": "libra-colour-aa",
+      "path": "mt8113-libraC_vision7/kernel.tar.zst.part-aa",
+      "url": "https://raw.githubusercontent.com/kobolabs/Kobo-Reader/7a762964e7fa71ad8e8df50dd1b6eee721a43217/hw/mt8113-libraC_vision7/kernel.tar.zst.part-aa",
+      "git_blob_sha1": "caeadfa828b03e6d4f9f77404fa0acf11c2fbee7",
+      "sha256": "e17e8787e61d082f49eb098036cb39f1766815c5674c9df5da350666e07c99c4",
+      "size": 104857600
+    },
+    {
+      "name": "libra-colour-ab",
+      "path": "mt8113-libraC_vision7/kernel.tar.zst.part-ab",
+      "url": "https://raw.githubusercontent.com/kobolabs/Kobo-Reader/7a762964e7fa71ad8e8df50dd1b6eee721a43217/hw/mt8113-libraC_vision7/kernel.tar.zst.part-ab",
+      "git_blob_sha1": "a0535ca1a20f50c56aebb3a08cb5eb3873704960",
+      "sha256": "c00ea64689b57dfa5175f2162b9dc2a1d8084b99a870c65f8fff5dc49596b01d",
+      "size": 47120968
+    },
+    {
+      "name": "libra2",
+      "path": "imx6sll-libra2/kernel.tar.bz2",
+      "url": "https://raw.githubusercontent.com/kobolabs/Kobo-Reader/7a762964e7fa71ad8e8df50dd1b6eee721a43217/hw/imx6sll-libra2/kernel.tar.bz2",
+      "git_blob_sha1": "38f3fec360f88de4344273b4cf46831eb8b2c1ab",
+      "sha256": "6f8c5693a47b11ff9bcf96401a576a410dd6b13bd7df7e3700e9feaee4363b38",
+      "size": 103100597
+    }
+  ],
+  "configurations": [
+    {
+      "name": "libra-colour",
+      "archive": "libra-colour-kernel.tar.zst",
+      "path": "linux/v4.9/arch/arm/configs/aud8113tp1_defconfig",
+      "values": {
+        "NAMESPACES": "n (explicit)",
+        "USER_NS": "unspecified",
+        "PID_NS": "unspecified",
+        "NET_NS": "unspecified",
+        "IPC_NS": "unspecified",
+        "UTS_NS": "unspecified",
+        "SECCOMP": "y",
+        "SECCOMP_FILTER": "y",
+        "TMPFS": "y",
+        "PROC_FS": "y",
+        "IKCONFIG": "y",
+        "IKCONFIG_PROC": "y"
+      },
+      "vendor_alias": "linux/v4.9/arch/arm/configs/aud8113tp1-kobo_defconfig -> aud8113tp1_defconfig",
+      "config_sha256": "8510b352944baa6514caffce34ec2291f79cdcf1a67fae47bf8e82582966ba6b"
+    },
+    {
+      "name": "libra2-kobo",
+      "archive": "libra2.archive",
+      "path": "kernel/arch/arm/configs/imx_v7_kobo_defconfig",
+      "values": {
+        "NAMESPACES": "n (explicit)",
+        "USER_NS": "unspecified",
+        "PID_NS": "unspecified",
+        "NET_NS": "unspecified",
+        "IPC_NS": "unspecified",
+        "UTS_NS": "unspecified",
+        "SECCOMP": "n (explicit)",
+        "SECCOMP_FILTER": "unspecified",
+        "TMPFS": "y",
+        "PROC_FS": "y",
+        "IKCONFIG": "y",
+        "IKCONFIG_PROC": "y"
+      },
+      "config_sha256": "82b1f5ded5554c071e4c0dadec0b58c8b02378064deadfd44705463a495ab672"
+    },
+    {
+      "name": "libra2-ntx",
+      "archive": "libra2.archive",
+      "path": "kernel/arch/arm/configs/imx_v7_ntx_defconfig",
+      "values": {
+        "NAMESPACES": "n (explicit)",
+        "USER_NS": "unspecified",
+        "PID_NS": "unspecified",
+        "NET_NS": "unspecified",
+        "IPC_NS": "unspecified",
+        "UTS_NS": "unspecified",
+        "SECCOMP": "n (explicit)",
+        "SECCOMP_FILTER": "unspecified",
+        "TMPFS": "y",
+        "PROC_FS": "y",
+        "IKCONFIG": "y",
+        "IKCONFIG_PROC": "y"
+      },
+      "config_sha256": "5eaee73c45350d93db30aa935a64dcbc0632cd4f91dbea93b126db8e52df49d3"
+    }
+  ],
+  "conclusion": "Namespace sandbox support cannot be assumed on Kobo. Published MediaTek config disables namespaces; published Libra 2 configs disable namespaces and seccomp.",
+  "runtime_policy": "Required sandbox remains default. The user authorized an explicit per-invocation unsandboxed device mode on 2026-11-09; no automatic fallback.",
+  "physical_device_probe": "not run"
+}

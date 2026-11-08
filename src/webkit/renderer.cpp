@@ -335,9 +335,16 @@ int main()
                *runtime = g_getenv("KOBALT_WEBKIT_RUNTIME");
     if (!bundle || !runtime || bundle[0] != '/' || runtime[0] != '/')
         return 2;
-    bool experiment = !g_strcmp0(g_getenv("KOBALT_WEBKIT_EXPERIMENT"), "1");
+    const char *mode = g_getenv("KOBALT_WEBKIT_SANDBOX_MODE");
+    bool experiment = !g_strcmp0(mode, "experiment");
+    bool deviceUnsandboxed = !g_strcmp0(mode, "device-unsandboxed");
+    if (!mode || (!experiment && !deviceUnsandboxed && std::strcmp(mode, "required")))
+        return 2;
     const char *overrideValue = g_getenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS");
-    if ((overrideValue && std::strcmp(overrideValue, "0")) != experiment)
+    if (experiment || deviceUnsandboxed) {
+        if (g_strcmp0(overrideValue, "1"))
+            return 2;
+    } else if (overrideValue && std::strcmp(overrideValue, "0"))
         return 2;
     signal(SIGPIPE, SIG_IGN);
     if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) || fcntl(STDOUT_FILENO, F_SETFL, O_NONBLOCK))
@@ -424,7 +431,10 @@ int main()
             &renderer);
     renderer.inputSource = g_unix_fd_add(STDIN_FILENO, GIOCondition(G_IO_IN | G_IO_HUP | G_IO_ERR),
                                          readInput, &renderer);
-    reply(renderer, 0, experiment ? "READY experiment" : "READY sandbox-required");
+    reply(renderer, 0,
+          experiment                  ? "READY experiment"
+                  : deviceUnsandboxed ? "READY device-unsandboxed"
+                                      : "READY sandbox-required");
     g_main_loop_run(renderer.loop);
     if (renderer.inputSource)
         g_source_remove(renderer.inputSource);

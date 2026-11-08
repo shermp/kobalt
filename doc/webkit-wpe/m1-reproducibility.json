@@ -138,5 +138,6 @@
     "nickel_responsive": true,
     "disposable_device_and_volume_deleted": true,
     "raw_evidence": "build/webkit/firmware-f26668a7b2/"
-  }
+  },
+  "scope": "Historical checkpoint before the kernel diagnostic and the subsequently authorized device opt-in; see device-mode-results.json for the newer runtime."
 }

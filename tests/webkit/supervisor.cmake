@@ -7,16 +7,19 @@ file(MAKE_DIRECTORY "${OUTPUT}/bin")
 file(WRITE "${OUTPUT}/keep" "Do not follow run-directory symlinks\n")
 file(COPY_FILE "${FIXTURE}" "${OUTPUT}/bin/kobalt-webkit-worker")
 find_program(TIMEOUT_EXECUTABLE timeout REQUIRED)
-foreach(mode normal failure crash hang experiment)
+foreach(mode normal failure crash hang experiment device)
     file(WRITE "${OUTPUT}/mode" "${mode}")
     set(command "${LAUNCHER}" --bundle "${OUTPUT}")
     if(mode STREQUAL "experiment")
         list(APPEND command --allow-unsandboxed-experiment)
+    elseif(mode STREQUAL "device")
+        list(APPEND command --allow-unsandboxed-device)
     elseif(mode STREQUAL "hang")
         list(PREPEND command "${TIMEOUT_EXECUTABLE}" --signal=TERM --kill-after=4 0.5)
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env KOBALT_TEST_POISON=present
-        WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 DISPLAY=poison WAYLAND_DISPLAY=poison
+        WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 KOBALT_WEBKIT_SANDBOX_MODE=device-unsandboxed
+        KOBALT_WEBKIT_EXPERIMENT=1 DISPLAY=poison WAYLAND_DISPLAY=poison
         DBUS_SESSION_BUS_ADDRESS=poison /bin/sh -c "exec 9</dev/null; exec \"$@\"" sh ${command}
         RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 10)
     set(expected 0)
@@ -44,6 +47,14 @@ foreach(mode normal failure crash hang experiment)
         if(alive EQUAL 0)
             message(FATAL_ERROR "${mode}: owned descendant remains")
         endif()
+    endif()
+endforeach()
+foreach(flags "--allow-unsandboxed-device;--allow-unsandboxed-experiment"
+        "--allow-unsandboxed-experiment;--allow-unsandboxed-device")
+    execute_process(COMMAND "${LAUNCHER}" --bundle "${OUTPUT}" ${flags}
+        RESULT_VARIABLE status OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 5)
+    if(NOT status EQUAL 2 OR NOT output STREQUAL "" OR NOT error MATCHES "conflicting sandbox modes")
+        message(FATAL_ERROR "Conflicting modes accepted: ${status}: ${output}: ${error}")
     endif()
 endforeach()
 execute_process(COMMAND "${CMAKE_COMMAND}" "-DPATHS=${OUTPUT}" -P "${root}/platforms/cleanup.cmake"

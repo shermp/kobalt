@@ -12,8 +12,13 @@ import uuid
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--virtualnickel', type=Path, required=True)
-parser.add_argument('--allow-unsandboxed-experiment', action='store_true', required=True)
+modes = parser.add_mutually_exclusive_group()
+modes.add_argument('--allow-unsandboxed-experiment', action='store_true')
+modes.add_argument('--allow-unsandboxed-device', action='store_true')
+parser.add_argument('--platform-probe-only', action='store_true')
 args = parser.parse_args()
+if not args.platform_probe_only and not (args.allow_unsandboxed_experiment or args.allow_unsandboxed_device):
+    parser.error('Rendering diagnostics require an explicit unsandboxed mode')
 root = Path(__file__).resolve().parents[2]
 vn = args.virtualnickel.resolve()
 sys.path.insert(0, str(vn / 'tools'))
@@ -50,9 +55,28 @@ try:
     run(['podman', 'update', '--cpus', '1', container], stdout=subprocess.DEVNULL)
     run(['podman', 'exec', '--workdir', prefix, container, 'sha256sum', '-c', 'SHA256SUMS'],
         stdout=(output / 'package-check.log').open('w'))
+    with (output / 'platform-probe.stderr').open('w') as error:
+        probe = subprocess.run(
+            ['podman', 'exec', container, '/usr/bin/vn-offline', '/usr/bin/qemu-arm',
+             '-cpu', 'cortex-a7', '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD',
+             prefix + '/bin/kobalt-webkit-probe', '--context', 'qemu-user'],
+            stdout=subprocess.PIPE, stderr=error, text=True, timeout=30)
+    report = json.loads(probe.stdout)
+    assert probe.returncode in (0, 77), (probe.returncode, report)
+    assert report['context'] == 'qemu-user' and report['sandbox_verified'] is False
+    missing = any(test['required'] and test['result'] != 'ok' for test in report['tests'])
+    assert report['summary'] == ('unavailable' if missing else 'primitives-available')
+    assert probe.returncode == (77 if missing else 0)
+    (output / 'platform-probe.json').write_text(json.dumps(report, indent=2) + '\n')
+    if args.platform_probe_only:
+        assert device.command('ping')['status'] == 'dispatched'
+        (output / 'nickel.json').write_text(json.dumps(dict(responsive=True)))
+        print('WEBKIT_PLATFORM_PROBE_VERIFIED', flush=True)
+        sys.exit(0)
     with (output / 'client.log').open('w') as log:
         run(['podman', 'exec', container, 'python3', '/instance/artifacts/webkit-client.py',
-             prefix, '/instance/artifacts/webkit-results'],
+             prefix, '/instance/artifacts/webkit-results',
+             'device-unsandboxed' if args.allow_unsandboxed_device else 'experiment'],
             stdout=log, stderr=subprocess.STDOUT, timeout=240)
     shutil.copytree(artifacts / 'webkit-results', output / 'results')
     assert device.command('ping')['status'] == 'dispatched'

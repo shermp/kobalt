@@ -1,0 +1,131 @@
+{
+  "milestone": "M1",
+  "base_commit": "dee2d2c",
+  "changes_uncommitted_at_validation": true,
+  "status": "explicit-device-mode-verified-in-firmware-userspace",
+  "authorization": "User approved explicit device opt-in on 2026-11-09",
+  "flag": "--allow-unsandboxed-device",
+  "protocol": "KWRP/1 0 READY device-unsandboxed",
+  "default": "sandbox-required; no automatic fallback",
+  "selection": "per invocation; inherited variables cleared; mutually exclusive flags; worker mode/override consistency checked",
+  "dependency_set": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+  "package_sha256": "0fa70885264ab1aadc26e2f614f60f21d767b28b03f98fc8a2f472acfc1c5c89",
+  "native": "supervisor mode selection/environment isolation, conflict rejection, crash/signal/reaping/scratch cleanup passed",
+  "firmware": {
+    "version": "6.0.274403",
+    "profile": "Libra Colour",
+    "qemu_cpu": "cortex-a7",
+    "memory_mib": 768,
+    "cpu_limit": 1,
+    "context": "QEMU userspace on host kernel",
+    "internal_sandbox": "explicit device opt-in; container/offline restrictions retained",
+    "primary_mode": "device-unsandboxed",
+    "runs": [
+      {
+        "case": "cold",
+        "mode": "device-unsandboxed",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "repeat",
+        "mode": "device-unsandboxed",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "web-crash",
+        "mode": "device-unsandboxed",
+        "result": 1,
+        "cleanup": true
+      },
+      {
+        "case": "worker-crash",
+        "mode": "device-unsandboxed",
+        "result": 137,
+        "cleanup": true
+      },
+      {
+        "case": "after-crash",
+        "mode": "device-unsandboxed",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "version",
+        "mode": "device-unsandboxed",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "oversized",
+        "mode": "device-unsandboxed",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "duplicate",
+        "mode": "device-unsandboxed",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "eof",
+        "mode": "device-unsandboxed",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "backpressure",
+        "mode": "device-unsandboxed",
+        "result": 1,
+        "cleanup": true
+      },
+      {
+        "case": "sandbox-required",
+        "mode": "required",
+        "result": 133,
+        "cleanup": true
+      },
+      {
+        "case": "other-explicit-mode",
+        "mode": "experiment",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "worker-mode-missing",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "worker-mode-unknown",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "worker-mode-required-disabled",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "worker-mode-device-missing-override",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "worker-mode-experiment-enabled",
+        "result": 2,
+        "cleanup": true
+      }
+    ],
+    "snapshot_sha256": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008",
+    "snapshot_matches_m0": true,
+    "nickel_responsive": true,
+    "device_and_volume_deleted": true,
+    "raw_evidence": "build/webkit/firmware-fc4a8ae584/"
+  },
+  "validation_reused": "Unchanged WebKit dependency, source/SDK recovery tests and platform-probe regressions. No full application suites; GUI/CREngine/data unchanged.",
+  "physical_hardware": "not tested; no kernel-support inference from simulator",
+  "remaining": "Enabled-source distribution review, physical-device validation of the selected mode; private sandbox helpers and isolation tests for required mode. M2 not started."
+}
