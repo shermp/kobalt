@@ -1,0 +1,75 @@
+{
+  "milestone": "M1",
+  "status": "development-review-candidate",
+  "base_commit": "d78f8df",
+  "followup_uncommitted": true,
+  "user_review": "pending",
+  "m2_started": false,
+  "runtime": {
+    "package_sha256": "e19e08b1d16bb1607a036ef3bf3dd39eb4fe36d9268cfbff7bf80bf32e54a8a0",
+    "dependency_set": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+    "executables_and_libraries": "byte-identical to device-mode-results.json; changes are distribution notices/metadata only",
+    "default": "sandbox required",
+    "device_mode": "explicit --allow-unsandboxed-device; fixed trusted fixture only"
+  },
+  "independent_rebuild": {
+    "status": "passed",
+    "dependency_set": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+    "inputs": {
+      "base_commit": "d78f8df",
+      "source_tar_sha256": "bfd86b5e46d4ad165d861c6cf45db1bbcf7cb8db349141821f0b848486169538",
+      "binary_tool_inputs": {
+        "kobov5": "a9eba0aaf17e5cc94fdabb46c2ae06d9bb41936b869ea6479d325c9f79b14a64",
+        "cmake-host": "630615d8e98ac33eba7fbe472626dff5c899c85af3c024585ae109166a6909d0"
+      },
+      "compiled_cache_initially_empty": true,
+      "objects_copied": false,
+      "sdk": "same immutable pinned prepared image; offline recovery already verified",
+      "network": "none"
+    },
+    "install_contents_modes_symlinks_identical": true,
+    "helpers_identical": {
+      "kobalt-webkit": true,
+      "kobalt-webkit-worker": true,
+      "kobalt-webkit-probe": true
+    },
+    "baseline_runtime_tar_sha256": "0fa70885264ab1aadc26e2f614f60f21d767b28b03f98fc8a2f472acfc1c5c89",
+    "rebuilt_runtime_tar_sha256": "0fa70885264ab1aadc26e2f614f60f21d767b28b03f98fc8a2f472acfc1c5c89",
+    "scope": "Current WebKit patch set and device-mode helpers fully rebuilt from exported sources with an empty compiled cache. SDK/compiler and Ubuntu runtime libraries remain locked binary inputs. Subsequent notice-only package changes are checked separately."
+  },
+  "source_and_notice_audit": {
+    "inventory": "distribution-inventory.json",
+    "review": "source-audit.md",
+    "header_notices": "native notice-headers checks passed; required groups and source pin verified",
+    "font_attribution": "correct pinned Instrument Serif copyright/OFL file included in runtime and source recipe",
+    "library_notices": "every runtime library maps to exact source archives and complete notice files",
+    "acknowledgements": "FreeType/IJG credits and GCC exception/full GPL text retained"
+  },
+  "resources": {
+    "review": "runtime-resources.md",
+    "firmware": "6.0.274403 / Libra Colour userspace",
+    "font_provenance": "all reported configs/fonts resolved into selected stock firmware; files hashed",
+    "worker_restored_and_package_rechecked": true,
+    "nickel_responsive": true,
+    "device_and_volume_deleted": true,
+    "raw_evidence": "build/webkit/firmware-14f6285d31/"
+  },
+  "validation_run": [
+    "independent offline current-patch WebKit/helper rebuild from empty compiled cache and byte comparison",
+    "focused native notice-header checks",
+    "notice/font/source inventory integrity",
+    "font-resource audit through production supervisor in disposable firmware userspace"
+  ],
+  "validation_reused": [
+    "device-mode render/resize/protocol/crash/restart/cleanup and mode isolation checks; binaries unchanged",
+    "SDK offline recovery, source import rejection and crypto/platform diagnostic checks; relevant inputs unchanged"
+  ],
+  "validation_not_run": "Full Kobalt GUI/CREngine and application SDK suites: application behavior/sources unchanged. Physical hardware and required-mode isolation: not verified.",
+  "limits": [
+    "Requires existing firmware glibc/loader and declared stock resource inputs. Optional WebKit features have no general resource guarantee.",
+    "Required-mode target Bubblewrap/D-Bus proxy are not bundled; explicit unsandboxed modes retain no WebKit sandbox.",
+    "No EPUB backend, Qt caller or reading-data changes. Physical-device validation remains later work.",
+    "Selected-configuration source/notice audit does not authorize release publication or public SDK redistribution."
+  ],
+  "final_artifact_association": "build/webkit/m1-review-artifacts.json"
+}

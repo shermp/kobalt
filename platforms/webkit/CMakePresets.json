@@ -20,12 +20,19 @@
       "inherits": "armhf",
       "binaryDir": "${sourceDir}/../../build/webkit/crypto-isa",
       "cacheVariables": { "KOBALT_WEBKIT_WORKER": "OFF", "KOBALT_WEBKIT_CRYPTO_ISA": "ON" }
+    },
+    {
+      "name": "font-resources",
+      "inherits": "armhf",
+      "binaryDir": "${sourceDir}/../../build/webkit/font-resources",
+      "cacheVariables": { "KOBALT_WEBKIT_WORKER": "OFF", "KOBALT_WEBKIT_FONT_RESOURCES": "ON" }
     }
   ],
   "buildPresets": [
     { "name": "armhf", "configurePreset": "armhf" },
     { "name": "native-supervisor", "configurePreset": "native-supervisor" },
-    { "name": "crypto-isa", "configurePreset": "crypto-isa" }
+    { "name": "crypto-isa", "configurePreset": "crypto-isa" },
+    { "name": "font-resources", "configurePreset": "font-resources" }
   ],
   "testPresets": [
     {

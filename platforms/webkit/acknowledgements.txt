@@ -1,0 +1,14 @@
+Kobalt's standalone renderer uses WPE WebKit and the libraries identified in
+library-packages.tsv. Complete component notices are under share/licenses/.
+The matching corresponding-source bundle retains the original per-file notices,
+pristine archives, downstream changes and build/replacement instructions.
+
+This software is based in part on the work of the Independent JPEG Group.
+Portions of this software are copyright © 1996-2021 The FreeType Project
+(www.freetype.org). All rights reserved.
+
+The WebKit source and private libraries have their own LGPL, BSD, MIT, Unicode,
+public-domain and other component terms. Kobalt's MIT license does not replace
+them. GCC runtime libraries retain their applicable Runtime Library Exception.
+See the exact license texts and package copyright files, rather than treating
+these acknowledgements as a replacement for them.

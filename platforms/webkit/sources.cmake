@@ -140,13 +140,13 @@ if(EXISTS "${output}")
 endif()
 file(MAKE_DIRECTORY "${output}/application/platforms" "${output}/application/dependencies"
     "${output}/application/src" "${output}/application/tests" "${output}/application/doc"
-    "${output}/application/assets/fonts")
+    "${output}/application/assets/fonts" "${output}/application/assets/notices")
 foreach(directory platforms/webkit dependencies/webkit src/webkit tests/webkit doc/webkit-wpe)
     get_filename_component(parent "${directory}" DIRECTORY)
     file(COPY "${root}/${directory}" DESTINATION "${output}/application/${parent}")
 endforeach()
 foreach(path LICENSE .clang-format dependencies/cache.cmake dependencies/apply-patches.cmake
-        platforms/cleanup.cmake platforms/load-lock.cmake assets/fonts/InstrumentSerif-Regular.ttf assets/fonts/OFL.txt)
+        platforms/cleanup.cmake platforms/load-lock.cmake assets/fonts/InstrumentSerif-Regular.ttf assets/fonts/instrument-serif.json assets/notices/Instrument-Serif-OFL)
     configure_file("${root}/${path}" "${output}/application/${path}" COPYONLY)
 endforeach()
 if(KOBALT_SOURCE_COMMIT)

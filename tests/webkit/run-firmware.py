@@ -15,11 +15,19 @@ parser.add_argument('--virtualnickel', type=Path, required=True)
 modes = parser.add_mutually_exclusive_group()
 modes.add_argument('--allow-unsandboxed-experiment', action='store_true')
 modes.add_argument('--allow-unsandboxed-device', action='store_true')
-parser.add_argument('--platform-probe-only', action='store_true')
+actions = parser.add_mutually_exclusive_group()
+actions.add_argument('--platform-probe-only', action='store_true')
+actions.add_argument('--font-resources-only', action='store_true')
 args = parser.parse_args()
-if not args.platform_probe_only and not (args.allow_unsandboxed_experiment or args.allow_unsandboxed_device):
+if not (args.platform_probe_only or args.font_resources_only) and not (args.allow_unsandboxed_experiment or args.allow_unsandboxed_device):
     parser.error('Rendering diagnostics require an explicit unsandboxed mode')
+host_cmake = shutil.which('cmake')
+if args.font_resources_only and not host_cmake:
+    parser.error('Host CMake is required for diagnostic scratch cleanup')
 root = Path(__file__).resolve().parents[2]
+font_diagnostic = root / 'build/webkit/font-resources/webkit-font-resources'
+if args.font_resources_only and not font_diagnostic.is_file():
+    parser.error('Build the font-resources preset first')
 vn = args.virtualnickel.resolve()
 sys.path.insert(0, str(vn / 'tools'))
 from device import Device
@@ -68,10 +76,47 @@ try:
     assert report['summary'] == ('unavailable' if missing else 'primitives-available')
     assert probe.returncode == (77 if missing else 0)
     (output / 'platform-probe.json').write_text(json.dumps(report, indent=2) + '\n')
-    if args.platform_probe_only:
+    if args.font_resources_only:
+        worker = install / 'kobalt-webkit/bin/kobalt-webkit-worker'
+        backup = output / 'worker-backup'
+        shutil.copy2(worker, backup)
+        try:
+            shutil.copy2(font_diagnostic, worker)
+            with (output / 'font-resources.tsv').open('w') as log, (output / 'font-resources.stderr').open('w') as error:
+                run(['podman', 'exec', container, '/usr/bin/vn-offline', '/usr/bin/qemu-arm',
+                     '-cpu', 'cortex-a7', '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD',
+                     prefix + '/bin/kobalt-webkit', '--qemu-prefix', '/firmware/rootfs'],
+                    stdout=log, stderr=error, timeout=45)
+        finally:
+            shutil.copy2(backup, worker)
+            run([host_cmake, '-DPATHS=' + str(backup), '-P', str(root / 'platforms/cleanup.cmake')])
+        run(['podman', 'exec', '--workdir', prefix, container, 'sha256sum', '-c', 'SHA256SUMS'],
+            stdout=(output / 'package-restored.log').open('w'))
+        paths = []
+        for line in (output / 'font-resources.tsv').read_text().splitlines():
+            fields = line.split('\t')
+            if fields[0] in ('CONFIG', 'FONT'):
+                paths.append(fields[1])
+        assert paths, 'No font resources reported'
+        verify = """import hashlib,json,sys
+from pathlib import Path
+paths=json.loads(sys.argv[1])
+records=[]
+for name in sorted(set(paths)):
+    path=Path(name).resolve(strict=True)
+    assert path.is_relative_to('/firmware/rootfs'), (name,str(path))
+    digest=None
+    if path.is_file():
+        with path.open('rb') as stream: digest=hashlib.file_digest(stream,'sha256').hexdigest()
+    records.append(dict(path=name,resolved=str(path),kind='directory' if path.is_dir() else 'file',sha256=digest))
+print(json.dumps(records,indent=2))
+"""
+        with (output / 'font-provenance.json').open('w') as log:
+            run(['podman', 'exec', container, 'python3', '-c', verify, json.dumps(paths)], stdout=log)
+    if args.platform_probe_only or args.font_resources_only:
         assert device.command('ping')['status'] == 'dispatched'
         (output / 'nickel.json').write_text(json.dumps(dict(responsive=True)))
-        print('WEBKIT_PLATFORM_PROBE_VERIFIED', flush=True)
+        print('WEBKIT_FONT_RESOURCES_VERIFIED' if args.font_resources_only else 'WEBKIT_PLATFORM_PROBE_VERIFIED', flush=True)
         sys.exit(0)
     with (output / 'client.log').open('w') as log:
         run(['podman', 'exec', container, 'python3', '/instance/artifacts/webkit-client.py',

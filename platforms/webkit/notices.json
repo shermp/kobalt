@@ -1,0 +1,45 @@
+{
+  "scope": "Header-only notices in enabled bundled components; the complete matching sources retain all per-file terms.",
+  "header_groups": [
+    {
+      "component": "xdgmime",
+      "license": "LGPL-2.0-or-later OR AFL-2.0; LGPL alternative retained with WebKit",
+      "patterns": [
+        "Source/ThirdParty/xdgmime/src/*.c",
+        "Source/ThirdParty/xdgmime/src/*.h"
+      ]
+    },
+    {
+      "component": "V8 double-conversion in WTF dtoa",
+      "license": "BSD-3-Clause",
+      "patterns": [
+        "Source/WTF/wtf/dtoa/*.cc",
+        "Source/WTF/wtf/dtoa/*.h"
+      ]
+    },
+    {
+      "component": "fast_float",
+      "license": "Apache-2.0 OR MIT OR BSL-1.0; MIT/Boost texts are in the amalgamated header",
+      "patterns": [
+        "Source/WTF/wtf/fast_float/fast_float.h"
+      ]
+    },
+    {
+      "component": "libpas",
+      "license": "BSD-2-Clause per source headers",
+      "patterns": [
+        "Source/bmalloc/libpas/src/libpas/*.c",
+        "Source/bmalloc/libpas/src/libpas/*.h"
+      ]
+    },
+    {
+      "component": "Skia partition_alloc pointer wrappers",
+      "license": "BSD-style; see Skia LICENSE and per-file notices",
+      "patterns": [
+        "Source/ThirdParty/skia/src/partition_alloc/*.h",
+        "Source/ThirdParty/skia/src/partition_alloc/noop/*.h"
+      ]
+    }
+  ],
+  "webkit_source_sha256": "f3284e19e47fcb5ac8c63c2e1c113dbd65b2423eb8a545f5b345707829004f56"
+}

@@ -62,10 +62,42 @@ Corresponding sources, patch/build instructions and notices must remain associat
 with any redistributed binary. Publishing binaries without arranging their source
 and notice delivery is outside this development artifact's status.
 
-A final enabled-source copyright/license review remains open, including notices
-that appear only in source headers and any release-specific requirements. The
-source export and notice collection provide the material for that review; they
-are not a compliance certification.
+The selected-configuration audit is recorded in the
+[distribution inventory](distribution-inventory.json). It maps the actual ELF
+closure to exact source versions, corresponding archives and hashes of the full
+notice files. The bundled-component inventory was checked against the completed
+build's source/header dependencies, rather than treating every directory in the
+WebKit tar as enabled.
+
+The observed bundled inputs include Skia/skcms, xdgmime, WTF's V8 dtoa and
+fast_float, and bmalloc's libpas/mimalloc. Skia/skcms and V8 dtoa retain BSD terms;
+xdgmime provides an LGPL/AFL alternative; fast_float's amalgamated header carries
+MIT and Boost alternatives alongside its Apache license; libpas is BSD and
+mimalloc MIT. Per-file terms remain in the complete source material. The library
+inventory preserves the original Ubuntu copyright texts, including mixed-license
+packages; GPL terms for a package's separate utilities are not assigned wholesale
+to its shared libraries.
+
+Packaging now retains `NOTICE`, `AUTHORS` and `COPYRIGHT` files as well as
+`LICENSE`/`COPYING`. The source-pinned `platforms/webkit/notices.json` identifies
+header-only notice groups. Their complete leading comment groups are retained
+and deduplicated by content, including editor-mode comments before a license and
+amalgamated line-comment licenses. Native regressions cover both formats and
+reject a truncated block. New source pins require review of this manifest.
+
+`ACKNOWLEDGEMENTS.txt` includes the FreeType and Independent JPEG Group credits.
+The fixture's font now carries its own Instrument Serif copyright/OFL file,
+verified against `assets/fonts/instrument-serif.json`. The earlier generic
+`assets/fonts/OFL.txt` describes other fonts and was insufficient attribution for
+this fixture. Both the runtime and source export now carry the correct file.
+GCC's GPLv3 text and Runtime Library Exception are also retained explicitly.
+
+For distribution, pair the binary with the exact complete source bundle, its
+patches/build scripts, original notices, checksums and replacement instructions.
+The runtime's index does not replace per-file terms. The audit covers this M1
+configuration; enabled-feature/source changes require review. Public SDK
+redistribution and release publication remain separate decisions. This is a
+record of delivered material and obligations, not a compliance certification.
 
 ## ARM instruction-set finding
 
