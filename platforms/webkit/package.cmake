@@ -15,7 +15,9 @@ if(NOT EXISTS "${entry}/complete")
 endif()
 set(inputs "${entry}")
 foreach(path "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker"
-        "${CMAKE_CURRENT_LIST_FILE}" "${root}/tests/webkit/fixture.xhtml"
+        "${CMAKE_CURRENT_LIST_FILE}" "${root}/LICENSE" "${root}/assets/fonts/OFL.txt"
+        "${root}/platforms/webkit/runtime-sources.json"
+        "${root}/platforms/webkit/source-provenance.json" "${root}/tests/webkit/fixture.xhtml"
         "${root}/tests/webkit/illustration.svg" "${root}/assets/fonts/InstrumentSerif-Regular.ttf")
     file(SHA256 "${path}" hash)
     string(APPEND inputs ";${hash}")
@@ -44,6 +46,7 @@ file(COPY "${root}/tests/webkit/fixture.xhtml" "${root}/tests/webkit/illustratio
 configure_file("${root}/assets/fonts/InstrumentSerif-Regular.ttf" "${output}/share/fixture/font.ttf" COPYONLY)
 file(GLOB font_notices "${root}/assets/fonts/*OFL*" "${root}/assets/fonts/*LICENSE*")
 file(COPY ${font_notices} DESTINATION "${output}/share/licenses/fonts")
+configure_file("${root}/LICENSE" "${output}/share/licenses/kobalt/LICENSE" COPYONLY)
 file(GLOB_RECURSE queue LIST_DIRECTORIES FALSE "${output}/bin/*" "${output}/libexec/*" "${output}/lib/*")
 set(seen)
 set(manifest "")
@@ -143,12 +146,34 @@ foreach(path IN LISTS notices)
     file(RELATIVE_PATH name "${source}" "${path}")
     configure_file("${path}" "${output}/share/licenses/webkit/${name}" COPYONLY)
 endforeach()
+# BSD headers on changed upstream files are themselves distribution notices.
+# Retain them explicitly alongside the release's component-level licenses.
+file(GLOB patches "${root}/dependencies/webkit/patches/*.patch")
+foreach(patch IN LISTS patches)
+    file(STRINGS "${patch}" changed REGEX "^\\+\\+\\+ b/")
+    get_filename_component(patch_name "${patch}" NAME)
+    foreach(line IN LISTS changed)
+        string(REGEX REPLACE "^\\+\\+\\+ b/" "" path "${line}")
+        file(READ "${source}/${path}" contents)
+        string(FIND "${contents}" "*/" end)
+        if(NOT contents MATCHES "^/\\*" OR end LESS 0)
+            message(FATAL_ERROR "Review missing upstream license header: ${path}")
+        endif()
+        math(EXPR length "${end} + 2")
+        string(SUBSTRING "${contents}" 0 ${length} notice)
+        get_filename_component(directory "${output}/share/licenses/webkit-modifications/${path}.txt" DIRECTORY)
+        file(MAKE_DIRECTORY "${directory}")
+        file(WRITE "${output}/share/licenses/webkit-modifications/${path}.txt"
+            "${notice}\n\nKobalt modification: ${patch_name}; source and patch included in the matching source bundle.\n")
+    endforeach()
+endforeach()
 execute_process(COMMAND dpkg-query -W "-f=\${binary:Package}\t\${Version}\t\${source:Package}\t\${source:Version}\n"
     OUTPUT_FILE "${output}/build-packages.tsv" COMMAND_ERROR_IS_FATAL ANY)
 file(COPY "${root}/dependencies/webkit/build-image.json" "${root}/dependencies/webkit/sources.json"
-    "${root}/dependencies/webkit/host-tools.json" DESTINATION "${output}")
+    "${root}/dependencies/webkit/host-tools.json" "${root}/platforms/webkit/runtime-sources.json"
+    "${root}/platforms/webkit/source-provenance.json" DESTINATION "${output}")
 file(WRITE "${output}/distribution-status.txt"
-    "Development artifact only. Corresponding Ubuntu/toolchain source archives and complete enabled-source license audit are pending. Do not redistribute as a release.\n")
+    "Development artifact only. Exact corresponding-source pins are included; export and pair the matching source bundle. Complete enabled-source license review and production sandbox validation remain release gates. Do not redistribute as a release.\n")
 file(GLOB_RECURSE files LIST_DIRECTORIES FALSE RELATIVE "${output}" "${output}/*")
 list(SORT files)
 set(checksums "")

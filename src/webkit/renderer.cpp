@@ -424,7 +424,7 @@ int main()
             &renderer);
     renderer.inputSource = g_unix_fd_add(STDIN_FILENO, GIOCondition(G_IO_IN | G_IO_HUP | G_IO_ERR),
                                          readInput, &renderer);
-    reply(renderer, 0, experiment ? "READY experiment" : "READY sandboxed");
+    reply(renderer, 0, experiment ? "READY experiment" : "READY sandbox-required");
     g_main_loop_run(renderer.loop);
     if (renderer.inputSource)
         g_source_remove(renderer.inputSource);

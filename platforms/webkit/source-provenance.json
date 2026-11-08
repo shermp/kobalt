@@ -1,0 +1,20 @@
+{
+  "ubuntu_snapshot": "20261108T000000Z",
+  "index_verification": "APT with Ubuntu archive keyring; no trust or validity overrides",
+  "inrelease_sha256": {
+    "snapshot.ubuntu.com_ubuntu_20261108T000000Z_dists_jammy-updates_InRelease": "02ee10422c91107ee00814b5a5520cd8c55a3e92746edeee1dd8f21816ac1392",
+    "snapshot.ubuntu.com_ubuntu_20261108T000000Z_dists_jammy_InRelease": "c14060cd8c6d625874dfcb9523a35a395bf4865c28b6b6a82569ef326fe92dc6",
+    "snapshot.ubuntu.com_ubuntu_20261108T000000Z_dists_jammy-security_InRelease": "06adcb08b355d32117d33b1ab948c12a835f822f62133ece84541ef254264b22"
+  },
+  "compiler": {
+    "koxtoolchain_commit": "6a4407a3cbb5fb2e3513e63c0fd12fcdbe1380af",
+    "crosstool_ng_commit": "34844bc8e985ad1ba26b072a5b58264967072e19",
+    "gcc_source_checksum_origin": "packages/gcc/14.4.0/chksum in the pinned crosstool-NG source",
+    "runtime_patches": [
+      "0001-gcc-plugin-POSIX-include-sys-select-h.patch",
+      "0003-0003-libgcc-disable-split-stack-nothreads.patch.patch",
+      "0009-gcc-Allow-g-to-work-differently-from-gcc.patch",
+      "0010-libgcc-Exclude-UCLIBC-from-GLIBC-thread-check.patch"
+    ]
+  }
+}

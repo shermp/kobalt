@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cmake -DACTION=IMPORT -P /work/platforms/webkit/sources.cmake
 cmake -P /work/dependencies/webkit/prepare.cmake
 export PATH="$(cat /work/build/webkit/cmake-host.txt)/bin:$PATH"
 export KOBALT_WEBKIT_TOOLCHAIN="$(cat /work/build/webkit/kobov5.txt)"

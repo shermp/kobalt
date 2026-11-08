@@ -9,7 +9,7 @@ string(JSON hash GET "${sources}" wpewebkit sha256)
 kobalt_dependency_archive("${KOBALT_WEBKIT_DOWNLOADS}" wpewebkit "${url}" "${hash}" archive)
 find_program(PATCH_EXECUTABLE patch REQUIRED)
 file(WRITE "${CMAKE_BINARY_DIR}/patches.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/patches/lazy-wpe-egl.patch\n${CMAKE_CURRENT_SOURCE_DIR}/patches/no-libdrm-snapshot.patch\n${CMAKE_CURRENT_SOURCE_DIR}/patches/release-exec-path.patch\n")
+    "${CMAKE_CURRENT_SOURCE_DIR}/patches/lazy-wpe-egl.patch\n${CMAKE_CURRENT_SOURCE_DIR}/patches/no-libdrm-snapshot.patch\n${CMAKE_CURRENT_SOURCE_DIR}/patches/release-exec-path.patch\n${CMAKE_CURRENT_SOURCE_DIR}/patches/require-requested-sandbox.patch\n")
 FetchContent_Declare(wpewebkit
     URL "${archive}" URL_HASH "SHA256=${hash}" DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SOURCE_DIR "${KOBALT_WEBKIT_OUTPUT}/sources/wpewebkit" SOURCE_SUBDIR kobalt-no-project

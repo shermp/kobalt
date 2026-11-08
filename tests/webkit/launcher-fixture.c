@@ -5,10 +5,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 int main(void)
 {
+    struct rlimit core_limit;
+    if (getrlimit(RLIMIT_CORE, &core_limit) || core_limit.rlim_cur || core_limit.rlim_max)
+        return 17;
     const char *root = getenv("KOBALT_WEBKIT_BUNDLE"), *runtime = getenv("KOBALT_WEBKIT_RUNTIME");
     if (!root || !runtime || getenv("KOBALT_TEST_POISON") || getenv("LD_PRELOAD")
         || getenv("DBUS_SESSION_BUS_ADDRESS") || getenv("DISPLAY") || getenv("WAYLAND_DISPLAY"))

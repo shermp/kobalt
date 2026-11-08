@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -82,6 +83,9 @@ int main(int argc, char **argv)
     // Do not keep Nickel's database, device or IPC descriptors alive in this process.
     closefrom(3);
     umask(0077);
+    const struct rlimit core_limit = { 0, 0 };
+    if (setrlimit(RLIMIT_CORE, &core_limit))
+        fail("disable core files");
     const char *bundle_argument = NULL, *guest = NULL;
     int experiment = 0;
     for (int i = 1; i < argc; ++i) {

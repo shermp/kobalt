@@ -1,0 +1,11 @@
+--- a/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp
++++ b/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp
+@@ -262,6 +262,8 @@
+     // Snap can allow it but has its own limitations that require workarounds.
+     else if (sandboxEnabled && shouldUseBubblewrap())
+         process = bubblewrapSpawn(launcher.get(), m_launchOptions, m_dbusProxy, argv, &error.outPtr());
++    else if (sandboxEnabled)
++        g_error("Required WebKit sandbox unavailable; refusing an unsandboxed child");
+ #endif // ENABLE(BUBBLEWRAP_SANDBOX)
+     else
+ #endif // OS(LINUX)

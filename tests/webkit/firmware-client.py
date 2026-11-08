@@ -33,13 +33,17 @@ def descendants(root):
 
 
 class Client:
-    def __init__(self, name):
+    def __init__(self, name, experiment=True):
         self.name = name
+        self.scratch_before = set(Path('/tmp').glob('kobalt-webkit-*'))
         self.log = (destination / (name + '.stderr')).open('w')
+        command = ['/usr/bin/vn-offline', '/usr/bin/qemu-arm', '-cpu', 'cortex-a7',
+                   '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD', str(bundle / 'bin/kobalt-webkit'),
+                   '--qemu-prefix', '/firmware/rootfs']
+        if experiment:
+            command.append('--allow-unsandboxed-experiment')
         self.process = subprocess.Popen(
-            ['/usr/bin/vn-offline', '/usr/bin/qemu-arm', '-cpu', 'cortex-a7',
-             '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD', str(bundle / 'bin/kobalt-webkit'),
-             '--qemu-prefix', '/firmware/rootfs', '--allow-unsandboxed-experiment'],
+            command,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
             env=dict(os.environ, WEBKIT_EXEC_PATH='/poison', DISPLAY='poison',
                      WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS='0'),
@@ -111,11 +115,14 @@ class Client:
         os.kill(selected[0], signal.SIGKILL)
 
     def close(self, expected):
+        self.tracked |= descendants(self.process.pid)
         self.process.stdin.close()
         result = self.process.wait(timeout=10)
         assert result == expected, (self.name, result, self.log.name)
         assert not any(Path('/proc', str(pid)).exists() for pid in self.tracked), self.tracked
         assert self.runtime is None or not self.runtime.exists(), self.runtime
+        scratch_after = set(Path('/tmp').glob('kobalt-webkit-*'))
+        assert scratch_after <= self.scratch_before, scratch_after - self.scratch_before
         self.selector.close()
         self.process.stdout.close()
         self.log.close()
@@ -190,6 +197,20 @@ try:
             break
         time.sleep(.01)
     active.close(1)
+    active = None
+    active = Client('sandbox-required', experiment=False)
+    try:
+        assert active.receive() == 'KWRP/1 0 READY sandbox-required'
+        active.send('KWRP/1 1 RENDER 800 1100\n')
+        while True:
+            response = active.receive()
+            assert 'OK SNAPSHOT' not in response, 'Unsandboxed normal-mode render was accepted'
+    except EOFError:
+        pass
+    result = active.process.wait(timeout=10)
+    assert result != 0, 'Required sandbox failure was accepted'
+    assert 'Required WebKit sandbox unavailable' in Path(active.log.name).read_text()
+    active.close(result)
     active = None
     (destination / 'results.json').write_text(json.dumps(dict(runs=records, snapshot_sha256=checksums[0]), indent=2))
     print('WEBKIT_FIRMWARE_OK ' + json.dumps(records), flush=True)

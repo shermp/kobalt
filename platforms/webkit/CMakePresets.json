@@ -14,11 +14,18 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/../../build/webkit/native-tools",
       "cacheVariables": { "KOBALT_WEBKIT_WORKER": "OFF", "BUILD_TESTING": "ON" }
+    },
+    {
+      "name": "crypto-isa",
+      "inherits": "armhf",
+      "binaryDir": "${sourceDir}/../../build/webkit/crypto-isa",
+      "cacheVariables": { "KOBALT_WEBKIT_WORKER": "OFF", "KOBALT_WEBKIT_CRYPTO_ISA": "ON" }
     }
   ],
   "buildPresets": [
     { "name": "armhf", "configurePreset": "armhf" },
-    { "name": "native-supervisor", "configurePreset": "native-supervisor" }
+    { "name": "native-supervisor", "configurePreset": "native-supervisor" },
+    { "name": "crypto-isa", "configurePreset": "crypto-isa" }
   ],
   "testPresets": [
     {

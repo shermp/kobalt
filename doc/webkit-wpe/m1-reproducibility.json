@@ -1,0 +1,142 @@
+{
+  "milestone": "M1",
+  "status": "source-recovery-rebuild-and-sandbox-correction-verified",
+  "milestone_complete": false,
+  "base_commit": "e5201b3",
+  "followup_changes_uncommitted_at_validation": true,
+  "sdk_recovery": {
+    "image": "sha256:32211887c07ac767d606cca9df82250a24b5c2f1938c48f687aaf8ae353ff7b2",
+    "archive_sha256": "78b110c8bd214c0174a0647472c63f80755626a8278b0eb04a674dbec5caf433",
+    "restored_into_empty_isolated_store": true,
+    "offline_container_run": "passed",
+    "normal_sdk_store_unchanged": true
+  },
+  "independent_rebuild": {
+    "dependency_set": "webkit-armhf-e98ce64bb58f003301ed4f1c9c6af41fad05147aa8ca2614cf25673926a5d03c",
+    "input_source_tar_sha256": "580cfb6f310de29bd52ecc86b932cf4deb4135eda6e09775b67ef6fabececcc6",
+    "compiled_webkit_cache_initially_empty": true,
+    "network": "none",
+    "sdk_and_compiler": "locked binary build inputs, not rebuilt",
+    "no_webkit_or_renderer_objects_copied": true,
+    "install_contents_modes_and_symlinks_identical": true,
+    "helper_binaries_identical": true,
+    "original_runtime_tar_sha256": "aa0731a42e383f22aeccd0bdc99bf73c0f72dae6dea26c2fb3b33e620751d0d3",
+    "rebuilt_runtime_tar_sha256": "aa0731a42e383f22aeccd0bdc99bf73c0f72dae6dea26c2fb3b33e620751d0d3",
+    "scope": "before require-requested-sandbox.patch and the launcher/core-limit correction"
+  },
+  "source_distribution": {
+    "manifest": "platforms/webkit/runtime-sources.json",
+    "provenance": "platforms/webkit/source-provenance.json",
+    "ubuntu_snapshot": "20261108T000000Z",
+    "all_runtime_source_name_versions_covered": true,
+    "material": "Ubuntu descriptors/pristine sources/Debian patches; GCC sources and exact compiler recipes/configuration/build log; WPE sources and Kobalt patches; notices",
+    "binary_sdk_archives_in_source_tar": false,
+    "corrupt_missing_and_escaping_sources": "rejected",
+    "real_build_with_published_cache": "corrupt/missing bundles rejected before cache use; valid and relative bundles reused objects"
+  },
+  "crypto_isa": {
+    "library": "libgcrypt 1.9.4",
+    "firmware_glibc": "2.35",
+    "cortex_a7_hwcap2": "0",
+    "qemu_max_hwcap2": "7f",
+    "builtin_selftests_and_sha256_vector": "passed under both CPU models",
+    "scope": "bounded QEMU dispatch check; not exhaustive hardware validation"
+  },
+  "validation_reused": "SDK recovery/source archive integrity and crypto ISA results; independent rebuild proves the preceding dependency set only",
+  "validation_run": "standalone supervisor/source-bundle/SDK-recovery tests; SDK cold/warm restore; source export integrity; real cache-hit rejection; independent offline rebuild before sandbox correction; crypto ISA checks; corrected ARM build and complete firmware diagnostic including normal-mode refusal",
+  "remaining": [
+    "sandbox-preserving target startup and private target sandbox helpers",
+    "final enabled-source notice/license review and optional runtime-resource audit",
+    "physical-device kernel/ISA validation remains later work"
+  ],
+  "raw_evidence": "build/webkit/independent-rebuild.json, independent-build.log, source-negative/results.json, source-tests.log, crypto-isa.log, sdk-restore.log, hardened-native-tests.log, hardened-wrapper-check.log, firmware-f26668a7b2/",
+  "source_metadata_checkpoint": {
+    "sha256": "4d63a43c772556dd5b1f91c92bca05229f3c3eb71856f3f7beba7c216a164051",
+    "change": "source pin metadata, first-party MIT notice and patched-file BSD notices only",
+    "runtime_binaries_unchanged": "reuse first-slice firmware validation after the identical rebuild",
+    "scope": "before sandbox correction; superseded runtime, retained as independent rebuild evidence"
+  },
+  "current_runtime_package": {
+    "dependency_set": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+    "sha256": "4ca5d10ca39b32912e9dbe2743f828a64f98b23f6e024121e51f687fc037f5a1",
+    "change": "refuse unavailable requested sandbox; report sandbox-required policy; disable core files; retain source pins and MIT/BSD notices",
+    "arm_build": "passed; final wrapper/cache-hit run passed",
+    "independent_full_rebuild": "not repeated after sandbox correction; preceding dependency set was independently reproduced"
+  },
+  "sandbox_correction": {
+    "before": "upstream automatically disabled sandbox in an unsupported container without the explicit override; old READY sandboxed label was not evidence of isolation",
+    "after": "normal mode requires sandbox and refuses an unsandboxed child",
+    "normal_mode_status": 133,
+    "normal_mode_snapshot": false,
+    "experiment": "approved explicit simulator-only exception; offline/container restrictions unchanged",
+    "production_sandbox_operation": "unverified; target sandbox helpers and kernel compatibility remain open"
+  },
+  "firmware_revalidation": {
+    "version": "6.0.274403",
+    "profile": "Libra Colour",
+    "qemu_cpu": "cortex-a7",
+    "memory_mib": 768,
+    "cpu_limit": 1,
+    "runs": [
+      {
+        "case": "cold",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "repeat",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "web-crash",
+        "result": 1,
+        "cleanup": true
+      },
+      {
+        "case": "worker-crash",
+        "result": 137,
+        "cleanup": true
+      },
+      {
+        "case": "after-crash",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "version",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "oversized",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "duplicate",
+        "result": 2,
+        "cleanup": true
+      },
+      {
+        "case": "eof",
+        "result": 0,
+        "cleanup": true
+      },
+      {
+        "case": "backpressure",
+        "result": 1,
+        "cleanup": true
+      },
+      {
+        "case": "sandbox-required",
+        "result": 133,
+        "cleanup": true
+      }
+    ],
+    "snapshot_sha256": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008",
+    "nickel_responsive": true,
+    "disposable_device_and_volume_deleted": true,
+    "raw_evidence": "build/webkit/firmware-f26668a7b2/"
+  }
+}
