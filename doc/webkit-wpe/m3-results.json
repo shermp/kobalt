@@ -2,7 +2,7 @@
   "milestone": "M3 initial integration",
   "base": "92eb5f7",
   "branch": "feature/webkit-wpe-m3",
-  "committed": false,
+  "committed": true,
   "review_gate": "initial production-session integration verified; installed NickelHook UI gate remains open",
   "checks": {
     "proxy": {
@@ -80,5 +80,7 @@
     "Publisher title typography crossing columns in the captured Type Tester pages",
     "Physical sandbox, memory footprint, storage and e-ink performance validation"
   ],
-  "source_tree": "9231be65fff901dd7c64c11129c6703a7232c6be56bad993c7e737da75c7cd84"
+  "source_tree": "9231be65fff901dd7c64c11129c6703a7232c6be56bad993c7e737da75c7cd84",
+  "initial_commit": "45069da",
+  "commit_authorization": "User approved committing the initial integration slice and continuing M3."
 }
