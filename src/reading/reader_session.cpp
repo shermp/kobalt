@@ -2,12 +2,15 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "reader_session.h"
+#include "engine/crengine/engine_document.h"
+#include "engine/webkit/webkit_document.h"
 #include "sync/kosync.h"
 #include "engine/crengine/engine_worker.h"
 #include "render/highlight_paint.h"
 #include "appearance_settings.h"
 #include "engine/crengine/engine_activity.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include <QElapsedTimer>
 #include "publication/publication.h"
 #include "publication/layout_compatibility.h"
@@ -46,14 +49,33 @@ QByteArray readUserStyleSheet(const QString &path)
 
 struct DocumentDeleter
 {
-    void operator()(EngineDocument *value) const
+    void operator()(Document *value) const
     {
         EngineJob job;
         delete value;
     }
 };
 
-void captureChapters(ReaderFrame &result, EngineDocument &engine)
+std::shared_ptr<Document> workerDocument(Document *document)
+{
+    const auto worker = engineWorkerState();
+    return std::shared_ptr<Document>(document, [worker](Document *value) {
+        if (worker->stopped.load()) {
+            mainthread::AllowBlocking allow(
+                    "application shutdown has stopped the document worker; no further input can arrive");
+            DocumentDeleter{}(value);
+            return;
+        }
+        if (QThread::currentThread() == worker->thread) {
+            DocumentDeleter{}(value);
+            return;
+        }
+        auto release = std::make_shared<std::unique_ptr<Document, DocumentDeleter>>(value);
+        kobalt::qt::invoke(worker->object, [release] { release->reset(); }, Qt::QueuedConnection);
+    });
+}
+
+void captureChapters(ReaderFrame &result, Document &engine)
 {
     const auto chapter = engine.chapterProgress();
     result.state["chapter_title"] = chapter.title;
@@ -88,8 +110,10 @@ private:
 // the cache. `direction` is the turn that led here; the page further that way
 // is the likelier next one and goes first. Stops when `current` reports a newer
 // request, because that request's page matters more than a page nobody asked for.
-void prepareNeighbours(EngineDocument &engine, int direction, const std::function<bool()> &current)
+void prepareNeighbours(Document &engine, int direction, const std::function<bool()> &current)
 {
+    if (!engine.prepareNeighbours())
+        return;
     for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
         if (current && !current())
             return;
@@ -102,7 +126,7 @@ void prepareNeighbours(EngineDocument &engine, int direction, const std::functio
     }
 }
 
-ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupRequest &request,
+ReaderMarkupFrame captureFrameMarkup(Document &engine, const ReaderMarkupRequest &request,
                                      quint64 generation, qint64 imageKey)
 {
     ReaderMarkupFrame result;
@@ -152,7 +176,7 @@ ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupR
 
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
-ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours = true,
+ReaderFrame capture(Document &engine, const PositionCodec &positions, bool neighbours = true,
                     const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0)
 {
     engineActivity().checkpoint();
@@ -186,27 +210,10 @@ ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool
 ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     : fonts_(std::move(fonts)), placeholderFamily_(std::move(placeholderFamily))
 {
-    const auto worker = engineWorkerState();
-    engine_ = std::shared_ptr<EngineDocument>(
-            new EngineDocument(fonts_), [worker](EngineDocument *value) {
-                // Session owners live on the GUI thread; queued jobs own the other
-                // references. After the GUI has joined the worker, it can destroy a
-                // retained document directly without touching either deleted Qt object.
-                // While the worker runs, release stays on that thread. Owning the
-                // queued value also releases it if shutdown discards the pending call.
-                if (worker->stopped.load() || QThread::currentThread() == worker->thread) {
-                    DocumentDeleter{}(value);
-                    return;
-                }
-                auto release =
-                        std::make_shared<std::unique_ptr<EngineDocument, DocumentDeleter>>(value);
-                kobalt::qt::invoke(
-                        worker->object, [release] { release->reset(); }, Qt::QueuedConnection);
-            });
+    engine_ = workerDocument(new EngineDocument(fonts_));
 }
 
-ReaderSession::ReaderSession(std::shared_ptr<EngineDocument> retainedEngine,
-                             QString placeholderFamily)
+ReaderSession::ReaderSession(std::shared_ptr<Document> retainedEngine, QString placeholderFamily)
     : fonts_(retainedEngine->fontInputs()),
       placeholderFamily_(std::move(placeholderFamily)),
       engine_(std::move(retainedEngine))
@@ -215,6 +222,8 @@ ReaderSession::ReaderSession(std::shared_ptr<EngineDocument> retainedEngine,
 
 std::unique_ptr<ReaderSession> ReaderSession::retained()
 {
+    if (experimentalBackend())
+        return {};
     if (running || !openingResult_.ready() || !frame.error.isEmpty() || fingerprint.isEmpty())
         return {};
     // Stop background image work before queuing eviction. The existing close
@@ -279,6 +288,7 @@ void ReaderSession::cancelSource()
     cancelPendingTurn();
     if (lease_)
         lease_->cancel();
+    suspend();
     clearRenderProgress();
 }
 
@@ -291,7 +301,19 @@ void ReaderSession::revokeSource()
     cancelPendingTurn();
     if (lease_)
         lease_->revoke();
+    suspend();
     clearRenderProgress();
+}
+
+void ReaderSession::suspend()
+{
+    if (!experimentalBackend())
+        return;
+    const auto worker = engineWorkerState();
+    if (worker->stopped.load())
+        return;
+    const auto engine = engine_;
+    kobalt::qt::invoke(worker->object, [engine] { engine->close(); }, Qt::QueuedConnection);
 }
 
 void ReaderSession::drain(std::function<void()> finished)
@@ -305,20 +327,19 @@ void ReaderSession::drain(std::function<void()> finished)
 // Nickel's reader opens every saved position, falling back to the chapter or
 // the book start without a message. Log the fallback, with the chapter file
 // inside the book, so a device report can tell which position failed.
-static bool openAtPlatform(EngineDocument &engine, const PositionCodec &codec,
-                           const QString &location, QString *failure)
+static bool openAtPlatform(Document &engine, const PositionCodec &codec, const QString &location,
+                           QString *failure)
 {
     QString error;
     const auto target = engine.goToPlatformNearest(codec, location, &error);
-    if (target == EngineDocument::PositionTarget::Unavailable) {
+    if (target == Document::PositionTarget::Unavailable) {
         if (failure)
             *failure = error;
         return false;
     }
-    if (target != EngineDocument::PositionTarget::Exact) {
+    if (target != Document::PositionTarget::Exact) {
         diagnostic("native-position-fallback",
-                   { { "target",
-                       target == EngineDocument::PositionTarget::Chapter ? "chapter" : "book" },
+                   { { "target", target == Document::PositionTarget::Chapter ? "chapter" : "book" },
                      { "error_code", diagnosticErrorCode(error) },
                      { "chapter",
                        location.left(location.indexOf('#') < 0 ? location.size()
@@ -335,6 +356,14 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
             request.syncFilename.isNull() ? request.path : request.syncFilename);
     if (ownsLease_)
         cancelSource();
+    const auto backend = request.backend.isEmpty()
+            ? QString::fromLocal8Bit(qgetenv("KOBALT_READER_BACKEND"))
+            : request.backend;
+    const bool webkit = backend == "webkit" && request.identity.startsWith("file://");
+    if (webkit)
+        engine_ = workerDocument(new WebKitDocument(fonts_, request.path));
+    else if (QString::fromLatin1(engine_->backend()) != "crengine")
+        engine_ = workerDocument(new EngineDocument(fonts_));
     ++revision;
     layoutReady_ = false;
     newestLayout->fetch_add(1);
@@ -427,6 +456,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 timer.start();
                 diagnostic("open-start");
                 const auto cancelled = [lease] { return !lease || lease->revoked(); };
+                engine->setCurrent([lease] { return lease && !lease->revoked(); });
                 OpeningResult outcome;
                 const auto interrupted = [lease] {
                     return OpeningResult::failed(lease && lease->end() == SourceLease::End::Revoked
@@ -665,12 +695,30 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         }
                         const auto modelStart = timer.elapsed();
                         report(OpeningStage::Text, 0);
-                        if (outcome.ready()
-                            && engine->openResources(resources, publication.sizes(), size, saved,
-                                                     nullptr, report, &outcome, publishCover)) {
-                            if (restart)
+                        const bool attempted = outcome.ready();
+                        bool opened = attempted
+                                && engine->openResources(resources, publication.sizes(), size,
+                                                         saved, nullptr, report, &outcome,
+                                                         publishCover);
+                        if (!opened && attempted
+                            && QString::fromLatin1(engine->backend()) == "webkit" && !cancelled()) {
+                            diagnostic("webkit-opening-fallback",
+                                       { { "error", engine->resourceError() } });
+                            auto fallback =
+                                    workerDocument(new EngineDocument(engine->fontInputs()));
+                            engine->close();
+                            engine = std::move(fallback);
+                            engine->setUserStyleSheet(userStyleSheet);
+                            outcome = {};
+                            opened = engine->openResources(resources, publication.sizes(), size,
+                                                           saved, nullptr, report, &outcome,
+                                                           publishCover);
+                        }
+                        if (opened) {
+                            if (restart && QString::fromLatin1(engine->backend()) == "crengine")
                                 engine->go(0);
-                            else if (!initial.isEmpty())
+                            else if (!initial.isEmpty()
+                                     && QString::fromLatin1(engine->backend()) == "crengine")
                                 locate(initial);
                             if (outcome.ready()) {
                                 report(OpeningStage::Ready, 0);
@@ -737,12 +785,14 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     neighbours = std::make_unique<NeighbourJob>(neighbourCount);
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), outcome, digest, syncDigest, identity,
-                         savedMatches, finished, lease, job, formattingWarning,
+                        [guard, engine, result = std::move(result), outcome, digest, syncDigest,
+                         identity, savedMatches, finished, lease, job, formattingWarning,
                          formattingDetails]() mutable {
                             if (!guard) {
                                 return;
                             }
+                            if (guard->revision == job && guard->lease_ == lease)
+                                guard->engine_ = engine;
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
                                     [guard, outcome, digest, syncDigest, identity, savedMatches,
@@ -776,8 +826,10 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                         guard->desired = result.state;
                                         guard->fingerprint = digest;
                                         guard->syncDigest_ =
-                                                outcome.ready() ? syncDigest : QByteArray();
-                                        if (!outcome.ready())
+                                                outcome.ready() && !guard->experimentalBackend()
+                                                ? syncDigest
+                                                : QByteArray();
+                                        if (!outcome.ready() || guard->experimentalBackend())
                                             guard->syncFilenameDigest_.clear();
                                         guard->savedMatched = savedMatches;
                                         guard->identity_ = identity;
@@ -2109,7 +2161,7 @@ void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<Chapter
             engineWorker(),
             [engine, guard, job, contents, graph, positions] {
                 EngineJob activity;
-                auto resolved = resolveChapterTargets(*engine, positions, contents, graph);
+                auto resolved = engine->resolveChapters(positions, contents, graph);
                 engine->setChapters(std::move(resolved.contents), std::move(resolved.graph));
                 ReaderFrame result;
                 captureChapters(result, *engine);

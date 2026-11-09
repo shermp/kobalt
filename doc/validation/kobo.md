@@ -1,6 +1,6 @@
 # Kobo adapter checks
 
-The optional standalone WebKit helper has separate [M1 runtime checks](../webkit-wpe/m1.md#verification). These do not replace the application adapter checks below.
+The optional standalone WebKit helper has separate [M1 runtime checks](../webkit-wpe/m1.md#verification) and an [M3 production-session firmware check](../webkit-wpe/m3.md#verification). These do not replace the application adapter checks below.
 
 Label `kobo`. Build `mac-tests`, then run `ctest --preset mac -L kobo` from `platforms/desktop/`. `ctest --preset mac -N -L kobo` lists its tests.
 

@@ -594,6 +594,9 @@ std::string Epub::description() const
     std::string result = "{\"spine\":[";
     for (const auto &item : spine_)
         result += (result.back() == '[' ? "" : ",") + jsonString(item.path);
+    result += "],\"linear\":[";
+    for (const auto &item : spine_)
+        result += std::string(result.back() == '[' ? "" : ",") + (item.linear ? "true" : "false");
     result += "],\"navigation\":[";
     for (const auto &item : navigation_)
         result += std::string(result.back() == '[' ? "" : ",") + "{\"title\":"

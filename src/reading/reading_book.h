@@ -64,14 +64,14 @@ public:
     // Once a minute while the reader is visible and awake.
     void minuteTick()
     {
-        if (bridge && !released)
+        if (bridge && !released && savesReadingState())
             bridge->minuteTick();
     }
 
     // After the final native write at close.
     void markRecent()
     {
-        if (bridge && !released && bridge->writable())
+        if (bridge && !released && bridge->writable() && savesReadingState())
             bridge->markRecent();
     }
 
@@ -173,6 +173,7 @@ public:
     bool rememberImageView(const QString &id, const QJsonObject &view);
 
 private:
+    bool savesReadingState() const;
     bool canFinish() const;
     bool finishPromptSuppressed = false;
     struct ActivitySave;

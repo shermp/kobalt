@@ -1,0 +1,84 @@
+{
+  "milestone": "M3 initial integration",
+  "base": "92eb5f7",
+  "branch": "feature/webkit-wpe-m3",
+  "committed": false,
+  "review_gate": "initial production-session integration verified; installed NickelHook UI gate remains open",
+  "checks": {
+    "proxy": {
+      "status": "passed",
+      "command": "ctest --preset linux -R '^engine.webkit-document$'",
+      "scope": [
+        "owning CPU images",
+        "chapter navigation",
+        "non-linear spine skipping",
+        "invalid frames",
+        "request identity",
+        "cancellation",
+        "sleep restart",
+        "CREngine fallback",
+        "saved-data preservation",
+        "reject sandbox mode downgrade",
+        "reap idle helper on source revocation",
+        "cleanup after document-worker shutdown under strict main-thread guard"
+      ],
+      "log": "build/m3-final-focused.log"
+    },
+    "standalone": {
+      "status": "passed",
+      "command": "ctest --preset native-supervisor",
+      "log": "build/m3-webkit-native.log"
+    },
+    "kobo_qt5": {
+      "status": "passed on final reviewed source",
+      "command": "bash platforms/kobo/build.sh qt5 --check",
+      "log": "build/m3-kobo-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "passed on final reviewed source",
+      "command": "bash platforms/kobo/build.sh qt6 --check",
+      "log": "build/m3-kobo-qt6.log"
+    },
+    "native": {
+      "status": "passed representative full suite; final focused reader/session and main-thread tests passed after WebKit-only handshake, revocation and shutdown hardening",
+      "command": "cmake -DPRESET=linux -DARGS=-j4 -P platforms/validation-record.cmake",
+      "log": "build/m3-native-suite-user.log",
+      "prior_environment_issue": "An initial container-root run bypassed permission-denial fixtures. All of its failures passed in the corrected unprivileged full run, using rootless keep-id and --init.",
+      "recorded_full_suite_tree": "1de9aa6e417ccdc02ddf09186e1a62acbcfdcf8d32ae4c7f9137666cc43096e1",
+      "full_suite_elapsed_seconds": 222.64,
+      "final_focused_log": "build/m3-final-focused.log",
+      "main_thread_log": "build/m3-main-thread.log"
+    },
+    "syntax": {
+      "status": "not available on this host",
+      "command": "cmake -P platforms/kobo/syntax.cmake",
+      "reason": "The Mac-oriented path hit Podman cp -q incompatibility; native clang and host-mapped desktop dependency headers are unavailable. Actual pinned Qt5/Qt6 compile and link checks are used instead."
+    },
+    "firmware_session": {
+      "status": "passed",
+      "firmware": "6.0.274403",
+      "profile": "libra-colour",
+      "execution": "production ReaderSession objects under ARM QEMU alongside Nickel",
+      "sandbox": "explicit unsandboxed experiment; offline network policy retained",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --session-only",
+      "evidence": "build/webkit/firmware-0909490431/session-results/session.json",
+      "first_frame_sha256": "9db8a0dab57adb0fd58643b3d01c70e4b4e9028252ef7eab1359ad6f05b64f1b",
+      "navigation": "forward/backward and identical return pixels",
+      "resize": "latest viewport wins",
+      "sleep": "supervisor stopped and restarted with volatile position",
+      "gui": "heartbeat events delivered during worker IPC",
+      "cleanup": "owned device and volume deleted; no remaining helper tmpfs directories",
+      "physical_device_validation": false,
+      "source_tree": "eccad02d11b58087d26b94616916cb4b491cbd172da96360446753f9447ba504",
+      "reuse_after_final_change": "The final change only handles GUI owners surviving the stopped worker; that branch passed the new native shutdown regression and both Kobo builds. The live-worker firmware navigation/resize/sleep results were reused.",
+      "log": "build/m3-firmware-session-final.log"
+    }
+  },
+  "remaining": [
+    "Installed NickelHook Kobalt UI review and full device lifecycle exercise",
+    "Persistent WebKit positions, native conversion and reading features in M4",
+    "Publisher title typography crossing columns in the captured Type Tester pages",
+    "Physical sandbox, memory footprint, storage and e-ink performance validation"
+  ],
+  "source_tree": "9231be65fff901dd7c64c11129c6703a7232c6be56bad993c7e737da75c7cd84"
+}

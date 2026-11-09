@@ -32,6 +32,7 @@
 #include "reading/reading_density.h"
 #include "reading/sleep_screen.h"
 #include "reading/reader_session.h"
+#include "engine/crengine/engine_document.h"
 #include "sync/kosync.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"

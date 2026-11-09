@@ -5,6 +5,7 @@
 #include "reading/session_timeout.h"
 #include "app/messages/opening_message.h"
 #include "reading/reader_session.h"
+#include "engine/crengine/engine_document.h"
 #include "storage/reader_storage.h"
 #include "storage/bookmark_store.h"
 #include "storage/highlight_store.h"

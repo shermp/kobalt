@@ -85,6 +85,7 @@ file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/embedded_resources.h" CONTENT
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS "${source}/*.cpp" "${source}/*.h")
 # The scenario player is built only into evaluation packages.
 list(FILTER shared EXCLUDE REGEX "/src/scenario/")
+list(FILTER shared EXCLUDE REGEX "/src/webkit/")
 list(FILTER shared EXCLUDE REGEX "/(library|app/library)/")
 file(GLOB adapters CONFIGURE_DEPENDS "common/*.cpp" "common/*.h" "nickel-qt${KOBALT_QT_MAJOR}/*.cpp" "nickel-qt${KOBALT_QT_MAJOR}/*.h" "display/*.cpp")
 # The application objects are compiled once. The mod library links them, and
@@ -251,5 +252,13 @@ if(KOBALT_BUILD_TESTS)
     set_tests_properties(pewter.keyboard PROPERTIES LABELS "pewter;keyboard;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment};QT_QPA_FONTDIR=${KOBALT_ASSETS}/fonts" TIMEOUT 120)
     list(APPEND tests kobalt-native-keyboard-tests)
+    if(KOBALT_QT_MAJOR EQUAL 6)
+        # Explicit firmware diagnostic: it requires the separately deployed WPE
+        # bundle and is therefore not a prepared-SDK CTest test.
+        add_executable(kobalt-webkit-session-check "${KOBALT_ROOT}/tests/webkit/session.cpp")
+        target_include_directories(kobalt-webkit-session-check PRIVATE "${source}" "${KOBALT_ROOT}/tests/support")
+        target_link_libraries(kobalt-webkit-session-check PRIVATE kobalt-test-code ${kobalt_libraries})
+        list(APPEND tests kobalt-webkit-session-check)
+    endif()
     add_custom_target(kobo-tests DEPENDS ${tests})
 endif()

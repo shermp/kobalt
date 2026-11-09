@@ -22,6 +22,7 @@ modes.add_argument('--allow-unsandboxed-device', action='store_true')
 actions = parser.add_mutually_exclusive_group()
 actions.add_argument('--platform-probe-only', action='store_true')
 actions.add_argument('--font-resources-only', action='store_true')
+actions.add_argument('--session-only', action='store_true')
 args = parser.parse_args()
 args.epub_tests |= args.epub_only or args.epub_corpus
 if args.epub_tests and (args.platform_probe_only or args.font_resources_only):
@@ -32,6 +33,9 @@ host_cmake = shutil.which('cmake')
 if args.font_resources_only and not host_cmake:
     parser.error('Host CMake is required for diagnostic scratch cleanup')
 root = Path(__file__).resolve().parents[2]
+session_check = root / 'build/kobo-qt6/kobalt-webkit-session-check'
+if args.session_only and not session_check.is_file():
+    parser.error('Build the Qt6 kobo-tests target first')
 if args.epub_tests:
     fixture = root / 'tests/fixtures/trevelyans-type-tester.kepub.epub'
     with fixture.open('rb') as stream:
@@ -78,6 +82,9 @@ try:
         package.extractall(install, filter='data')
     artifacts = device.folder / 'artifacts'
     shutil.copy2(Path(__file__).with_name('firmware-client.py'), artifacts / 'webkit-client.py')
+    if args.session_only:
+        shutil.copy2(session_check, artifacts / 'kobalt-webkit-session-check')
+        shutil.copy2(root / 'tests/fixtures/trevelyans-type-tester.kepub.epub', artifacts / 'session.epub')
     if args.epub_tests:
         shutil.copy2(Path(__file__).with_name('epub-client.py'), artifacts / 'epub-client.py')
         shutil.copy2(root / 'tests/fixtures/trevelyans-type-tester.kepub.epub', artifacts)
@@ -102,6 +109,30 @@ try:
     assert report['summary'] == ('unavailable' if missing else 'primitives-available')
     assert probe.returncode == (77 if missing else 0)
     (output / 'platform-probe.json').write_text(json.dumps(report, indent=2) + '\n')
+    if args.session_only:
+        environment = dict(
+            KOBALT_WEBKIT_LAUNCHER=prefix + '/bin/kobalt-webkit',
+            KOBALT_WEBKIT_MODE='device-unsandboxed' if args.allow_unsandboxed_device else 'experiment',
+            KOBALT_WEBKIT_QEMU_PREFIX='/firmware/rootfs',
+            QEMU_LD_PREFIX='/firmware/rootfs',
+            LD_LIBRARY_PATH='/firmware/rootfs/usr/local/Kobo:/firmware/rootfs/usr/lib:/firmware/rootfs/lib',
+            QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORM_PLUGIN_PATH='/instance/runtime/plugins/platforms',
+            QT_PLUGIN_PATH='/instance/runtime/plugins:/usr/local/Kobo:/firmware/rootfs/usr/lib/plugins',
+            KOBALT_STRICT_MAIN_THREAD='1')
+        command = ['podman', 'exec', container, '/usr/bin/vn-offline', '/usr/bin/qemu-arm',
+                   '-cpu', 'cortex-a7', '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD']
+        for key, value in environment.items():
+            command += ['-E', key + '=' + value]
+        command += ['/instance/artifacts/kobalt-webkit-session-check',
+                    '/instance/artifacts/session.epub', '/instance/artifacts/session-results']
+        with (output / 'session.log').open('w') as log:
+            run(command, stdout=log, stderr=subprocess.STDOUT, timeout=600)
+        shutil.copytree(artifacts / 'session-results', output / 'session-results')
+        assert device.command('ping')['status'] == 'dispatched'
+        assert not run(['podman', 'exec', container, 'find', '/dev/shm', '-maxdepth', '1',
+                        '-name', 'kobalt-webkit-*'], stdout=subprocess.PIPE, text=True).stdout.strip()
+        print('WEBKIT_KOBALT_SESSION_VERIFIED', flush=True)
+        sys.exit(0)
     if args.font_resources_only:
         worker = install / 'kobalt-webkit/bin/kobalt-webkit-worker'
         backup = output / 'worker-backup'
@@ -165,7 +196,8 @@ print(json.dumps(records,indent=2))
     print('WEBKIT_EPUB_FIRMWARE_VERIFIED' if args.epub_tests else 'WEBKIT_M1_VERIFIED', flush=True)
 finally:
     try:
-        for source, target in (('webkit-results', 'results'), ('epub-results', 'epub-results')):
+        for source, target in (('webkit-results', 'results'), ('epub-results', 'epub-results'),
+                               ('session-results', 'session-results')):
             if (device.folder / 'artifacts' / source).exists() and not (output / target).exists():
                 shutil.copytree(device.folder / 'artifacts' / source, output / target)
     finally:

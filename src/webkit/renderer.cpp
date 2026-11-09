@@ -169,7 +169,9 @@ static void snapshotReady(GObject *object, GAsyncResult *result, gpointer data)
     png.width = width;
     png.height = height;
     png.format = PNG_FORMAT_BGRA;
-    bool written = png_image_write_to_file(&png, path.c_str(), 0, pixels, stride, nullptr);
+    const bool memory = renderer.epub && g_getenv("KOBALT_WEBKIT_MEMORY_FRAMES");
+    bool written =
+            memory || png_image_write_to_file(&png, path.c_str(), 0, pixels, stride, nullptr);
     if (!written)
         g_printerr("kobalt-webkit: PNG: %s\n", png.message);
     png_image_free(&png);
@@ -181,8 +183,8 @@ static void snapshotReady(GObject *object, GAsyncResult *result, gpointer data)
                 + ",\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height)
                 + ",\"stride\":" + std::to_string(stride)
                 + ",\"format\":\"BGRA8-premultiplied\",\"pixels\":" + jsonString(stem + ".bgra")
-                + ",\"png\":" + jsonString(path) + ",\"document\":" + renderer.book.description()
-                + ",\"layout\":" + renderer.metadata + "}\n";
+                + ",\"png\":" + jsonString(memory ? "" : path) + ",\"document\":"
+                + renderer.book.description() + ",\"layout\":" + renderer.metadata + "}\n";
         if (written)
             written = g_file_set_contents((stem + ".json").c_str(), metadata.data(),
                                           metadata.size(), &error);

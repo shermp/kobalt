@@ -26,6 +26,9 @@ int main(void)
     if (!file || !fgets(mode, sizeof(mode), file))
         return 11;
     fclose(file);
+    if (!strcmp(mode, "memory")
+        && (!getenv("KOBALT_WEBKIT_MEMORY_FRAMES") || strncmp(runtime, "/dev/shm/", 9)))
+        return 19;
     char link_path[4096], target[4096];
     snprintf(link_path, sizeof(link_path), "%s/escape", runtime);
     snprintf(target, sizeof(target), "%s/keep", root);

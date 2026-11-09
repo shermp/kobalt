@@ -11,6 +11,7 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -88,6 +89,7 @@ int main(int argc, char **argv)
         fail("disable core files");
     const char *bundle_argument = NULL, *guest = NULL;
     const char *sandbox_mode = "required";
+    int memory_frames = 0;
     for (int i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--allow-unsandboxed-experiment")
             || !strcmp(argv[i], "--allow-unsandboxed-device")) {
@@ -99,14 +101,16 @@ int main(int argc, char **argv)
                 return 2;
             }
             sandbox_mode = selected;
-        } else if (!strcmp(argv[i], "--bundle") && i + 1 < argc)
+        } else if (!strcmp(argv[i], "--memory-frames"))
+            memory_frames = 1;
+        else if (!strcmp(argv[i], "--bundle") && i + 1 < argc)
             bundle_argument = argv[++i];
         else if (!strcmp(argv[i], "--qemu-prefix") && i + 1 < argc)
             guest = argv[++i];
         else {
             fprintf(stderr,
                     "Usage: kobalt-webkit [--bundle directory] [--qemu-prefix sysroot] "
-                    "[--allow-unsandboxed-experiment | --allow-unsandboxed-device]\n");
+                    "[--allow-unsandboxed-experiment | --allow-unsandboxed-device] [--memory-frames]\n");
             return 2;
         }
     }
@@ -146,7 +150,16 @@ int main(int argc, char **argv)
     fprintf(stderr, "kobalt-webkit: sandbox-mode=%s\n", sandbox_mode);
     if (!strcmp(sandbox_mode, "device-unsandboxed"))
         fprintf(stderr, "kobalt-webkit: WebKit sandbox disabled by explicit device opt-in\n");
-    char scratch[] = "/tmp/kobalt-webkit-XXXXXX";
+    char scratch[PATH_MAX];
+    snprintf(scratch, sizeof(scratch), "%s/kobalt-webkit-XXXXXX",
+             memory_frames ? "/dev/shm" : "/tmp");
+    if (memory_frames) {
+        struct statfs filesystem;
+        if (statfs("/dev/shm", &filesystem) || filesystem.f_type != 0x01021994) {
+            fprintf(stderr, "kobalt-webkit: memory frames require tmpfs at /dev/shm\n");
+            return 2;
+        }
+    }
     if (!mkdtemp(scratch))
         fail("runtime directory");
     if (prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)) {
@@ -183,6 +196,8 @@ int main(int argc, char **argv)
         environment("WEBKIT_SKIA_ENABLE_CPU_RENDERING", "1");
         environment("KOBALT_WEBKIT_BUNDLE", bundle);
         environment("KOBALT_WEBKIT_RUNTIME", scratch);
+        if (memory_frames)
+            environment("KOBALT_WEBKIT_MEMORY_FRAMES", "1");
         char path[PATH_MAX];
         join_path(path, bundle, "/libexec/wpe-webkit-2.0");
         environment("WEBKIT_EXEC_PATH", path);

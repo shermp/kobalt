@@ -33,5 +33,8 @@ struct OpenRequest
     bool restartAtStart = false;
     // The same optional host cover used by the sleep screen.
     QString coverImagePath{};
+    // Empty uses KOBALT_READER_BACKEND; CREngine remains the default. WebKit
+    // is experimental and only accepts unencrypted local file publications.
+    QString backend{};
 };
 } // namespace kobalt

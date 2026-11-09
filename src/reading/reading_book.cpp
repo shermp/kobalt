@@ -103,11 +103,11 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     activitySaved.start();
     activityFailed.invalidate();
     appearanceFailed.invalidate();
-    if (annotationDatabaseEnabled())
+    if (annotationDatabaseEnabled() && savesReadingState())
         history = std::make_unique<ReadingHistory>(paths_.directory, identity_, this->digest,
                                                    std::move(sourceKey), session_->title(),
                                                    session_->author(), this->utc);
-    if (!this->bridge) {
+    if (!this->bridge && savesReadingState()) {
         speed = std::make_unique<ReadingSpeed>();
         speed->restore(storage::readRecord(paths_.directory, "reading-speed", paths_.readingSpeed())
                                .object);
@@ -147,7 +147,12 @@ bool ReadingBook::deviceTransition() const
 
 bool ReadingBook::canWriteNative() const
 {
-    return bridge && bridge->writable();
+    return savesReadingState() && bridge && bridge->writable();
+}
+
+bool ReadingBook::savesReadingState() const
+{
+    return !session_->experimentalBackend();
 }
 
 void ReadingBook::releaseNative(bool save)
@@ -173,7 +178,7 @@ void ReadingBook::finishReading(std::function<void(bool)> done)
 
 void ReadingBook::drainReadingSave(std::function<void(bool)> done)
 {
-    if (!bridge) {
+    if (!bridge || !savesReadingState()) {
         done(true);
         return;
     }
@@ -210,6 +215,8 @@ void ReadingBook::retryFailedReadingSave()
 
 void ReadingBook::observeReading(bool learnPace)
 {
+    if (!savesReadingState())
+        return;
     // Reading continues around these stops, so none of them waits for storage.
     if (released || (bridge && !bridge->writable())) {
         stopReading(true);
@@ -286,6 +293,7 @@ ReadingEstimates ReadingBook::estimates() const
 
 void ReadingBook::sleepReading(const QJsonObject &preferences)
 {
+    session_->suspend();
     if (!sleepingReading) {
         sleepingReading = true;
         sleepingAt = utc();
@@ -311,7 +319,7 @@ void ReadingBook::stopReading(bool background, bool nativeAllowed)
     }
     // End Nickel's interval before local storage work, so its clock does not
     // include that I/O and its asynchronous flush can run alongside our save.
-    if (bridge && nativeAllowed)
+    if (bridge && nativeAllowed && savesReadingState())
         bridge->stopReading(readingActivity());
     if (!background)
         checkpointReadingHistory();
@@ -352,6 +360,8 @@ bool ReadingBook::activitySaveDue(int intervalMilliseconds) const
 
 void ReadingBook::saveReadingActivity(bool durable)
 {
+    if (!savesReadingState())
+        return;
     if (activityPending || checkpointAfterActivity || !closesAfterActivity.isEmpty()
         || closeCheckpointPending || activitySaveCoolingDown())
         return;
@@ -480,7 +490,7 @@ void ReadingBook::resumeActivityCheckpoints()
 
 void ReadingBook::rememberAppearance()
 {
-    if (session_->temporaryTypography())
+    if (!savesReadingState() || session_->temporaryTypography())
         return;
     const auto state = checkpointState();
     QJsonObject appearance;
@@ -855,6 +865,10 @@ QJsonObject ReadingBook::checkpointState() const
 
 QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
 {
+    // M3 has no persistent WebKit source-position format. Preserve the entire
+    // supported record until M4 defines and validates that compatibility layer.
+    if (session_->experimentalBackend())
+        return preservedState;
     auto checkpoint = preservedState;
     for (auto it = state.begin(); it != state.end(); ++it)
         checkpoint[it.key()] = it.value();
@@ -887,6 +901,10 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
 
 bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 {
+    if (!savesReadingState()) {
+        *snapshot = checkpointState();
+        return true;
+    }
     if (!background) {
         ++activityGeneration;
         if (activityWriter)
@@ -1009,6 +1027,10 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 
 void ReadingBook::checkpointForClose(std::function<void(bool)> done)
 {
+    if (!savesReadingState()) {
+        done(true);
+        return;
+    }
     if (activityPending || appearancePending || !closesAfterActivity.isEmpty()) {
         closesAfterActivity.append(std::move(done));
         return;

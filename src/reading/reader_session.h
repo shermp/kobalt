@@ -1,5 +1,5 @@
 #pragma once
-#include "engine/crengine/engine_document.h"
+#include "document.h"
 #include "open_request.h"
 #include "highlight_geometry.h"
 #include <QElapsedTimer>
@@ -132,6 +132,10 @@ public:
     std::unique_ptr<ReaderSession> retained();
     void cancelSource();
     void revokeSource();
+    // Retain the displayed frame while releasing an experimental helper at sleep.
+    void suspend();
+
+    bool experimentalBackend() const { return frame.state.value("backend").toString() == "webkit"; }
 
     QByteArray sourceHash() const { return fingerprint; }
 
@@ -381,10 +385,10 @@ public:
 private:
     bool formattingWarning_ = false;
     QJsonObject formattingDetails_;
-    ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily);
+    ReaderSession(std::shared_ptr<Document> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
     QString placeholderFamily_;
-    std::shared_ptr<EngineDocument> engine_;
+    std::shared_ptr<Document> engine_;
     ReaderFrame frame;
     void completeFrameMarkup(ReaderFrame result, quint64 job,
                              const std::shared_ptr<SourceLease> &lease,

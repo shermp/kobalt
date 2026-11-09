@@ -114,4 +114,19 @@ ResolvedChapters resolveChapterTargets(const EngineDocument &engine, const Posit
     auto resolvedContents = resolve(contents);
     return { std::move(resolvedContents), resolve(graph) };
 }
+
+ResolvedChapters EngineDocument::resolveChapters(const PositionCodec &codec,
+                                                 const QVector<ChapterTarget> &contents,
+                                                 const QVector<ChapterTarget> &graph) const
+{
+    return resolveChapterTargets(*this, codec, contents, graph);
+}
+
+bool EngineDocument::openPreview(Document &source, QSize size, QString *error)
+{
+    auto *engine = dynamic_cast<EngineDocument *>(&source);
+    if (!engine)
+        return Document::openPreview(source, size, error);
+    return openPreview(*engine, size, error);
+}
 } // namespace kobalt
