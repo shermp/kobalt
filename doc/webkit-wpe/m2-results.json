@@ -1,0 +1,173 @@
+{
+  "milestone": "M2",
+  "status": "milestone-implementation",
+  "base_branch": "feature/webkit-wpe-m1",
+  "base_commit": "15dfb82a4da69b20b00956f9f04a397214661dd0",
+  "branch": "feature/webkit-wpe-m2",
+  "m2_review_gate": "standalone feature checks and representative EPUB rendering passed in firmware userspace; user authorized commit",
+  "m3_started": false,
+  "arm_build": {
+    "result": "passed",
+    "command": "bash platforms/webkit/build.sh",
+    "log": "build/webkit/arm-build.log",
+    "package": "build/webkit/packages/edc74d6af1f4233cb7f3892e1cfe5b2d9759d1301dd98daffbfbd5f082eed9f3/kobalt-webkit-armhf.tar",
+    "sha256": "c7a22cccf2b09f6916b97b77dce594563bb32039a0e662753296cd46e0e32440",
+    "dependency_entry": "webkit-armhf-e5c09576a0bcca27920c8d3cd90aa77caf337d38c5da1fa71cc92462e741a7d8",
+    "qt_or_webkit_sdk_rebuilt": false
+  },
+  "native": {
+    "result": "passed",
+    "command": "cmake --build --preset native-supervisor && ctest --preset native-supervisor",
+    "image": "sha256:662599b1c68c64b57e6a3d8f35994592a3f4ac6042b3a66c82651db1f36428d7",
+    "log": "build/webkit/native-tests.log",
+    "coverage": [
+      "archive/path/CRC rejection",
+      "package/spine and EPUB3 navigation",
+      "EPUB2 NCX",
+      "cross-publication link rejection",
+      "script resource denial",
+      "supervisor and platform diagnostics",
+      "source-bundle, recovery and notice regressions",
+      "known independent IDPF/Adobe font byte vectors and unchanged suffixes",
+      "obfuscation metadata cannot target chapter content"
+    ]
+  },
+  "sanitizers": {
+    "result": "passed",
+    "log": "build/webkit/epub-sanitizers.log",
+    "tools": [
+      "AddressSanitizer with leak detection",
+      "UndefinedBehaviorSanitizer"
+    ],
+    "scope": "helper EPUB parser native regressions"
+  },
+  "firmware": {
+    "result": "passed",
+    "version": "6.0.274403",
+    "profile": "libra-colour",
+    "runtime": "VirtualNickel/QEMU ARM32; not physical hardware",
+    "mode": "explicit --allow-unsandboxed-experiment",
+    "external_network_restrictions": "unchanged",
+    "evidence": "build/webkit/firmware-bdfdb339a4",
+    "m1_cases": [
+      "cold",
+      "repeat",
+      "web-crash",
+      "worker-crash",
+      "after-crash",
+      "version",
+      "oversized",
+      "duplicate",
+      "eof",
+      "backpressure",
+      "sandbox-required",
+      "other-explicit-mode",
+      "worker-mode-missing",
+      "worker-mode-unknown",
+      "worker-mode-required-disabled",
+      "worker-mode-device-missing-override",
+      "worker-mode-experiment-enabled"
+    ],
+    "m1_snapshot_sha256": "89252a681e502ab38fe3f8f178d89c696030f05085a5dc0f3d774cbdaadb0008",
+    "epub_cases": [
+      "embedded fonts and SVG",
+      "book inline/external/load-handler script denial",
+      "remote stylesheet import/image/iframe/refresh denial",
+      "page forward/back and identical return capture",
+      "chapter boundaries in both directions",
+      "spine jump and internal fragment link",
+      "viewport reflow preserving text anchor",
+      "appearance reflow and dark theme",
+      "immutable outstanding frame quota and release",
+      "invalid command/path/link/style/position errors",
+      "close and reopen",
+      "Trevelyan representative chapter captures",
+      "legacy/modern forced breaks and fitting avoid-before/after/inside groups",
+      "left/right forced-page fallback without parity blanks",
+      "cascade and media queries across resize",
+      "empty spacer/nested chapter-start suppression",
+      "collapsed-whitespace source locations",
+      "retained isolated script world and publisher-style restoration",
+      "rapid close/reopen source validation",
+      "IDPF and Adobe obfuscated fonts produce identical pixels to the plain-font fixture",
+      "long Unicode filename and href commands",
+      "missing fragments restore the previous chapter/page",
+      "image-only source anchors survive viewport changes",
+      "pinned Alice and Moby Dick chapter navigation and stable return images",
+      "literary text pages have non-uniform pixel content"
+    ],
+    "network_requests_observed": [],
+    "nickel_responsive": true,
+    "renderer_cleanup": true,
+    "device_and_system_volume_deleted": true,
+    "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --epub-tests --epub-corpus",
+    "pixel_geometry_consistency": "representative text pages require actual non-uniform pixels; Alice and Moby Dick captures visually inspected"
+  },
+  "fixtures": {
+    "general": {
+      "path": "tests/fixtures/trevelyans-type-tester.kepub.epub",
+      "sha256": "1050bc7af6a6b19267319c8b56965ca7cbf63abedfa8079ab5c4eacbb6c407ac",
+      "scope": "selected chapters, not whole-book language/layout coverage"
+    },
+    "focused": "synthetic EPUB built by simulator diagnostic for security and geometry assertions",
+    "literary": {
+      "alice": {
+        "filename": "pg11-epub3.epub",
+        "sha256": "4f81245d31380ac1d6eafb9a321e3691369bc70985736ae4bccf849a4f784036",
+        "source": "https://www.gutenberg.org/ebooks/11",
+        "rights": "Public domain in the United States; Project Gutenberg edition"
+      },
+      "moby-dick": {
+        "filename": "pg2701-epub3.epub",
+        "sha256": "1bc88e79ef7cf9d5325abe0071e6302265b708df56d3af07db124c81e84197f6",
+        "source": "https://www.gutenberg.org/ebooks/2701",
+        "rights": "Public domain in the United States; Project Gutenberg edition"
+      }
+    },
+    "literary_scope": "selected spine chunks, forward/back navigation, TOC links and pixel-content assertions; not exhaustive whole-book conformance"
+  },
+  "source_export": {
+    "result": "passed",
+    "export_command": "cmake -DACTION=EXPORT -DKOBALT_SOURCE_COMMIT=15dfb82a4da69b20b00956f9f04a397214661dd0 -P platforms/webkit/sources.cmake",
+    "verify_command": "cmake -DACTION=VERIFY -DSOURCE_BUNDLE=<absolute extracted source bundle> -P platforms/webkit/sources.cmake",
+    "log": "build/webkit/source-export.log",
+    "artifact": "build/webkit/sources/kobalt-webkit-sources.tar",
+    "independent_m2_rebuild": false
+  },
+  "not_run": [
+    "Kobalt GUI/CREngine suite: no application sources changed",
+    "Kobo Qt5/Qt6 adapter builds: no application/shared adapter sources changed",
+    "physical-device validation",
+    "exhaustive whole-book/multilingual EPUB conformance matrix"
+  ],
+  "remaining": [
+    "fixed-layout/vertical and RTL-body handling",
+    "full recto/verso spreads and parity blanks",
+    "nested table/flex/grid fragmentation and advanced multilingual coverage",
+    "persistent CFI/source positions remain M4",
+    "shared-memory/Qt integration remains M3",
+    "fatal non-link layout errors still require helper restart",
+    "physical sandbox/resource/performance validation"
+  ],
+  "formatting": {
+    "result": "passed",
+    "version": "clang-format 21.1.8",
+    "files": [
+      "src/webkit/renderer.cpp",
+      "src/webkit/epub.cpp",
+      "src/webkit/epub.h",
+      "tests/webkit/epub.cpp"
+    ],
+    "verification": "--dry-run --Werror passed with the checked-in style",
+    "tool_wheel_sha256": "d12b864b596b80810cdd7f97556c485dc09cfe2952503958535f01359e025fbb"
+  },
+  "user_review": "user authorized committing the M2 candidate; M3 remains a separate milestone",
+  "commit_authorized": true,
+  "precommit": {
+    "arm_runtime_package_byte_identical": true,
+    "sha256": "c7a22cccf2b09f6916b97b77dce594563bb32039a0e662753296cd46e0e32440",
+    "arm_build_log": "build/webkit/precommit-arm-build.log",
+    "focused_native_log": "build/webkit/precommit-native.log",
+    "firmware_validation": "reused the passed combined M1/M2 run because the formatted ARM runtime package is byte-identical"
+  }
+}

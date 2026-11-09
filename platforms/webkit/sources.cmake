@@ -149,6 +149,12 @@ foreach(path LICENSE .clang-format dependencies/cache.cmake dependencies/apply-p
         platforms/cleanup.cmake platforms/load-lock.cmake assets/fonts/InstrumentSerif-Regular.ttf assets/fonts/instrument-serif.json assets/notices/Instrument-Serif-OFL)
     configure_file("${root}/${path}" "${output}/application/${path}" COPYONLY)
 endforeach()
+configure_file("${root}/tests/fixtures/trevelyans-type-tester.kepub.epub"
+    "${output}/application/tests/fixtures/trevelyans-type-tester.kepub.epub" COPYONLY)
+configure_file("${root}/tests/fixtures/screenshot-books.json"
+    "${output}/application/tests/fixtures/screenshot-books.json" COPYONLY)
+configure_file("${root}/platforms/desktop/prepare-screenshot-books.cmake"
+    "${output}/application/platforms/desktop/prepare-screenshot-books.cmake" COPYONLY)
 if(KOBALT_SOURCE_COMMIT)
     set(commit "${KOBALT_SOURCE_COMMIT}")
 else()

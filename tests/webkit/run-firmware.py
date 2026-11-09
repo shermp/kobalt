@@ -2,6 +2,7 @@
 from pathlib import Path
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import shutil
@@ -12,6 +13,9 @@ import uuid
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--virtualnickel', type=Path, required=True)
+parser.add_argument('--epub-tests', action='store_true')
+parser.add_argument('--epub-only', action='store_true')
+parser.add_argument('--epub-corpus', action='store_true')
 modes = parser.add_mutually_exclusive_group()
 modes.add_argument('--allow-unsandboxed-experiment', action='store_true')
 modes.add_argument('--allow-unsandboxed-device', action='store_true')
@@ -19,12 +23,27 @@ actions = parser.add_mutually_exclusive_group()
 actions.add_argument('--platform-probe-only', action='store_true')
 actions.add_argument('--font-resources-only', action='store_true')
 args = parser.parse_args()
+args.epub_tests |= args.epub_only or args.epub_corpus
+if args.epub_tests and (args.platform_probe_only or args.font_resources_only):
+    parser.error('Select EPUB rendering or a resource/platform diagnostic')
 if not (args.platform_probe_only or args.font_resources_only) and not (args.allow_unsandboxed_experiment or args.allow_unsandboxed_device):
     parser.error('Rendering diagnostics require an explicit unsandboxed mode')
 host_cmake = shutil.which('cmake')
 if args.font_resources_only and not host_cmake:
     parser.error('Host CMake is required for diagnostic scratch cleanup')
 root = Path(__file__).resolve().parents[2]
+if args.epub_tests:
+    fixture = root / 'tests/fixtures/trevelyans-type-tester.kepub.epub'
+    with fixture.open('rb') as stream:
+        assert hashlib.file_digest(stream, 'sha256').hexdigest() == '1050bc7af6a6b19267319c8b56965ca7cbf63abedfa8079ab5c4eacbb6c407ac', 'General reading fixture changed'
+corpus = []
+if args.epub_corpus:
+    references = json.loads((root / 'tests/fixtures/screenshot-books.json').read_text())
+    for title in ('alice', 'moby-dick'):
+        book = root / 'build/webkit/books' / references[title]['filename']
+        with book.open('rb') as stream:
+            assert hashlib.file_digest(stream, 'sha256').hexdigest() == references[title]['sha256'], title
+        corpus.append(book)
 font_diagnostic = root / 'build/webkit/font-resources/webkit-font-resources'
 if args.font_resources_only and not font_diagnostic.is_file():
     parser.error('Build the font-resources preset first')
@@ -59,6 +78,13 @@ try:
         package.extractall(install, filter='data')
     artifacts = device.folder / 'artifacts'
     shutil.copy2(Path(__file__).with_name('firmware-client.py'), artifacts / 'webkit-client.py')
+    if args.epub_tests:
+        shutil.copy2(Path(__file__).with_name('epub-client.py'), artifacts / 'epub-client.py')
+        shutil.copy2(root / 'tests/fixtures/trevelyans-type-tester.kepub.epub', artifacts)
+        if corpus:
+            (artifacts / 'corpus').mkdir()
+            for book in corpus:
+                shutil.copy2(book, artifacts / 'corpus')
     prefix = '/mnt/onboard/.adds/kobalt-webkit'
     run(['podman', 'update', '--cpus', '1', container], stdout=subprocess.DEVNULL)
     run(['podman', 'exec', '--workdir', prefix, container, 'sha256sum', '-c', 'SHA256SUMS'],
@@ -118,25 +144,38 @@ print(json.dumps(records,indent=2))
         (output / 'nickel.json').write_text(json.dumps(dict(responsive=True)))
         print('WEBKIT_FONT_RESOURCES_VERIFIED' if args.font_resources_only else 'WEBKIT_PLATFORM_PROBE_VERIFIED', flush=True)
         sys.exit(0)
-    with (output / 'client.log').open('w') as log:
-        run(['podman', 'exec', container, 'python3', '/instance/artifacts/webkit-client.py',
-             prefix, '/instance/artifacts/webkit-results',
-             'device-unsandboxed' if args.allow_unsandboxed_device else 'experiment'],
-            stdout=log, stderr=subprocess.STDOUT, timeout=240)
-    shutil.copytree(artifacts / 'webkit-results', output / 'results')
+    if not args.epub_only:
+        with (output / 'client.log').open('w') as log:
+            run(['podman', 'exec', container, 'python3', '/instance/artifacts/webkit-client.py',
+                 prefix, '/instance/artifacts/webkit-results',
+                 'device-unsandboxed' if args.allow_unsandboxed_device else 'experiment'],
+                stdout=log, stderr=subprocess.STDOUT, timeout=240)
+        shutil.copytree(artifacts / 'webkit-results', output / 'results')
+    if args.epub_tests:
+        with (output / 'epub-client.log').open('w') as log:
+            command = ['podman', 'exec', container, 'python3', '/instance/artifacts/epub-client.py',
+                 prefix, '/instance/artifacts/epub-results',
+                 'device-unsandboxed' if args.allow_unsandboxed_device else 'experiment']
+            if corpus:
+                command.append('/instance/artifacts/corpus')
+            run(command, stdout=log, stderr=subprocess.STDOUT, timeout=600)
+        shutil.copytree(artifacts / 'epub-results', output / 'epub-results')
     assert device.command('ping')['status'] == 'dispatched'
     (output / 'nickel.json').write_text(json.dumps(dict(responsive=True)))
-    print('WEBKIT_M1_VERIFIED', flush=True)
+    print('WEBKIT_EPUB_FIRMWARE_VERIFIED' if args.epub_tests else 'WEBKIT_M1_VERIFIED', flush=True)
 finally:
     try:
-        if (device.folder / 'artifacts/webkit-results').exists() and not (output / 'results').exists():
-            shutil.copytree(device.folder / 'artifacts/webkit-results', output / 'results')
-        device.close()
+        for source, target in (('webkit-results', 'results'), ('epub-results', 'epub-results')):
+            if (device.folder / 'artifacts' / source).exists() and not (output / target).exists():
+                shutil.copytree(device.folder / 'artifacts' / source, output / target)
     finally:
-        run([str(vn / 'launch.sh'), '--delete', '--name', name],
-            env=dict(os.environ, CONTAINER_ENGINE='podman'), stdout=subprocess.DEVNULL, timeout=120)
-        assert not device.folder.exists(), 'Owned device directory remains'
-        volumes = subprocess.check_output(['podman', 'volume', 'ls', '-q', '--filter',
-                                          'name=virtualnickel-system-' + name], text=True, timeout=15)
-        assert not volumes.strip(), 'Owned system volume remains'
-        print('DEVICE_DELETED ' + name, flush=True)
+        try:
+            device.close()
+        finally:
+            run([str(vn / 'launch.sh'), '--delete', '--name', name],
+                env=dict(os.environ, CONTAINER_ENGINE='podman'), stdout=subprocess.DEVNULL, timeout=120)
+            assert not device.folder.exists(), 'Owned device directory remains'
+            volumes = subprocess.check_output(['podman', 'volume', 'ls', '-q', '--filter',
+                                              'name=virtualnickel-system-' + name], text=True, timeout=15)
+            assert not volumes.strip(), 'Owned system volume remains'
+            print('DEVICE_DELETED ' + name, flush=True)

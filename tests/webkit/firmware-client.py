@@ -151,107 +151,112 @@ class Client:
         self.log.close()
 
 
-active = None
-try:
-    checksums = []
-    for label in ('cold', 'repeat', 'web-crash', 'worker-crash', 'after-crash'):
-        active = Client(label)
-        checksums.append(active.render())
-        if label == 'web-crash':
-            active.kill_named('WPEWebProcess')
-            assert active.receive() == 'KWRP/1 0 ERROR web-process-terminated'
-            active.close(1)
-        elif label == 'worker-crash':
-            active.kill_named('kobalt-webkit-worker')
-            active.close(137)
-        else:
-            active.send('KWRP/1 5 RENDER 600 800\n')
-            resize = active.receive()
-            assert resize.startswith('KWRP/1 5 OK SNAPSHOT 600 800 '), resize
-            active.send('KWRP/1 6 SHUTDOWN\n')
-            assert active.receive() == 'KWRP/1 6 OK BYE'
-            active.close(0)
-        active = None
-    assert len(set(checksums)) == 1, checksums
-    for label, request, response in (
-        ('version', 'KWRP/2 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
-        ('oversized', 'X' * 300 + '\n', 'KWRP/1 0 ERROR oversized-request'),
-        ('duplicate', 'KWRP/1 1 PING\nKWRP/1 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
-    ):
-        active = Client(label)
-        assert active.receive() == active.ready
-        active.send(request)
-        if label == 'duplicate':
-            assert active.receive() == 'KWRP/1 1 OK PONG'
-        assert active.receive() == response
-        active.close(2)
-        active = None
-    active = Client('eof')
-    assert active.receive() == active.ready
-    active.send('KWRP/1 1 RENDER 800 1100\n')
-    active.tracked |= descendants(active.process.pid)
-    active.close(0)
-    active = Client('backpressure')
-    assert active.receive() == active.ready
-    os.set_blocking(active.process.stdin.fileno(), False)
-    payload = ''.join('KWRP/1 ' + str(index) + ' PING\n' for index in range(1, 10001)).encode('ascii')
-    offset = 0
-    deadline = time.monotonic() + 15
-    while active.process.poll() is None and time.monotonic() < deadline:
-        try:
-            if offset < len(payload):
-                offset += os.write(active.process.stdin.fileno(), payload[offset:])
-        except BlockingIOError:
-            pass
-        except BrokenPipeError:
-            break
-        time.sleep(.01)
-    active.close(1)
+def main():
     active = None
-    active = Client('sandbox-required', mode='required')
     try:
-        assert active.receive() == 'KWRP/1 0 READY sandbox-required'
+        checksums = []
+        for label in ('cold', 'repeat', 'web-crash', 'worker-crash', 'after-crash'):
+            active = Client(label)
+            checksums.append(active.render())
+            if label == 'web-crash':
+                active.kill_named('WPEWebProcess')
+                assert active.receive() == 'KWRP/1 0 ERROR web-process-terminated'
+                active.close(1)
+            elif label == 'worker-crash':
+                active.kill_named('kobalt-webkit-worker')
+                active.close(137)
+            else:
+                active.send('KWRP/1 5 RENDER 600 800\n')
+                resize = active.receive()
+                assert resize.startswith('KWRP/1 5 OK SNAPSHOT 600 800 '), resize
+                active.send('KWRP/1 6 SHUTDOWN\n')
+                assert active.receive() == 'KWRP/1 6 OK BYE'
+                active.close(0)
+            active = None
+        assert len(set(checksums)) == 1, checksums
+        for label, request, response in (
+            ('version', 'KWRP/2 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
+            ('oversized', 'X' * 8193 + '\n', 'KWRP/1 0 ERROR oversized-request'),
+            ('duplicate', 'KWRP/1 1 PING\nKWRP/1 1 PING\n', 'KWRP/1 0 ERROR invalid-request'),
+        ):
+            active = Client(label)
+            assert active.receive() == active.ready
+            active.send(request)
+            if label == 'duplicate':
+                assert active.receive() == 'KWRP/1 1 OK PONG'
+            assert active.receive() == response
+            active.close(2)
+            active = None
+        active = Client('eof')
+        assert active.receive() == active.ready
         active.send('KWRP/1 1 RENDER 800 1100\n')
-        while True:
-            response = active.receive()
-            assert 'OK SNAPSHOT' not in response, 'Unsandboxed normal-mode render was accepted'
-    except EOFError:
-        pass
-    result = active.process.wait(timeout=10)
-    assert result != 0, 'Required sandbox failure was accepted'
-    assert 'Required WebKit sandbox unavailable' in Path(active.log.name).read_text()
-    active.close(result)
-    active = None
-    other_mode = 'experiment' if selected_mode == 'device-unsandboxed' else 'device-unsandboxed'
-    active = Client('other-explicit-mode', mode=other_mode)
-    assert active.render() == checksums[0]
-    active.send('KWRP/1 5 SHUTDOWN\n')
-    assert active.receive() == 'KWRP/1 5 OK BYE'
-    active.close(0)
-    active = None
-    for label, mode, override in (
-        ('missing', None, '1'), ('unknown', 'unknown', '1'),
-        ('required-disabled', 'required', '1'),
-        ('device-missing-override', 'device-unsandboxed', None),
-        ('experiment-enabled', 'experiment', '0'),
-    ):
-        environment = dict(os.environ, KOBALT_WEBKIT_BUNDLE=str(bundle), KOBALT_WEBKIT_RUNTIME='/tmp')
-        for key, value in (('KOBALT_WEBKIT_SANDBOX_MODE', mode),
-                           ('WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS', override)):
-            environment.pop(key, None)
-            if value is not None:
-                environment[key] = value
-        libraries = str(bundle / 'private') + ':/firmware/rootfs/usr/lib:/firmware/rootfs/lib'
-        result = subprocess.run(
-            ['/usr/bin/vn-offline', '/usr/bin/qemu-arm', '-cpu', 'cortex-a7',
-             '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD', '-E', 'LD_LIBRARY_PATH=' + libraries,
-             str(bundle / 'bin/kobalt-webkit-worker')],
-            env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-        (destination / ('worker-mode-' + label + '.stderr')).write_bytes(result.stderr)
-        assert result.returncode == 2 and not result.stdout, (label, result.returncode, result.stdout)
-        records.append(dict(case='worker-mode-' + label, result=2, cleanup=True))
-    (destination / 'results.json').write_text(json.dumps(dict(primary_mode=selected_mode, runs=records, snapshot_sha256=checksums[0]), indent=2))
-    print('WEBKIT_FIRMWARE_OK ' + json.dumps(records), flush=True)
-finally:
-    if active is not None:
-        active.abort()
+        active.tracked |= descendants(active.process.pid)
+        active.close(0)
+        active = Client('backpressure')
+        assert active.receive() == active.ready
+        os.set_blocking(active.process.stdin.fileno(), False)
+        payload = ''.join('KWRP/1 ' + str(index) + ' PING\n' for index in range(1, 10001)).encode('ascii')
+        offset = 0
+        deadline = time.monotonic() + 15
+        while active.process.poll() is None and time.monotonic() < deadline:
+            try:
+                if offset < len(payload):
+                    offset += os.write(active.process.stdin.fileno(), payload[offset:])
+            except BlockingIOError:
+                pass
+            except BrokenPipeError:
+                break
+            time.sleep(.01)
+        active.close(1)
+        active = None
+        active = Client('sandbox-required', mode='required')
+        try:
+            assert active.receive() == 'KWRP/1 0 READY sandbox-required'
+            active.send('KWRP/1 1 RENDER 800 1100\n')
+            while True:
+                response = active.receive()
+                assert 'OK SNAPSHOT' not in response, 'Unsandboxed normal-mode render was accepted'
+        except EOFError:
+            pass
+        result = active.process.wait(timeout=10)
+        assert result != 0, 'Required sandbox failure was accepted'
+        assert 'Required WebKit sandbox unavailable' in Path(active.log.name).read_text()
+        active.close(result)
+        active = None
+        other_mode = 'experiment' if selected_mode == 'device-unsandboxed' else 'device-unsandboxed'
+        active = Client('other-explicit-mode', mode=other_mode)
+        assert active.render() == checksums[0]
+        active.send('KWRP/1 5 SHUTDOWN\n')
+        assert active.receive() == 'KWRP/1 5 OK BYE'
+        active.close(0)
+        active = None
+        for label, mode, override in (
+            ('missing', None, '1'), ('unknown', 'unknown', '1'),
+            ('required-disabled', 'required', '1'),
+            ('device-missing-override', 'device-unsandboxed', None),
+            ('experiment-enabled', 'experiment', '0'),
+        ):
+            environment = dict(os.environ, KOBALT_WEBKIT_BUNDLE=str(bundle), KOBALT_WEBKIT_RUNTIME='/tmp')
+            for key, value in (('KOBALT_WEBKIT_SANDBOX_MODE', mode),
+                               ('WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS', override)):
+                environment.pop(key, None)
+                if value is not None:
+                    environment[key] = value
+            libraries = str(bundle / 'private') + ':/firmware/rootfs/usr/lib:/firmware/rootfs/lib'
+            result = subprocess.run(
+                ['/usr/bin/vn-offline', '/usr/bin/qemu-arm', '-cpu', 'cortex-a7',
+                 '-L', '/firmware/rootfs', '-U', 'LD_PRELOAD', '-E', 'LD_LIBRARY_PATH=' + libraries,
+                 str(bundle / 'bin/kobalt-webkit-worker')],
+                env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+            (destination / ('worker-mode-' + label + '.stderr')).write_bytes(result.stderr)
+            assert result.returncode == 2 and not result.stdout, (label, result.returncode, result.stdout)
+            records.append(dict(case='worker-mode-' + label, result=2, cleanup=True))
+        (destination / 'results.json').write_text(json.dumps(dict(primary_mode=selected_mode, runs=records, snapshot_sha256=checksums[0]), indent=2))
+        print('WEBKIT_FIRMWARE_OK ' + json.dumps(records), flush=True)
+    finally:
+        if active is not None:
+            active.abort()
+
+
+if __name__ == "__main__":
+    main()

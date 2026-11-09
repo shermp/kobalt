@@ -19,7 +19,8 @@ foreach(path "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker" "$
         "${root}/platforms/webkit/notices.json" "${root}/platforms/webkit/acknowledgements.txt" "${root}/LICENSE" "${root}/assets/notices/Instrument-Serif-OFL" "${root}/assets/fonts/instrument-serif.json"
         "${root}/platforms/webkit/runtime-sources.json"
         "${root}/platforms/webkit/source-provenance.json" "${root}/tests/webkit/fixture.xhtml"
-        "${root}/tests/webkit/illustration.svg" "${root}/assets/fonts/InstrumentSerif-Regular.ttf")
+        "${root}/tests/webkit/illustration.svg" "${root}/assets/fonts/InstrumentSerif-Regular.ttf"
+        "${root}/src/webkit/reader.js")
     file(SHA256 "${path}" hash)
     string(APPEND inputs ";${hash}")
 endforeach()
@@ -44,6 +45,7 @@ file(COPY "${build}/arm/kobalt-webkit" "${build}/arm/kobalt-webkit-worker" "${bu
 file(COPY "${KOBALT_WEBKIT_PREFIX}/libexec" DESTINATION "${output}")
 file(COPY "${KOBALT_WEBKIT_PREFIX}/lib/wpe-webkit-2.0" DESTINATION "${output}/lib")
 file(COPY "${root}/tests/webkit/fixture.xhtml" "${root}/tests/webkit/illustration.svg" DESTINATION "${output}/share/fixture")
+file(COPY "${root}/src/webkit/reader.js" DESTINATION "${output}/share")
 configure_file("${root}/assets/fonts/InstrumentSerif-Regular.ttf" "${output}/share/fixture/font.ttf" COPYONLY)
 file(READ "${root}/assets/fonts/instrument-serif.json" font_manifest)
 string(JSON font_count LENGTH "${font_manifest}" files)

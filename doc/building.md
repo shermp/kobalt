@@ -2,7 +2,7 @@
 
 Application code lives in `src/` and `platforms/`. Shared assets live in root `assets/`. Pinned third-party source URLs, checksums, patches and CMake recipes live in `dependencies/`. Each platform owns its CMake project, presets and toolchain definitions. Generated files and incremental application objects stay under ignored `build/` in this worktree. Compiled third-party dependencies and their downloads live in the shared [dependency cache](#dependency-cache), which belongs to no worktree.
 
-The optional standalone WPE renderer has separate [M1 build and runtime instructions](webkit-wpe/m1.md). It uses the shared cache and a pinned ARM build image; ordinary application builds do not configure or link it.
+The optional standalone WPE renderer has separate [M1 build and runtime instructions](webkit-wpe/m1.md). It uses the shared cache and a pinned ARM build image; ordinary application builds do not configure or link it. The [M2 standalone EPUB backend](webkit-wpe/m2.md) adds pagination, navigation and CPU frame capture.
 
 Install CMake 3.22 or later on the build host. The Kobo and Android launchers also use it to read source provenance before starting their prepared container.
 
