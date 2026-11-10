@@ -15,6 +15,7 @@ struct Resource
 struct Navigation
 {
     std::string title, href;
+    int depth = 0;
 };
 
 // Private helper-side reader. No extraction, Qt, Nickel services or saved data.
@@ -37,6 +38,8 @@ public:
 
     const std::vector<Navigation> &navigation() const { return navigation_; }
 
+    const std::vector<std::string> &spineCfi() const { return spineCfi_; }
+
     const std::string &error() const { return error_; }
 
     std::string description() const;
@@ -53,6 +56,7 @@ private:
     std::map<std::string, Resource> resources_;
     std::vector<Resource> spine_;
     std::vector<Navigation> navigation_;
+    std::vector<std::string> spineCfi_;
 
     struct ObfuscatedFont
     {

@@ -416,6 +416,14 @@ bool Epub::package()
         auto item = found->second;
         item.linear = attribute(n, "linear") != "no";
         spine_.push_back(item);
+        const auto step = [](xmlNode *node) {
+            unsigned index = 2;
+            for (auto *previous = node->prev; previous; previous = previous->prev)
+                if (previous->type == XML_ELEMENT_NODE)
+                    index += 2;
+            return std::to_string(index);
+        };
+        spineCfi_.push_back("/" + step(n->parent) + "/" + step(n));
     });
     if (!valid || spine_.empty()
         || std::none_of(spine_.begin(), spine_.end(), [](const Resource &r) { return r.linear; }))
@@ -466,7 +474,13 @@ bool Epub::package()
                             break;
                         }
                 xmlChar *title = xmlNodeGetContent(label);
-                navigation_.push_back({ title ? reinterpret_cast<char *>(title) : "", href });
+                int depth = 0;
+                for (auto *parent = n->parent; parent && parent != scope; parent = parent->parent)
+                    if (element(parent, anchor ? "ol" : "navPoint"))
+                        ++depth;
+                if (navigation_.size() < 4096)
+                    navigation_.push_back({ title ? reinterpret_cast<char *>(title) : "", href,
+                                            std::max(0, depth - 1) });
                 xmlFree(title);
             });
     }
@@ -597,10 +611,14 @@ std::string Epub::description() const
     result += "],\"linear\":[";
     for (const auto &item : spine_)
         result += std::string(result.back() == '[' ? "" : ",") + (item.linear ? "true" : "false");
+    result += "],\"spine_cfi\":[";
+    for (const auto &cfi : spineCfi_)
+        result += (result.back() == '[' ? "" : ",") + jsonString(cfi);
     result += "],\"navigation\":[";
     for (const auto &item : navigation_)
-        result += std::string(result.back() == '[' ? "" : ",") + "{\"title\":"
-                + jsonString(item.title) + ",\"href\":" + jsonString(item.href) + "}";
+        result += std::string(result.back() == '[' ? "" : ",")
+                + "{\"title\":" + jsonString(item.title) + ",\"href\":" + jsonString(item.href)
+                + ",\"depth\":" + std::to_string(item.depth) + "}";
     return result + "]}";
 }
 } // namespace kobalt::webkit

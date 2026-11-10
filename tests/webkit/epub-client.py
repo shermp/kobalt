@@ -27,7 +27,8 @@ def fixture(path):
         book.writestr('EPUB/picture.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="80"><rect width="180" height="80" fill="navy"/><text x="10" y="40" fill="white">Local EPUB SVG</text></svg>')
         attack = "document.getElementById('guard').textContent='BOOK SCRIPT EXECUTED';fetch('http://127.0.0.1:18765/script')"
         book.writestr('EPUB/evil.js', attack)
-        paragraphs = ''.join(f'<p>Paragraph {i:03}: A quiet reader turns the page. Typography and geometry stay tied to the source text through columns and viewport changes.</p>' for i in range(80))
+        paragraphs = '<p id="unicode-target">Unique source anchor: Café 😀 e\u0301 العربية. A verified source position survives reflow.</p>'
+        paragraphs += ''.join(f'<p>Paragraph {i:03}: A quiet reader turns the page. Typography and geometry stay tied to the source text through columns and viewport changes.</p>' for i in range(80))
         book.writestr('EPUB/one.xhtml', f'''<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title><link rel="stylesheet" href="style.css"/><script>{attack}</script><script src="evil.js"></script><meta http-equiv="refresh" content="0;url=http://127.0.0.1:18765/refresh"/></head><body onload="{attack}"><h1 id="guard">Book scripts blocked</h1><a href="two.xhtml#target">Chapter two</a><img src="picture.svg"/><img src="http://127.0.0.1:18765/image"/><iframe src="http://127.0.0.1:18765/frame"></iframe>{paragraphs}</body></html>''')
         book.writestr('EPUB/two.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1 id="target">Second chapter target</h1><a href="one.xhtml">Return to chapter one</a><p>End of the focused fixture.</p></body></html>')
 
@@ -191,6 +192,30 @@ try:
     assert styled['layout']['content']['x'] == 40 and styled['sha256'] != resized['sha256']
     call('STYLE 0 180 40 2 10 serif dark', error='invalid-style')
     call('GOTO 9 0', error='invalid-location')
+    target = call('LINK ' + encoded('one.xhtml#unicode-target'))
+    source = target['layout']['locator']
+    assert source['version'] == 1 and source['after'].startswith('Unique source anchor:'), source
+    assert source['cfi'].startswith('epubcfi(/4/2!'), source
+    call('GOTO 1 0')
+    restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
+    assert restored['layout']['locator'] == source
+    call('RESIZE 600 900')
+    restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
+    assert restored['layout']['locator'] == source
+    call('CLOSE')
+    call(f'OPEN {encoded(synthetic)} 600 800')
+    restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
+    assert restored['layout']['locator'] == source, (source, restored)
+    # Recover a parser-dependent structural path only through verified text.
+    recover = dict(source, cfi='epubcfi(/4/2!/4/9999:0)', offset=source['offset'] + 7)
+    restored = call('LOCATE 0 ' + encoded(json.dumps(recover)))
+    assert restored['layout']['locator'] == source
+    ambiguous = dict(source, cfi='epubcfi(/4/2!/4/9999:0)', offset=2147483647,
+                     before='', after='Paragraph')
+    call('LOCATE 0 ' + encoded(json.dumps(ambiguous)), error='unresolved-source-position')
+    call('LOCATE 0 ' + encoded(json.dumps(dict(source, version=2))), error='invalid-source-position')
+    call('LOCATE 0 ' + encoded('{bad JSON'), error='invalid-source-position')
+    call('LOCATE 0 ' + encoded(json.dumps(source)))
     held = call('GOTO 0 0', release=False)
     call('NEXT', release=False)
     call('NEXT', error='frame-limit')

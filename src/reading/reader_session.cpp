@@ -548,8 +548,18 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     const auto tracking = saved.value("justification_tracking");
                     const auto hanging = saved.value("hanging_punctuation");
                     const auto widowsOrphans = saved.value("widows_orphans");
+                    // Backend positions have their own content identity. A new
+                    // WebKit checkpoint never relabels an older CREngine DOM.
+                    const auto backendPositions = saved.value("backend_positions").toObject();
+                    const auto webkitPosition = backendPositions.value("webkit").toObject();
+                    const bool sourceMatches =
+                            webkitPosition.value("fingerprint").toString().toLatin1() == digest;
                     if (!savedMatches)
                         saved = {};
+                    if (sourceMatches)
+                        saved["backend_positions"] = backendPositions;
+                    else if (QString::fromLatin1(engine->backend()) == "webkit")
+                        saved.remove("backend_positions");
                     saved["bold_reading"] = bionic;
                     saved["dark_mode"] = dark;
                     saved["hide_nonlinear_fragments"] = hideNonlinear;
@@ -575,6 +585,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     // the DOM version used by existing bookmarks and annotations.
                     if (restart)
                         saved.remove("imported_native_location");
+                    if (restartAtStart && QString::fromLatin1(engine->backend()) == "webkit")
+                        saved.remove("backend_positions");
                     const auto initial = !restart && saved.value("position").toString().isEmpty()
                             ? nativeLocation
                             : QString();

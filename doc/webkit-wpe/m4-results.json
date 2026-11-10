@@ -1,0 +1,185 @@
+{
+  "milestone": "M4 initial source-position and TOC slice",
+  "milestone_status": "in progress; full feature parity remains outstanding",
+  "base": "bcbcfdd",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "75114bc1205d628d9c91e2bc417fc08485c38ef206bc1725f9d4e479a31219db",
+  "checks": {
+    "native_full": {
+      "status": "passed representative full suite before final WebKit-only compatibility hardening; reused for unchanged behavior",
+      "command": "cmake -DPRESET=linux -DARGS=-j4 -P platforms/validation-record.cmake",
+      "source_tree": "25c6ca11e11162f371befba824e179c9be71afce633ef0595021f13f38cd9639",
+      "elapsed_seconds": 227.46,
+      "log": "build/m4-native-suite.log",
+      "all_variant_release_validation": false,
+      "reuse": "The later changes initialize a missing native baseline only for WebKit checkpoints, provide typed errors for unsupported saved locators, distinguish repeated spine resources by CFI package path, and correct an installed-diagnostic selector. Final focused regressions cover these branches; CREngine behavior is unchanged."
+    },
+    "native_focused": {
+      "status": "passed on final source",
+      "log": "build/m4-final-proxy.log",
+      "command": "ctest --preset linux -R \"^(engine.webkit-document|session.reader-session|model.main-thread)$\"",
+      "scope": [
+        "source-token validation and future-version rejection",
+        "reflow without source-anchor drift",
+        "cold reopen at another viewport",
+        "repeated spine resources distinguished by package CFI",
+        "TOC fragments, depths and duplicate destinations",
+        "background checkpoints under the interactive main-thread guard",
+        "independent backend fingerprints",
+        "CREngine and unknown-record preservation",
+        "unchanged native Unread baseline preservation"
+      ]
+    },
+    "kobo_qt5": {
+      "status": "passed final compile/link and adapter tests",
+      "command": "bash platforms/kobo/build.sh qt5 --check",
+      "log": "build/m4-final-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "passed final compile/link, packaging and package checks; previous adapter pass reused",
+      "command": "bash platforms/kobo/build.sh qt6",
+      "log": "build/m4-final-package.log",
+      "adapter_log": "build/m4-kobo-qt6-final.log",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "8c154e900294030edaf385f3167fca0e35afaabb5abd4b11ccfaf1fc8b58f0af"
+    },
+    "syntax": {
+      "status": "unavailable: native clang++ missing",
+      "log": "build/m4-syntax.log",
+      "substitute": "Both pinned Kobo SDKs compiled and linked the changed application sources; no SDK or Qt repair/build was performed."
+    },
+    "helper_epub": {
+      "status": "passed",
+      "command": "ctest --preset native-supervisor -R \"^webkit.epub$\"",
+      "log": "build/m4-helper-epub-final.log",
+      "prepared_native_image": "sha256:662599b1c68c64b57e6a3d8f35994592a3f4ac6042b3a66c82651db1f36428d7",
+      "scope": [
+        "OPF element-order CFI package prefixes",
+        "existing EPUB resource, encryption and navigation checks"
+      ]
+    },
+    "firmware_protocol": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --epub-only",
+      "firmware": "6.0.274403",
+      "mode": "explicit unsandboxed experiment; offline networking retained",
+      "log": "build/m4-firmware-epub-final.log",
+      "evidence": "build/webkit/firmware-9ba28bc4db/epub-results/epub-results.json",
+      "sha256": "b5bdab5772c40f4a001de28a353181deb7c0072b21bdf5b84da2ac065ff22292",
+      "scope": [
+        "real DOM CFI points",
+        "Unicode source context",
+        "cold restoration",
+        "verified unique-context recovery",
+        "ambiguous, future-version and malformed requests rejected without exiting",
+        "existing standalone EPUB regressions"
+      ],
+      "initial_failure": "An unresolved locator originally exited the worker. The final run passes nonfatal rejection and subsequent valid rendering.",
+      "cleanup": "owned device and volume deleted"
+    },
+    "firmware_session": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --session-only",
+      "log": "build/m4-firmware-session.log",
+      "evidence": "build/webkit/firmware-012fdf850d/session-results/session.json",
+      "sha256": "db5a69e797cc02bb91b6580af1735e4fc3e2dfbb2a9b1e0de2475468e8fe4725",
+      "scope": [
+        "production ReaderSession and worker",
+        "TOC navigation",
+        "typography and viewport reflow",
+        "asynchronous saved profile checkpoint",
+        "cold restoration with preserved CREngine fields",
+        "sleep restart",
+        "GUI heartbeat delivery"
+      ],
+      "reuse": "The session executable predates the final WebKit-only baseline/error/duplicate-spine guards. Its live unique-spine case is unchanged; final native regressions and the final installed mod cover the guards.",
+      "cleanup": "owned device and volume deleted"
+    },
+    "firmware_installed": {
+      "status": "passed on final package",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --installed-only",
+      "firmware": "6.0.274403",
+      "profile": "libra-colour",
+      "mode": "explicit unsandboxed experiment; offline networking retained",
+      "log": "build/m4-installed-final.log",
+      "evidence": "build/webkit/firmware-394decfdf7/installed-results/installed.json",
+      "sha256": "e874ef6e62a3e3903a0e92225fd22d84935e2146c10ac4cbd54ad90c5fd019ce",
+      "scope": [
+        "native Library opening",
+        "Chapters menu entry and opened list",
+        "chapter-row navigation",
+        "WebKit forward/back",
+        "rotation",
+        "sleep/wake",
+        "close/reopen",
+        "CREngine opening fallback",
+        "independent WebKit position restored after CREngine reading",
+        "helper and session cleanup"
+      ],
+      "main_thread_blocked": [],
+      "cleanup": "owned device and volume deleted",
+      "retained_user_m3_device_changed": false,
+      "physical_device_validation": false
+    },
+    "screen_review": {
+      "status": "commit approved in chat; screen-review tool has no recorded seen states or annotations",
+      "url": "http://localhost:8765/",
+      "source": "build/screenshots/webkit-m4/",
+      "data": "build/review/webkit-m4/",
+      "round": "001",
+      "developer_inspection": "Compared the Chapters entry and opened list directly with CREngine. Shared fonts, alignment, row spacing and dividers match. Publication font metrics/page counts differ. The M3 Aa text-font sample difference remains; typography parity is later M4 work.",
+      "restored_capture_sha256": "53eab5e8d565743ec50d1bf37e8299e58cd454003d186876d3c8b2a7108c9167",
+      "before_close_capture_sha256": "53eab5e8d565743ec50d1bf37e8299e58cd454003d186876d3c8b2a7108c9167",
+      "restored_capture_identical": true,
+      "feedback_command": "node platforms/review/review.mjs notes --data build/review/webkit-m4",
+      "scope": "targeted installed light-mode captures; shared UI classes/styles are unchanged"
+    },
+    "manual_deployment": {
+      "status": "installed and verified at user request",
+      "instance": "kobalt_webkit_m3_manual",
+      "milestone": "M4 initial source-position and TOC slice",
+      "retained_for_user": true,
+      "left_at": "Library",
+      "verified_backend": "webkit",
+      "verified_source_position_version": 1,
+      "verified_toc": true,
+      "package_sha256": "8c154e900294030edaf385f3167fca0e35afaabb5abd4b11ccfaf1fc8b58f0af",
+      "helper_archive_sha256": "0f1ce5e0c03bec05a3e5084fb5cdd3ef3d469f48c69ce6c06ce143ea614d65b7",
+      "native_library_hash_verified": true,
+      "library_hashes_preserved": true,
+      "settings_and_config_bytes_preserved": true,
+      "evidence": "build/manual-m4-install/verified-state.json",
+      "helper_checksums": "build/manual-m4-install/helper-check.log",
+      "backup": "/home/sherman/kobo-dev/VirtualNickel/state/instances/kobalt_webkit_m3_manual/webkit-m3/upgrades/m4-ae204f02a6",
+      "backup_barrier": "Nickel and the viewer stopped; the instance run lock held during copying and package staging",
+      "backup_contents": "complete Kobalt profile, native database and journals, native settings, previous mod library and helper",
+      "rebuild_required": false
+    }
+  },
+  "helper_package": {
+    "key": "abae698c8b22d02fa21deebbe5eded9006ae9786aac9840e8a515b127b08703b",
+    "archive_sha256": "0f1ce5e0c03bec05a3e5084fb5cdd3ef3d469f48c69ce6c06ce143ea614d65b7",
+    "build_log": "build/m4-webkit-rejection-fix.log"
+  },
+  "saved_data": {
+    "book_record_format": 1,
+    "database_schema": 3,
+    "preferences_schema": 1,
+    "position_field": "backend_positions.webkit",
+    "native_conversion": false,
+    "native_writeback": false
+  },
+  "remaining": [
+    "selection and hit testing",
+    "bookmarks, highlights, annotations and range geometry",
+    "search and text extraction",
+    "reading statistics and progress",
+    "page previews and cache policy",
+    "advanced typography and writing directions",
+    "automatic renderer-failure recovery",
+    "validated CFI/XPointer/native conversion",
+    "user visual review of this initial slice"
+  ],
+  "commit_authorization": "User authorized committing the validated position/TOC slice and continuing M4 after installation on the manual device."
+}

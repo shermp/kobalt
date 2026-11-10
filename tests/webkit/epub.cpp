@@ -96,6 +96,7 @@ int main()
     Epub book;
     assert(book.open(path));
     assert(book.spine().size() == 2 && book.navigation().size() == 1);
+    assert(book.spineCfi() == std::vector<std::string>({ "/4/2", "/4/4" }));
     unsigned target = 9;
     std::string fragment, resource;
     assert(book.resolveLink(0, "two.xhtml#target", target, fragment) && target == 1
@@ -163,6 +164,7 @@ int main()
                           + "'/><CipherData><CipherReference URI='OEBPS/font.ttf'/></CipherData></EncryptedData></encryption>" });
         archive(path, fonts);
         assert(book.open(path));
+        assert(book.spineCfi()[0] == "/6/2");
         assert(book.read("OEBPS/font.ttf", resource) && resource == plain);
         auto &encryption = fonts.back().second;
         encryption.replace(encryption.find("OEBPS/font.ttf"), 14, "OEBPS/text/one.xhtml");

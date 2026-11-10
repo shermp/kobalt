@@ -1,6 +1,9 @@
 #include "check.h"
 #include "publication/local_resources.h"
 #include "reading/reader_session.h"
+#include "reading/reading_book.h"
+#include "reading/source_position.h"
+#include "support/main_thread.h"
 #include <QGuiApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -8,6 +11,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QTimer>
+#include <QTemporaryDir>
 
 using namespace kobalt;
 
@@ -57,6 +61,7 @@ int main(int argc, char **argv)
         completion.exec();
         require(beats > 0, "GUI event loop continues during opening");
         require(session->pages() > 1 && !session->image().isNull(), "CPU page and pagination");
+        require(!session->chapters().isEmpty(), "Publication table of contents exposed");
         const auto firstPage = session->page();
         const auto first = digest(session->image());
         require(session->image().save(output + "/first.png"), "Capture first reader frame");
@@ -82,7 +87,62 @@ int main(int argc, char **argv)
         completion.exec();
         require(session->error().isEmpty() && !session->image().isNull(),
                 "Helper restarts after sleep");
-        require(!session->state().contains("position"), "No provisional persistent position");
+        require(!session->state().contains("position"), "CREngine position remains separate");
+        const auto contents = session->chapters();
+        require(session->goTo(contents.at(qMin(1, contents.size() - 1)).position),
+                "TOC destination queued");
+        completion.exec();
+        require(session->error().isEmpty(), "TOC source destination resolves");
+        require(session->turn(1), "Turn into chapter text");
+        completion.exec();
+        const auto anchor = session->state().value("source_position").toObject();
+        require(sourceposition::valid(anchor), "Versioned source position captured");
+        auto appearance = session->persistentState();
+        appearance["font_pixels"] = 32;
+        session->apply(appearance, { 800, 600 });
+        completion.exec();
+        require(session->error().isEmpty()
+                        && session->state().value("source_position").toObject() == anchor,
+                "Typography and viewport changes retain the exact source anchor");
+        const auto fingerprint = session->sourceHash();
+        const auto identity = request.identity;
+        QTemporaryDir profile;
+        require(profile.isValid(), "Create diagnostic profile");
+        const storage::Paths paths{ profile.path() };
+        const QJsonObject original{ { "schema", 1 },
+                                    { "book", identity },
+                                    { "position", "CREngine position retained" },
+                                    { "fingerprint", "previous-CREngine-fingerprint" },
+                                    { "future_field", "preserved" } };
+        require(storage::writeBookState(paths, identity, original),
+                "Prepare existing saved record");
+        session->updated = {};
+        {
+            ReadingBook book(std::move(session), paths.bookState(identity), paths, identity,
+                             fingerprint, nullptr, {}, {});
+            mainthread::Interaction reading([] { return true; });
+            book.checkpointForClose([&](bool saved) {
+                require(saved, "Background source checkpoint saved");
+                completion.quit();
+            });
+            completion.exec();
+        }
+        auto saved = storage::readBookState(paths, identity).object;
+        auto preserved = saved;
+        preserved.remove("backend_positions");
+        require(preserved == original, "CREngine and unknown record fields preserved");
+        session = std::make_unique<ReaderSession>(EngineFontInputs{}, "serif");
+        lease = std::make_shared<SourceLease>();
+        request.lease = lease;
+        request.resources = localResourceFactory(path, lease);
+        request.saved = saved;
+        session->open(request, [&](OpeningResult result) {
+            require(result.ready() && session->experimentalBackend(), "Cold WebKit reopening");
+            require(session->state().value("source_position").toObject() == anchor,
+                    "Source anchor restored after a cold open at another viewport");
+            completion.quit();
+        });
+        completion.exec();
         QFile report(output + "/session.json");
         require(report.open(QIODevice::WriteOnly), "Open firmware report");
         report.write(QJsonDocument(QJsonObject{ { "backend", "webkit" },
@@ -91,7 +151,11 @@ int main(int argc, char **argv)
                                                 { "first_sha256", QString::fromLatin1(first) },
                                                 { "navigation", true },
                                                 { "resize", true },
-                                                { "sleep_resume", true } })
+                                                { "sleep_resume", true },
+                                                { "source_position", anchor },
+                                                { "persistent_position", true },
+                                                { "toc_navigation", true },
+                                                { "saved_data_preserved", true } })
                              .toJson());
         lease->cancel();
         session.reset();

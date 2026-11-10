@@ -1,6 +1,11 @@
 // This function body runs only through the native API in the kobalt-reader
 // isolated world. Book markup cannot execute scripts or replace this state.
 if (document.URL !== options.uri) return { source: document.URL };
+let sourcePosition = null;
+try { sourcePosition = options.restore ? JSON.parse(options.restore) : null; }
+catch (_) { return { source: document.URL, error: 'invalid-source-position' }; }
+if (options.restore && (!sourcePosition || typeof sourcePosition !== 'object' || Array.isArray(sourcePosition)))
+  return { source: document.URL, error: 'invalid-source-position' };
 const body = document.body;
 if (!body) throw new Error('missing-body');
 if (getComputedStyle(body).writingMode !== 'horizontal-tb' ||
@@ -147,7 +152,7 @@ state.breakOverrides = Array.from(breakElements, ([element, style]) => ({ elemen
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const pages = Math.max(1, Math.ceil((body.scrollWidth + 2 * margin - 1) / options.width));
 if (pages > 100000) throw new Error('chapter-too-large');
-const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION, {
   acceptNode(node) {
     return /^(script|style|noscript)$/i.test(node.parentElement?.localName || '')
       ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -193,7 +198,98 @@ function elementPath(element) {
   }
   return path;
 }
-let page = options.page;
+const text = nodes.map(entry => entry.node.data).join('');
+function textPoint(offset) {
+  const entry = nodes.find(entry => entry.offset + entry.node.length > offset) || nodes.at(-1);
+  if (!entry) return null;
+  let local = Math.max(0, Math.min(entry.node.length, offset - entry.offset));
+  // Positions are UTF-16 offsets between Unicode characters.
+  if (local && /[\uD800-\uDBFF]/u.test(entry.node.data[local - 1]) &&
+      /[\uDC00-\uDFFF]/u.test(entry.node.data[local] || '')) --local;
+  return { node: entry.node, local, offset: entry.offset + local };
+}
+function objectPoint(node) {
+  const next = nodes.find(entry => node.compareDocumentPosition(entry.node) & Node.DOCUMENT_POSITION_FOLLOWING);
+  return { node, local: null, offset: next ? next.offset : length };
+}
+function cfiPath(node, offset = null) {
+  const steps = [];
+  if (offset !== null) {
+    let elements = 0, precedingText = 0;
+    for (const sibling of node.parentNode.childNodes) {
+      if (sibling === node) break;
+      if (sibling.nodeType === Node.ELEMENT_NODE) { ++elements; precedingText = 0; }
+      else if (sibling.nodeType === Node.TEXT_NODE || sibling.nodeType === Node.CDATA_SECTION_NODE)
+        precedingText += sibling.length;
+    }
+    steps.unshift(`${2 * elements + 1}:${precedingText + offset}`);
+    node = node.parentElement;
+  }
+  while (node && node !== document.documentElement) {
+    if (!node.parentElement || steps.length >= 256) throw new Error('invalid-source-position');
+    steps.unshift(String(2 * (Array.prototype.indexOf.call(node.parentElement.children, node) + 1)));
+    node = node.parentElement;
+  }
+  return '/' + steps.join('/');
+}
+function cfiPoint(cfi) {
+  const prefix = `epubcfi(${options.cfiBase}!`;
+  if (typeof cfi !== 'string' || cfi.length > 2048 || !cfi.startsWith(prefix) || !cfi.endsWith(')'))
+    return null;
+  const match = /^((?:\/[1-9][0-9]*)+)(?::(0|[1-9][0-9]*))?$/u.exec(cfi.slice(prefix.length, -1));
+  if (!match) return null;
+  const steps = match[1].slice(1).split('/').map(Number);
+  if (steps.length > 256) return null;
+  let node = document.documentElement;
+  for (let index = 0; index < steps.length; ++index) {
+    const step = steps[index];
+    if (step % 2 === 0) node = node?.children[step / 2 - 1];
+    else {
+      if (index !== steps.length - 1 || match[2] === undefined || !node) return null;
+      let elements = 0, local = Number(match[2]);
+      for (const child of node.childNodes) {
+        if (child.nodeType === Node.ELEMENT_NODE) ++elements;
+        else if (elements === (step - 1) / 2 &&
+                 (child.nodeType === Node.TEXT_NODE || child.nodeType === Node.CDATA_SECTION_NODE)) {
+          if (local <= child.length) {
+            const entry = nodes.find(entry => entry.node === child);
+            return entry ? textPoint(entry.offset + local) : null;
+          }
+          local -= child.length;
+        }
+      }
+      return null;
+    }
+    if (!node) return null;
+  }
+  return match[2] === undefined && node && body.contains(node) ? objectPoint(node) : null;
+}
+let restored = null;
+if (sourcePosition) {
+  const saved = sourcePosition;
+  if (saved.version !== 1 || !Number.isInteger(saved.offset) || saved.offset < 0 ||
+      typeof saved.before !== 'string' || saved.before.length > 64 ||
+      typeof saved.after !== 'string' || saved.after.length > 64)
+    return { source: document.URL, error: 'invalid-source-position' };
+  restored = cfiPoint(saved.cfi);
+  const asserts = offset => offset >= saved.before.length && offset <= text.length &&
+    text.slice(offset - saved.before.length, offset) === saved.before &&
+    text.slice(offset, offset + saved.after.length) === saved.after;
+  if (!restored || (restored.local !== null && !asserts(restored.offset))) {
+    // A text assertion can recover a parser-dependent path, but an ambiguous
+    // quote must never silently move a saved anchor to another passage.
+    if (asserts(saved.offset) && (saved.before || saved.after)) restored = textPoint(saved.offset);
+    else {
+      const quote = saved.before + saved.after;
+      const first = quote ? text.indexOf(quote) : -1;
+      if (first < 0 || text.indexOf(quote, first + 1) !== -1)
+        return { source: document.URL, error: 'unresolved-source-position' };
+      restored = textPoint(first + saved.before.length);
+    }
+  }
+  if (!restored) return { source: document.URL, error: 'unresolved-source-position' };
+}
+let page = options.page, fragmentPoint = null;
 if (options.anchor !== null) {
   const object = options.element ? elementAt(options.element) : null;
   page = object ? Math.floor((object.getBoundingClientRect().left - margin + 0.5) / options.width)
@@ -203,7 +299,14 @@ if (options.fragment) {
   const target = document.getElementById(options.fragment) ||
     Array.from(document.getElementsByName(options.fragment))[0];
   if (!target) return { source: document.URL, error: 'missing-link-target' };
+  const first = nodes.find(entry => target.contains(entry.node));
+  fragmentPoint = first ? textPoint(first.offset) : objectPoint(target);
   page = Math.floor((target.getBoundingClientRect().left - margin + 0.5) / options.width);
+}
+if (restored) {
+  page = restored.local === null
+    ? Math.floor((restored.node.getBoundingClientRect().left - margin + 0.5) / options.width)
+    : pageAt(restored.node, restored.local);
 }
 if (page < 0) page = pages - 1;
 page = Math.max(0, Math.min(pages - 1, page));
@@ -257,8 +360,19 @@ for (const element of body.querySelectorAll('img,svg,math')) {
 }
 state.page = page;
 state.start = start;
-const excerpt = nodes.map(entry => entry.node.textContent).join('').slice(start, start + 160);
+let point = restored || fragmentPoint || (start < end ? textPoint(start) : null);
+if (!point && objects.length) point = objectPoint(elementAt(objects[0].path));
+if (!point) point = objectPoint(body);
+let quoteStart = Math.max(0, point.offset - 32), quoteEnd = Math.min(text.length, point.offset + 32);
+if (/[\uDC00-\uDFFF]/u.test(text[quoteStart] || '')) ++quoteStart;
+if (/[\uDC00-\uDFFF]/u.test(text[quoteEnd] || '')) --quoteEnd;
+const locator = { version: 1, cfi: `epubcfi(${options.cfiBase}!${cfiPath(point.node, point.local)})`,
+  offset: point.offset,
+  before: point.local === null ? '' : text.slice(quoteStart, point.offset),
+  after: point.local === null ? '' : text.slice(point.offset, quoteEnd) };
+const excerpt = text.slice(start, start + 160);
 return { source: document.URL, title: document.title, page, pages,
+  locator,
   location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
   viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
   content: { x: margin, y: margin, width: options.width - 2 * margin,

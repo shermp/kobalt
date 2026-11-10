@@ -2,6 +2,7 @@
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
+#include "reading/source_position.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -9,6 +10,7 @@
 #include <QJsonDocument>
 #include <QProcessEnvironment>
 #include <QSysInfo>
+#include <QUrl>
 #include <QtMath>
 #include <algorithm>
 #include <cmath>
@@ -244,9 +246,17 @@ bool WebKitDocument::readFrame(const QString &path, unsigned id)
     if (image.isNull() || count < 1 || count > maximumChapterPages || selected < 0
         || selected >= count || index < 0 || index >= spine.size() || spine.size() > 4096)
         return fail("Invalid WebKit layout");
+    auto position = layout.value("locator").toObject();
+    position["href"] = spine.at(index).toString();
+    const auto prefixes = frame.value("document").toObject().value("spine_cfi").toArray();
+    if (!sourceposition::valid(position) || prefixes.size() != spine.size()
+        || !position.value("cfi").toString().startsWith("epubcfi(" + prefixes.at(index).toString()
+                                                        + '!'))
+        return fail("Invalid WebKit source position");
     runtime_ = directory;
     frame_ = frame;
     image_ = std::move(image);
+    position_ = std::move(position);
     error_.clear();
     return true;
 }
@@ -259,6 +269,21 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     close();
     frame_ = {};
     offsets_.clear();
+    chapters_.clear();
+    chapterStartsAtPage_.clear();
+    position_ = {};
+    bool supported = true;
+    const auto positions = saved.value("backend_positions");
+    if (!positions.isUndefined() && !positions.isObject())
+        supported = fail("Unsupported saved source positions");
+    const auto slot = positions.toObject().value("webkit");
+    if (!slot.isUndefined()) {
+        if (!slot.isObject()
+            || !sourceposition::valid(slot.toObject().value("position").toObject()))
+            supported = fail("Unsupported saved WebKit source position");
+        else
+            position_ = slot.toObject().value("position").toObject();
+    }
     appearance_ = saved;
     appearance_["font_pixels"] =
             qBound(8, saved.value("font_pixels").toInt(defaultFontPixels()), 96);
@@ -275,7 +300,7 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     size_ = size;
     if (progress)
         progress(OpeningStage::Pages, 0);
-    const bool opened = ensureOpen();
+    const bool opened = supported && ensureOpen();
     if (error)
         *error = error_;
     if (!opened && result)
@@ -290,8 +315,7 @@ bool WebKitDocument::ensureOpen()
 {
     if (opened_)
         return true;
-    const bool restore = !frame_.isEmpty();
-    const int index = spine(), selected = chapterPage();
+    const auto restore = position_;
     if (!start()
         || !command("OPEN " + encoded(QFileInfo(path_).absoluteFilePath()) + ' '
                             + QByteArray::number(size_.width()) + ' '
@@ -303,14 +327,14 @@ bool WebKitDocument::ensureOpen()
         return false;
     if (offsets_.isEmpty() && !paginateBook())
         return false;
-    return !restore
-            || command("GOTO " + QByteArray::number(index) + ' ' + QByteArray::number(selected),
-                       true);
+    if (chapters_.isEmpty() && !resolveContents())
+        return false;
+    return restore.isEmpty() || locate(restore);
 }
 
 bool WebKitDocument::paginateBook()
 {
-    const int index = spine(), selected = chapterPage();
+    const auto restore = position_;
     const auto description = frame_.value("document").toObject();
     const int count = description.value("spine").toArray().size();
     const auto linear = description.value("linear").toArray();
@@ -322,11 +346,57 @@ bool WebKitDocument::paginateBook()
         offsets.append(offsets.last() + chapterPages());
         flags.append(linear.size() == count ? linear.at(i).toBool() : true);
     }
-    if (!command("GOTO " + QByteArray::number(index) + ' ' + QByteArray::number(selected), true))
-        return false;
     offsets_ = std::move(offsets);
     linear_ = std::move(flags);
-    return true;
+    return locate(restore);
+}
+
+bool WebKitDocument::locate(const QJsonObject &position)
+{
+    if (!sourceposition::valid(position))
+        return fail("Invalid source position");
+    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    const auto prefixes = frame_.value("document").toObject().value("spine_cfi").toArray();
+    for (int index = 0; index < paths.size(); ++index)
+        if (paths.at(index).toString() == position.value("href").toString()
+            && position.value("cfi").toString().startsWith("epubcfi("
+                                                           + prefixes.at(index).toString() + '!'))
+            return command(
+                    "LOCATE " + QByteArray::number(index) + ' '
+                            + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64(),
+                    true);
+    return fail("Source document is no longer in the reading order");
+}
+
+bool WebKitDocument::resolveContents()
+{
+    const auto restore = position_;
+    QVector<ChapterLink> contents;
+    QMap<QString, bool> boundaries;
+    const auto navigation = frame_.value("document").toObject().value("navigation").toArray();
+    if (navigation.size() > 4096)
+        return fail("Oversized WebKit table of contents");
+    for (const auto &entry : navigation) {
+        const auto item = entry.toObject();
+        if (!command("LINK " + encoded(item.value("href").toString()), true)) {
+            if (!error_.endsWith("missing-link-target"))
+                return false;
+            error_.clear();
+            continue;
+        }
+        const auto position = sourceposition::token(position_);
+        boundaries[position] = position_.value("offset").toInt() <= frame_.value("layout")
+                                                                            .toObject()
+                                                                            .value("location")
+                                                                            .toObject()
+                                                                            .value("start")
+                                                                            .toInt();
+        contents.append({ item.value("title").toString().simplified().left(512), position, page(),
+                          qBound(0, item.value("depth").toInt(), 256) });
+    }
+    chapters_ = std::move(contents);
+    chapterStartsAtPage_ = std::move(boundaries);
+    return locate(restore);
 }
 
 bool WebKitDocument::style()
@@ -356,6 +426,7 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
 {
     if (!ensureOpen())
         return false;
+    const auto restore = position_;
     const bool resized = size.isValid() && size != size_;
     if (resized) {
         if (size.width() < 100 || size.height() < 100 || size.width() > 2048
@@ -376,7 +447,7 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
     if (appearance::same(appearance_, settings) && !resized)
         return true;
     appearance_ = settings;
-    return style() && paginateBook();
+    return style() && paginateBook() && resolveContents() && locate(restore);
 }
 
 int WebKitDocument::spine() const
@@ -448,7 +519,11 @@ bool WebKitDocument::go(int target)
 
 bool WebKitDocument::goTo(const QString &href)
 {
-    return ensureOpen() && command("LINK " + encoded(href), true);
+    if (!ensureOpen())
+        return false;
+    if (href.startsWith("kobalt-source:"))
+        return locate(sourceposition::fromToken(href));
+    return command("LINK " + encoded(href), true);
 }
 
 QImage WebKitDocument::image(int selected)
@@ -487,6 +562,7 @@ QJsonObject WebKitDocument::state() const
     result.remove("position");
     result.remove("dom_version");
     result["backend"] = QStringLiteral("webkit");
+    result["source_position"] = position_;
     return result;
 }
 
@@ -527,7 +603,7 @@ ChapterProgress WebKitDocument::chapterProgress() const
     QString chapter = frame_.value("layout").toObject().value("title").toString();
     for (const auto &entry : document.value("navigation").toArray()) {
         const auto item = entry.toObject();
-        if (item.value("href").toString().section('#', 0, 0) == path
+        if (QUrl(item.value("href").toString()).path().mid(1) == path
             && !item.value("title").toString().trimmed().isEmpty()) {
             chapter = item.value("title").toString();
             break;
@@ -535,6 +611,65 @@ ChapterProgress WebKitDocument::chapterProgress() const
     }
     if (chapter.trimmed().isEmpty())
         chapter = title();
-    return { chapter.simplified().left(512), chapterPage() + 1, chapterPages() };
+    const auto selected = chapterSelection(chapters_);
+    if (selected.current >= 0 && !chapters_.at(selected.current).title.isEmpty())
+        chapter = chapters_.at(selected.current).title;
+    return { chapter.simplified().left(512),
+             selected.current >= 0 ? selected.page : chapterPage() + 1,
+             selected.current >= 0 ? selected.pages : chapterPages() };
+}
+
+ChapterSelection WebKitDocument::chapterSelection(const QVector<ChapterLink> &contents) const
+{
+    auto selected = selectContents(contents, position_);
+    if (selected.current >= 0) {
+        const int first = contents.at(selected.current).page;
+        const auto next = selected.next >= 0 ? contents.at(selected.next) : ChapterLink();
+        const int end = selected.next >= 0
+                ? next.page + (chapterStartsAtPage_.value(next.position, true) ? 0 : 1)
+                : pages();
+        selected.pages = qMax(1, end - first);
+        selected.page = qBound(1, page() - first + 1, selected.pages);
+    }
+    return selected;
+}
+
+QString WebKitDocument::chapterTitle(const QString &position) const
+{
+    const auto selected = selectContents(chapters_, sourceposition::fromToken(position));
+    return selected.current >= 0 ? chapters_.at(selected.current).title : QString();
+}
+
+ChapterSelection WebKitDocument::selectContents(const QVector<ChapterLink> &contents,
+                                                const QJsonObject &source) const
+{
+    ChapterSelection result;
+    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    const auto prefixes = frame_.value("document").toObject().value("spine_cfi").toArray();
+    const auto rank = [&](const QJsonObject &position) {
+        for (int index = 0; index < paths.size(); ++index)
+            if (paths.at(index).toString() == position.value("href").toString()
+                && position.value("cfi").toString().startsWith(
+                        "epubcfi(" + prefixes.at(index).toString() + '!'))
+                return qMakePair(index, position.value("offset").toInt());
+        return qMakePair(-1, -1);
+    };
+    const auto anchor = rank(source);
+    if (anchor.first < 0)
+        return result;
+    auto previous = qMakePair(-1, -1), next = qMakePair(int(paths.size()), 0);
+    for (int index = 0; index < contents.size(); ++index) {
+        const auto candidate = rank(sourceposition::fromToken(contents.at(index).position));
+        if (candidate.first < 0)
+            continue;
+        if (candidate <= anchor && candidate >= previous) {
+            previous = candidate;
+            result.current = index;
+        } else if (candidate > anchor && candidate < next) {
+            next = candidate;
+            result.next = index;
+        }
+    }
+    return result;
 }
 } // namespace kobalt

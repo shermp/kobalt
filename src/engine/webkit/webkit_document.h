@@ -51,6 +51,16 @@ public:
     LinkDetails linkDetails(const QString &, bool = true) override;
     ChapterProgress chapterProgress() const override;
 
+    QVector<ChapterLink> chapters() const override { return chapters_; }
+
+    QVector<ChapterLink> chapterGraph() const override
+    {
+        return chapterPageLengths(chapters_, pages());
+    }
+
+    ChapterSelection chapterSelection(const QVector<ChapterLink> &) const override;
+    QString chapterTitle(const QString &) const override;
+
 private:
     EngineFontInputs fonts_;
     QString path_, error_, runtime_;
@@ -59,10 +69,12 @@ private:
     bool readySeen_ = false;
     unsigned request_ = 0;
     QSize size_;
-    QJsonObject appearance_, frame_;
+    QJsonObject appearance_, frame_, position_;
     QImage image_;
     QVector<int> offsets_;
     QVector<bool> linear_;
+    QVector<ChapterLink> chapters_;
+    QMap<QString, bool> chapterStartsAtPage_;
     bool opened_ = false;
     std::function<bool()> current_;
     bool start();
@@ -71,6 +83,9 @@ private:
     bool readFrame(const QString &, unsigned);
     bool style();
     bool paginateBook();
+    bool locate(const QJsonObject &);
+    bool resolveContents();
+    ChapterSelection selectContents(const QVector<ChapterLink> &, const QJsonObject &) const;
     bool fail(QString);
     void collectProcessError();
     bool processExited();

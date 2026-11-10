@@ -1,5 +1,6 @@
 #include "support/strings.h"
 #include "reading_book.h"
+#include "source_position.h"
 #include "appearance_settings.h"
 #include "session_timeout.h"
 #include "reader_session.h"
@@ -360,8 +361,13 @@ bool ReadingBook::activitySaveDue(int intervalMilliseconds) const
 
 void ReadingBook::saveReadingActivity(bool durable)
 {
-    if (!savesReadingState())
+    if (!savesReadingState()) {
+        QJsonObject snapshot;
+        if (sourceposition::valid(session_->state().value("source_position").toObject())
+            && checkpoint(&snapshot, true))
+            activitySaved.restart();
         return;
+    }
     if (activityPending || checkpointAfterActivity || !closesAfterActivity.isEmpty()
         || closeCheckpointPending || activitySaveCoolingDown())
         return;
@@ -865,10 +871,37 @@ QJsonObject ReadingBook::checkpointState() const
 
 QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
 {
-    // M3 has no persistent WebKit source-position format. Preserve the entire
-    // supported record until M4 defines and validates that compatibility layer.
-    if (session_->experimentalBackend())
-        return preservedState;
+    if (session_->experimentalBackend()) {
+        auto checkpoint = preservedState;
+        const auto current = state.value("source_position").toObject();
+        const auto oldSlots = checkpoint.value("backend_positions");
+        if (!sourceposition::valid(current) || (!oldSlots.isUndefined() && !oldSlots.isObject()))
+            return preservedState;
+        auto positions = oldSlots.toObject();
+        const auto oldSlot = positions.value("webkit");
+        if (!oldSlot.isUndefined()
+            && (!oldSlot.isObject()
+                || !sourceposition::valid(oldSlot.toObject().value("position").toObject())))
+            return preservedState;
+        auto slot = oldSlot.toObject();
+        auto position = slot.value("position").toObject();
+        for (auto it = current.begin(); it != current.end(); ++it)
+            position[it.key()] = it.value();
+        slot["position"] = position;
+        slot["fingerprint"] = QString::fromLatin1(digest);
+        positions["webkit"] = slot;
+        checkpoint["backend_positions"] = positions;
+        checkpoint["schema"] = 1;
+        checkpoint["book"] = identity_;
+        // A new local-only record still needs the observed native baseline.
+        // Otherwise an unchanged native Unread status looks like a fresh reset
+        // at the next opening and discards the backend position before restore.
+        if (!checkpoint.contains("nickel_progress") && baseline.valid)
+            checkpoint["nickel_progress"] = baseline.json();
+        // CREngine's position, fingerprint, native reconciliation and appearance
+        // remain its own saved state. The WebKit slot has an independent digest.
+        return checkpoint;
+    }
     auto checkpoint = preservedState;
     for (auto it = state.begin(); it != state.end(); ++it)
         checkpoint[it.key()] = it.value();
@@ -901,7 +934,8 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
 
 bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 {
-    if (!savesReadingState()) {
+    if (!savesReadingState()
+        && !sourceposition::valid(session_->state().value("source_position").toObject())) {
         *snapshot = checkpointState();
         return true;
     }
@@ -934,10 +968,12 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
     if (background && (checkpoint == savedCheckpoint || checkpoint == pendingCheckpoint))
         return true;
     auto persisted = checkpoint;
-    for (const auto *key : appearance::layoutKeys)
-        persisted.remove(key);
-    for (const auto *key : appearance::marginKeys)
-        persisted.remove(key);
+    if (!session_->experimentalBackend()) {
+        for (const auto *key : appearance::layoutKeys)
+            persisted.remove(key);
+        for (const auto *key : appearance::marginKeys)
+            persisted.remove(key);
+    }
     // A background checkpoint runs while a tap can turn the page, so all of
     // its storage work runs on the writer thread: the first write of an
     // opening can import legacy files. Appearance changes save separately.
@@ -979,10 +1015,10 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
         history->update(readingMilliseconds(), state.value("position").toString());
     const auto historySnapshot = history ? history->snapshot() : ReadingHistory::Snapshot();
     const auto speedState = speed && speed->dirty() ? speed->state() : QJsonObject();
-    const bool saved =
-            writer->writeNow([paths = paths_, identity = identity_, persisted, path = statePath,
-                              state, rememberAppearance = !session_->temporaryTypography(),
-                              historySnapshot, speedState, &layoutSaved] {
+    const bool saved = writer->writeNow(
+            [paths = paths_, identity = identity_, persisted, path = statePath, state,
+             rememberAppearance = savesReadingState() && !session_->temporaryTypography(),
+             historySnapshot, speedState, &layoutSaved] {
                 const bool ok = storage::writeReadingActivity(
                         paths, identity, persisted, speedState, historySnapshot.write, path);
                 if (historySnapshot.complete)
@@ -1027,7 +1063,8 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 
 void ReadingBook::checkpointForClose(std::function<void(bool)> done)
 {
-    if (!savesReadingState()) {
+    if (!savesReadingState()
+        && !sourceposition::valid(session_->state().value("source_position").toObject())) {
         done(true);
         return;
     }
@@ -1044,11 +1081,13 @@ void ReadingBook::checkpointForClose(std::function<void(bool)> done)
     const auto state = checkpointState();
     const auto checkpoint = persistedCheckpoint(state);
     auto persisted = checkpoint;
-    for (const auto *key : appearance::layoutKeys)
-        persisted.remove(key);
-    for (const auto *key : appearance::marginKeys)
-        persisted.remove(key);
-    const bool rememberAppearance = !session_->temporaryTypography();
+    if (!session_->experimentalBackend()) {
+        for (const auto *key : appearance::layoutKeys)
+            persisted.remove(key);
+        for (const auto *key : appearance::marginKeys)
+            persisted.remove(key);
+    }
+    const bool rememberAppearance = savesReadingState() && !session_->temporaryTypography();
     const bool writeSpeed = speed && speed->dirty();
     const auto speedState = writeSpeed ? speed->state() : QJsonObject();
     if (history && activeReading.isValid())

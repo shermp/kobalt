@@ -42,7 +42,7 @@ struct Renderer
     unsigned linkSpine = 0, linkPage = 0;
     unsigned fontSize = 24, lineHeight = 150, margin = 24, letterSpacing = 0, wordSpacing = 0;
     std::string family = "publisher", fragment, bridge, metadata;
-    std::string elementAnchor = "null", pendingError;
+    std::string elementAnchor = "null", pendingError, sourcePosition;
     bool dark = false;
     std::set<unsigned> frames;
 };
@@ -238,19 +238,25 @@ static void pageReady(GObject *object, GAsyncResult *result, gpointer data)
         return;
     }
     JSCValue *failure = jsc_value_object_get_property(value, "error");
-    bool missingFragment = jsc_value_is_string(failure);
+    char *failureText = jsc_value_is_string(failure) ? jsc_value_to_string(failure) : nullptr;
+    const std::string navigationError = failureText ? failureText : "";
+    g_free(failureText);
     g_object_unref(failure);
-    if (missingFragment) {
+    if (!navigationError.empty()) {
         g_object_unref(value);
-        if (!renderer.pendingError.empty()) {
+        if (!renderer.pendingError.empty()
+            || (navigationError != "missing-link-target"
+                && navigationError != "invalid-source-position"
+                && navigationError != "unresolved-source-position")) {
             renderError(renderer, "navigation-restore-failed");
             return;
         }
-        renderer.pendingError = "missing-link-target";
+        renderer.pendingError = navigationError;
         bool reload = renderer.spine != renderer.linkSpine;
         renderer.spine = renderer.linkSpine;
         renderer.targetPage = renderer.linkPage;
         renderer.fragment.clear();
+        renderer.sourcePosition.clear();
         renderer.preserveAnchor = false;
         renderer.pageScriptPending = false;
         if (reload)
@@ -320,7 +326,9 @@ static void paginate(Renderer &renderer)
             + ",\"page\":" + std::to_string(renderer.targetPage)
             + ",\"anchor\":" + (renderer.preserveAnchor ? std::to_string(renderer.anchor) : "null")
             + ",\"element\":" + (renderer.preserveAnchor ? renderer.elementAnchor : "null")
-            + ",\"fragment\":" + jsonString(renderer.fragment) + "};\n";
+            + ",\"fragment\":" + jsonString(renderer.fragment) + ",\"cfiBase\":"
+            + jsonString(renderer.epub ? renderer.book.spineCfi()[renderer.spine] : "/6/2")
+            + ",\"restore\":" + jsonString(renderer.sourcePosition) + "};\n";
     options += "return await globalThis.kobaltPaginate(options);";
     webkit_web_view_call_async_javascript_function(
             renderer.view, options.data(), options.size(), nullptr, "kobalt-reader",
@@ -483,8 +491,8 @@ static std::string expectedUri(const Renderer &renderer)
 static bool epubCommand(Renderer &renderer, unsigned id, const std::string &action,
                         std::istringstream &stream)
 {
-    const std::set<std::string> commands{ "OPEN",   "NEXT",  "PREVIOUS", "GOTO",   "LINK",
-                                          "RESIZE", "STYLE", "CLOSE",    "RELEASE" };
+    const std::set<std::string> commands{ "OPEN",   "NEXT",  "PREVIOUS", "GOTO",    "LINK",
+                                          "RESIZE", "STYLE", "CLOSE",    "RELEASE", "LOCATE" };
     if (!commands.count(action))
         return false;
     std::vector<std::string> args;
@@ -569,7 +577,7 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
     }
     unsigned target = renderer.spine;
     int page = renderer.page;
-    std::string fragment;
+    std::string fragment, sourcePosition;
     bool reload = false, preserve = false;
     if (action == "STYLE") {
         unsigned values[5]{};
@@ -602,6 +610,18 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
         }
         target = index;
         page = selected;
+        reload = target != renderer.spine;
+    } else if (action == "LOCATE") {
+        unsigned index = 0;
+        if (args.size() != 2 || !number(args[0], index) || index >= renderer.book.spine().size()
+            || !decoded(args[1], sourcePosition) || sourcePosition.size() > 4096) {
+            error("invalid-source-position");
+            return true;
+        }
+        target = index;
+        page = 0;
+        renderer.linkSpine = renderer.spine;
+        renderer.linkPage = renderer.page;
         reload = target != renderer.spine;
     } else if (action == "LINK") {
         std::string href;
@@ -645,6 +665,7 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
     renderer.spine = target;
     renderer.targetPage = page;
     renderer.fragment = fragment;
+    renderer.sourcePosition = sourcePosition;
     renderer.preserveAnchor = preserve;
     beginRequest(renderer, id);
     if (reload)

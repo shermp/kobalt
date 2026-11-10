@@ -121,7 +121,7 @@ def check(device, output):
         assert answer['status'] == 'dispatched', answer
         return answer
 
-    def open_book(backend):
+    def open_book(backend, expected_page=None):
         nonlocal current_page
         previous = state_file.stat().st_mtime_ns if state_file.exists() else 0
         device.tap_widget(class_name='BookCoverView')
@@ -129,13 +129,29 @@ def check(device, output):
         value = state(lambda item: state_file.stat().st_mtime_ns > previous,
                       description=backend + ' installed reader frame', timeout=240)
         assert value.get('backend', 'crengine') == backend, value
-        if backend == 'webkit':
+        if backend == 'webkit' and expected_page is None:
             assert value['chapter_title'] == 'Title Page', value['chapter_title']
             assert value['chapter_page'] == 1, value['chapter_page']
+        if expected_page is not None:
+            assert value['page'] == expected_page, (value['page'], expected_page)
         assert value.get('pages', 0) > 1, value
         current_page = value['page']
         transcript.append({'action': 'open', 'backend': backend, 'state': value})
         return value
+
+    def contents(backend):
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrNavChapters')
+        capture(backend + '-chapters-menu')
+        device.tap_widget(name='rrNavChapters')
+        device.wait_widget(name='rrChapter0')
+        capture(backend + '-contents')
+        before = cursor()
+        device.tap_widget(name='rrChapter0')
+        event('frame-ready', before)
+        device.wait_widget(name='rrPage')
 
     def turn(direction=1):
         nonlocal current_page
@@ -171,6 +187,8 @@ def check(device, output):
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
+        assert first['chapters'] > 0, first
+        contents('webkit')
         forward = turn()
         assert forward['page'] > first['page']
         capture('webkit-next')
@@ -209,6 +227,7 @@ def check(device, output):
         device.wait_widget(name='rrPage', timeout=60)
         turn()
         capture('webkit-wake')
+        saved_webkit_page = current_page
         close_book('webkit-menu')
         capture('library-after-close')
         # Only this disposable device's helper is hidden to exercise the public
@@ -220,10 +239,12 @@ def check(device, output):
             open_book('crengine')
             turn()
             capture('crengine-fallback')
+            contents('crengine')
             close_book('crengine-menu')
         finally:
             hidden.rename(launcher)
-        open_book('webkit')
+        open_book('webkit', expected_page=saved_webkit_page)
+        capture('webkit-restored')
         turn()
         close_book()
         assert call('ping')['status'] == 'dispatched'
@@ -233,6 +254,7 @@ def check(device, output):
         report = {'status': 'passed', 'installed_mod': True, 'webkit_navigation': True,
                   'rotation': True, 'sleep_resume': True,
                   'creengine_fallback': True, 'reopen': True, 'helper_cleanup': True,
+                  'persistent_position': True, 'toc_navigation': True,
                   'main_thread_blocked': blocked, 'transcript': transcript}
         (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
         print('WEBKIT_INSTALLED_MOD_VERIFIED', flush=True)
