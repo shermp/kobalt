@@ -55,7 +55,7 @@ private:
     EngineFontInputs fonts_;
     QString path_, error_, runtime_;
     std::unique_ptr<QProcess> process_;
-    QByteArray input_, ready_;
+    QByteArray input_, ready_, processError_;
     bool readySeen_ = false;
     unsigned request_ = 0;
     QSize size_;
@@ -72,6 +72,8 @@ private:
     bool style();
     bool paginateBook();
     bool fail(QString);
+    void collectProcessError();
+    bool processExited();
     int spine() const;
     int chapterPage() const;
     int chapterPages() const;

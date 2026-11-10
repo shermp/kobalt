@@ -23,9 +23,10 @@ actions = parser.add_mutually_exclusive_group()
 actions.add_argument('--platform-probe-only', action='store_true')
 actions.add_argument('--font-resources-only', action='store_true')
 actions.add_argument('--session-only', action='store_true')
+actions.add_argument('--installed-only', action='store_true')
 args = parser.parse_args()
 args.epub_tests |= args.epub_only or args.epub_corpus
-if args.epub_tests and (args.platform_probe_only or args.font_resources_only):
+if args.epub_tests and (args.platform_probe_only or args.font_resources_only or args.session_only or args.installed_only):
     parser.error('Select EPUB rendering or a resource/platform diagnostic')
 if not (args.platform_probe_only or args.font_resources_only) and not (args.allow_unsandboxed_experiment or args.allow_unsandboxed_device):
     parser.error('Rendering diagnostics require an explicit unsandboxed mode')
@@ -34,9 +35,12 @@ if args.font_resources_only and not host_cmake:
     parser.error('Host CMake is required for diagnostic scratch cleanup')
 root = Path(__file__).resolve().parents[2]
 session_check = root / 'build/kobo-qt6/kobalt-webkit-session-check'
+installed_package = root / 'build/kobo-qt6/Kobalt-qt6-diagnostic.zip'
+if args.installed_only and not installed_package.is_file():
+    parser.error('Build the Qt6 diagnostic installation package first')
 if args.session_only and not session_check.is_file():
     parser.error('Build the Qt6 kobo-tests target first')
-if args.epub_tests:
+if args.epub_tests or args.installed_only:
     fixture = root / 'tests/fixtures/trevelyans-type-tester.kepub.epub'
     with fixture.open('rb') as stream:
         assert hashlib.file_digest(stream, 'sha256').hexdigest() == '1050bc7af6a6b19267319c8b56965ca7cbf63abedfa8079ab5c4eacbb6c407ac', 'General reading fixture changed'
@@ -61,7 +65,12 @@ assert archive.is_file(), 'Build the ARM package first'
 output = root / 'build/webkit' / ('firmware-' + uuid.uuid4().hex[:10])
 output.mkdir()
 name = 'agent_kobalt_wpe_m1_' + uuid.uuid4().hex[:10]
-device = Device(name, engine='podman')
+engine = 'podman'
+if args.installed_only:
+    import installed
+    engine = installed.engine_command(output,
+        'device-unsandboxed' if args.allow_unsandboxed_device else 'experiment')
+device = Device(name, engine=engine)
 container = 'virtualnickel-' + name
 
 
@@ -73,7 +82,10 @@ try:
     print('RESULTS ' + str(output), flush=True)
     with (output / 'prepare.log').open('w') as log, contextlib.redirect_stdout(log):
         device.prepare(device='libra-colour', firmware='6.0.274403')
-        device.start(device='libra-colour', firmware='6.0.274403', wait=False, memory_mib=768)
+        if args.installed_only:
+            installed.prepare(root, device, installed_package)
+        device.start(device='libra-colour', firmware='6.0.274403', wait=False, memory_mib=768,
+                     display_time='09:00' if args.installed_only else None)
         device.wait_library_ready(timeout=120)
     print('DEVICE_READY ' + name, flush=True)
     install = device.onboard / '.adds'
@@ -96,6 +108,9 @@ try:
     run(['podman', 'update', '--cpus', '1', container], stdout=subprocess.DEVNULL)
     run(['podman', 'exec', '--workdir', prefix, container, 'sha256sum', '-c', 'SHA256SUMS'],
         stdout=(output / 'package-check.log').open('w'))
+    if args.installed_only:
+        installed.check(device, output)
+        sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(
             ['podman', 'exec', container, '/usr/bin/vn-offline', '/usr/bin/qemu-arm',

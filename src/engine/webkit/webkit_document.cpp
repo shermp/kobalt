@@ -1,6 +1,7 @@
 #include "webkit_document.h"
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
+#include "support/diagnostics.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -42,6 +43,24 @@ bool WebKitDocument::fail(QString error)
     return false;
 }
 
+void WebKitDocument::collectProcessError()
+{
+    if (!process_)
+        return;
+    processError_ += process_->readAllStandardError();
+    if (processError_.size() > 4096)
+        processError_.remove(0, processError_.size() - 4096);
+}
+
+bool WebKitDocument::processExited()
+{
+    collectProcessError();
+    diagnostic("webkit-helper-exited",
+               qt::object({ { "exit_code", process_ ? process_->exitCode() : -1 },
+                            { "stderr", QString::fromUtf8(processError_) } }));
+    return fail("WebKit helper exited");
+}
+
 bool WebKitDocument::start()
 {
     mainthread::blocking("start WebKit helper");
@@ -56,7 +75,6 @@ bool WebKitDocument::start()
     for (const auto *name : { "LD_PRELOAD", "LD_LIBRARY_PATH", "QT_PLUGIN_PATH" })
         environment.remove(name);
     process_->setProcessEnvironment(environment);
-    process_->setStandardErrorFile(QProcess::nullDevice());
     QString launcher = QString::fromLocal8Bit(qgetenv("KOBALT_WEBKIT_LAUNCHER"));
     if (launcher.isEmpty())
         launcher = "/mnt/onboard/.adds/kobalt-webkit/bin/kobalt-webkit";
@@ -75,6 +93,7 @@ bool WebKitDocument::start()
         process_->setProcessEnvironment(environment);
     }
     input_.clear();
+    processError_.clear();
     runtime_.clear();
     ready_ = "KWRP/1 0 READY "
             + (mode.isEmpty() || mode == "required" ? QByteArray("sandbox-required") : mode);
@@ -108,7 +127,7 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult)
 {
     mainthread::blocking("WebKit IPC");
     if (!process_ || process_->state() == QProcess::NotRunning)
-        return fail("WebKit helper exited");
+        return processExited();
     const unsigned id = ++request_;
     const QByteArray prefix = "KWRP/1 " + QByteArray::number(id) + ' ';
     const auto message = prefix + body + '\n';
@@ -125,6 +144,7 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult)
             process_->waitForReadyRead(50);
             input_ += process_->readAllStandardOutput();
         }
+        collectProcessError();
         if (input_.size() > maximumReply) {
             close();
             return fail("Oversized WebKit reply");
@@ -164,7 +184,7 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult)
             return true;
         }
         if (process_->state() == QProcess::NotRunning)
-            return fail("WebKit helper exited");
+            return processExited();
     }
     close();
     return fail("WebKit request timed out");
@@ -501,8 +521,20 @@ LinkDetails WebKitDocument::linkDetails(const QString &href, bool)
 
 ChapterProgress WebKitDocument::chapterProgress() const
 {
-    const auto documents = frame_.value("document").toObject().value("spine").toArray();
-    return { spine() < documents.size() ? documents.at(spine()).toString() : QString(),
-             chapterPage(), chapterPages() };
+    const auto document = frame_.value("document").toObject();
+    const auto documents = document.value("spine").toArray();
+    const auto path = spine() < documents.size() ? documents.at(spine()).toString() : QString();
+    QString chapter = frame_.value("layout").toObject().value("title").toString();
+    for (const auto &entry : document.value("navigation").toArray()) {
+        const auto item = entry.toObject();
+        if (item.value("href").toString().section('#', 0, 0) == path
+            && !item.value("title").toString().trimmed().isEmpty()) {
+            chapter = item.value("title").toString();
+            break;
+        }
+    }
+    if (chapter.trimmed().isEmpty())
+        chapter = title();
+    return { chapter.simplified().left(512), chapterPage() + 1, chapterPages() };
 }
 } // namespace kobalt

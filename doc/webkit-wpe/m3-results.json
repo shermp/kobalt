@@ -1,9 +1,9 @@
 {
-  "milestone": "M3 initial integration",
+  "milestone": "M3 Kobalt integration",
   "base": "92eb5f7",
   "branch": "feature/webkit-wpe-m3",
   "committed": true,
-  "review_gate": "initial production-session integration verified; installed NickelHook UI gate remains open",
+  "review_gate": "production-session and installed NickelHook checks passed; user approved committing the continuation in chat",
   "checks": {
     "proxy": {
       "status": "passed",
@@ -20,9 +20,12 @@
         "saved-data preservation",
         "reject sandbox mode downgrade",
         "reap idle helper on source revocation",
-        "cleanup after document-worker shutdown under strict main-thread guard"
+        "cleanup after document-worker shutdown under strict main-thread guard",
+        "bounded helper stderr tail and exit code",
+        "XHTML chapter title",
+        "one-based chapter progress"
       ],
-      "log": "build/m3-final-focused.log"
+      "log": "build/m3-continuation-proxy.log"
     },
     "standalone": {
       "status": "passed",
@@ -30,29 +33,36 @@
       "log": "build/m3-webkit-native.log"
     },
     "kobo_qt5": {
-      "status": "passed on final reviewed source",
+      "status": "passed continuation compile/link and adapter checks",
       "command": "bash platforms/kobo/build.sh qt5 --check",
-      "log": "build/m3-kobo-qt5.log"
+      "log": "build/m3-continuation-qt5.log"
     },
     "kobo_qt6": {
-      "status": "passed on final reviewed source",
-      "command": "bash platforms/kobo/build.sh qt6 --check",
-      "log": "build/m3-kobo-qt6.log"
+      "status": "passed continuation compile/link, diagnostic packaging and package checks; prior adapter checks reused",
+      "command": "bash platforms/kobo/build.sh qt6",
+      "log": "build/m3-installed-build.log",
+      "adapter_log": "build/m3-kobo-qt6.log",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "7704d255c4c3340bbf09ed1ebf5d52be2ac3a9c0e13eb818ab2fdf44b6d8afa0",
+      "package_source_tree": "33537950cbba5a2fb3594317efbba32db43e9e2ba4a0658c5cb1863d051ef621",
+      "reuse": "Only host diagnostic assertions/captures and documentation changed after this package; the application and helper sources are unchanged."
     },
     "native": {
-      "status": "passed representative full suite; final focused reader/session and main-thread tests passed after WebKit-only handshake, revocation and shutdown hardening",
+      "status": "passed representative full suite on initial integration; continuation focused proxy, reader-session and main-thread checks passed",
       "command": "cmake -DPRESET=linux -DARGS=-j4 -P platforms/validation-record.cmake",
       "log": "build/m3-native-suite-user.log",
       "prior_environment_issue": "An initial container-root run bypassed permission-denial fixtures. All of its failures passed in the corrected unprivileged full run, using rootless keep-id and --init.",
       "recorded_full_suite_tree": "1de9aa6e417ccdc02ddf09186e1a62acbcfdcf8d32ae4c7f9137666cc43096e1",
       "full_suite_elapsed_seconds": 222.64,
-      "final_focused_log": "build/m3-final-focused.log",
-      "main_thread_log": "build/m3-main-thread.log"
+      "final_focused_log": "build/m3-continuation-proxy.log",
+      "main_thread_log": "build/m3-main-thread.log",
+      "reuse": "The continuation changes the WebKit proxy and bridge metadata only. The representative full native run and standalone supervisor suite are reused for unchanged behavior."
     },
     "syntax": {
       "status": "not available on this host",
       "command": "cmake -P platforms/kobo/syntax.cmake",
-      "reason": "The Mac-oriented path hit Podman cp -q incompatibility; native clang and host-mapped desktop dependency headers are unavailable. Actual pinned Qt5/Qt6 compile and link checks are used instead."
+      "reason": "Prepared SDK headers were extracted successfully. Native clang++ is unavailable. Actual pinned Qt5/Qt6 compile and link checks are used instead.",
+      "log": "build/m3-installed-syntax.log"
     },
     "firmware_session": {
       "status": "passed",
@@ -72,15 +82,99 @@
       "source_tree": "eccad02d11b58087d26b94616916cb4b491cbd172da96360446753f9447ba504",
       "reuse_after_final_change": "The final change only handles GUI owners surviving the stopped worker; that branch passed the new native shutdown regression and both Kobo builds. The live-worker firmware navigation/resize/sleep results were reused.",
       "log": "build/m3-firmware-session-final.log"
+    },
+    "firmware_installed": {
+      "status": "passed",
+      "firmware": "6.0.274403",
+      "profile": "libra-colour",
+      "execution": "installed Qt6 diagnostic NickelHook mod under ARM QEMU",
+      "sandbox": "explicit unsandboxed experiment; offline network policy retained",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --allow-unsandboxed-experiment --installed-only",
+      "evidence": "build/webkit/firmware-13ccd490d9/installed-results/installed.json",
+      "evidence_sha256": "7be3a2d5d4e012d686a5de9930fcb86867a61b31500d7263a0b54d6d4f6eb95e",
+      "log": "build/m3-installed-final.log",
+      "helper_package_key": "1968b280e3ce841ce22297efeca3f3d341d271d47c3f727116178ffdcf1013a0",
+      "helper_archive_sha256": "e54b93cfca5792b532b239b020ac0b233557f71c4ae5700a39555ded21af065e",
+      "helper_build_log": "build/m3-webkit-build.log",
+      "scope": [
+        "Library opening",
+        "WebKit forward/backward navigation",
+        "readable chapter title and one-based chapter page",
+        "rotation cycle",
+        "sleep helper cleanup",
+        "post-wake navigation",
+        "close/reopen",
+        "CREngine opening fallback with missing helper",
+        "session marker and tmpfs cleanup",
+        "Nickel responsiveness"
+      ],
+      "main_thread_blocked": [],
+      "cleanup": "owned device and volume deleted; no remaining run container",
+      "launch_configuration": {
+        "adapter": "generated Device API engine override for the owned launch only",
+        "onboard": "single bind mount with guest-root symlink; resolves QSaveFile EXDEV reproduced with and without observer",
+        "launcher": "/instance/onboard/.adds/kobalt-webkit/bin/kobalt-webkit",
+        "retained": [
+          "offline wrapper",
+          "network isolation",
+          "read-only root",
+          "768 MiB memory limit"
+        ],
+        "filesystem_probe_before": "build/m3-files-probe/results/",
+        "filesystem_probe_after": "build/m3-files-probe/alias-results/",
+        "application_qt_or_simulator_sources_changed": false
+      },
+      "last_harness_change": "Added the same checksum guard already used for EPUB diagnostics to the installed action; Python syntax checked without repeating the unchanged firmware run.",
+      "physical_device_validation": false,
+      "installed_poweroff_with_book_open": false
+    },
+    "screen_review": {
+      "status": "commit approved in chat; screen-review tool has no recorded seen states or annotations",
+      "source": "build/screenshots/webkit-m3/",
+      "manifest": "build/screenshots/webkit-m3/manifest.json",
+      "data": "build/review/webkit-m3/",
+      "round": "001",
+      "pair": "webkit=crengine",
+      "url": "http://localhost:8765/",
+      "developer_inspection": "Reader and opened menus compared directly with CREngine. Menu geometry, captions, dividers and clock/battery placement match. Publication font metrics and pagination differ; the WebKit Aa sample uses the interface font until resolved text-font metadata is implemented. Landscape and sleep/wake captures inspected.",
+      "feedback_command": "node platforms/review/review.mjs notes --data build/review/webkit-m3",
+      "approval": "User: I powered of the device in the emulator. You can commit the changes",
+      "server": "stopped after commit approval; captures and feedback retained"
+    },
+    "diagnostic_syntax": {
+      "status": "passed",
+      "command": "python3 -m py_compile tests/webkit/installed.py tests/webkit/run-firmware.py"
+    },
+    "manual_setup": {
+      "status": "Type Tester opened with backend=webkit before handoff; user later powered device off",
+      "instance": "kobalt_webkit_m3_manual",
+      "retained_for_user": true,
+      "evidence": "build/webkit/manual-m3/verified-state.json",
+      "helper_package_check": "build/webkit/manual-m3/package-check.log",
+      "helper_launcher": "/instance/webkit-m3/kobalt-webkit/bin/kobalt-webkit",
+      "helper_location": "outside onboard storage to prevent Nickel importing the text notices as books",
+      "scope": "manual environment setup and verified opening; no new application sources or runtime mode changes"
     }
   },
   "remaining": [
-    "Installed NickelHook Kobalt UI review and full device lifecycle exercise",
     "Persistent WebKit positions, native conversion and reading features in M4",
-    "Publisher title typography crossing columns in the captured Type Tester pages",
-    "Physical sandbox, memory footprint, storage and e-ink performance validation"
+    "Physical sandbox, memory footprint, storage and e-ink performance validation",
+    "Persistent onboard helper deployment must prevent Nickel from importing bundled text notices; the retained manual environment keeps its helper outside scanned storage"
   ],
-  "source_tree": "9231be65fff901dd7c64c11129c6703a7232c6be56bad993c7e737da75c7cd84",
   "initial_commit": "45069da",
-  "commit_authorization": "User approved committing the initial integration slice and continuing M3."
+  "commit_authorization": "User approved the initial integration commit, then explicitly approved committing the M3 continuation after powering off the retained manual device.",
+  "initial_source_tree": "9231be65fff901dd7c64c11129c6703a7232c6be56bad993c7e737da75c7cd84",
+  "source_tree": "873e55948df7793c2f77d8cefff4a34a7b2df4bdf005c474383737408abe3b8e",
+  "approval_record_commit": "2ffc576",
+  "continuation": {
+    "base": "2ffc576",
+    "committed": true,
+    "scope": [
+      "installed NickelHook diagnostic",
+      "bounded helper stderr diagnostics",
+      "readable chapter labels",
+      "one-based chapter progress"
+    ],
+    "m4_started": false
+  }
 }

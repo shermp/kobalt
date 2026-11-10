@@ -5,6 +5,7 @@
 #include "reading/reader_session.h"
 #include "reading/reading_book.h"
 #include "support/main_thread.h"
+#include "support/diagnostics.h"
 #include <QGuiApplication>
 #include <QEventLoop>
 #include <QFile>
@@ -32,6 +33,10 @@ int helper()
     QTemporaryDir runtime("/dev/shm/kobalt-webkit-XXXXXX");
     require(runtime.isValid(), "helper runtime");
     const auto mode = qgetenv("KOBALT_TEST_WEBKIT_MODE");
+    if (mode == "exit") {
+        std::cerr << std::string(16384, 'x') << " fixture-helper-exit\n" << std::flush;
+        return 23;
+    }
     std::cout << "KWRP/1 0 READY " << (mode == "bad-ready" ? "experiment" : "sandbox-required")
               << '\n'
               << std::flush;
@@ -94,7 +99,10 @@ int helper()
                              QJsonObject{ { "spine", QJsonArray{ "one", "aside", "two" } },
                                           { "linear", QJsonArray{ true, false, true } } } },
                            { "layout",
-                             QJsonObject{ { "page", page }, { "pages", counts[spine] } } } };
+                             QJsonObject{
+                                     { "page", page },
+                                     { "pages", counts[spine] },
+                                     { "title", "Fixture chapter " + QString::number(spine) } } } };
         if (mode == "bad-size")
             frame["width"] = 999999;
         if (mode == "bad-path")
@@ -118,6 +126,9 @@ int main(int argc, char **argv)
         return helper();
     }
     QGuiApplication app(argc, argv);
+    QTemporaryDir diagnosticDirectory;
+    require(diagnosticDirectory.isValid(), "Diagnostic directory");
+    initializeDiagnostics(diagnosticDirectory.path());
     qputenv("KOBALT_WEBKIT_LAUNCHER", QFile::encodeName(app.applicationFilePath()));
     qunsetenv("KOBALT_WEBKIT_MODE");
     qunsetenv("KOBALT_WEBKIT_QEMU_PREFIX");
@@ -125,6 +136,10 @@ int main(int argc, char **argv)
         WebKitDocument document({}, "/unused.epub");
         require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "proxy opening");
         require(document.pages() == 6, "whole-book page counts");
+        require(document.chapterProgress().title == "Fixture chapter 0",
+                "Chapter header uses the XHTML title rather than an archive path");
+        require(document.chapterProgress().page == 1 && document.chapterProgress().pages == 2,
+                "Chapter progress uses the reader's one-based page numbering");
         require(document.turnTarget(1, 1) == 3 && document.turnTarget(3, -1) == 1,
                 "turns skip non-linear spine entries");
         const auto first = document.image(0);
@@ -156,6 +171,22 @@ int main(int argc, char **argv)
         require(document.resourceError().contains("cancelled"), "cancellation error");
     }
     qunsetenv("KOBALT_TEST_WEBKIT_MODE");
+    {
+        QJsonObject exited;
+        setDiagnosticObserver([&](const QJsonObject &entry) {
+            if (entry.value("event").toString() == "webkit-helper-exited")
+                exited = entry;
+        });
+        qputenv("KOBALT_TEST_WEBKIT_MODE", "exit");
+        WebKitDocument document({}, "/unused.epub");
+        require(!document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Helper exit reported");
+        require(exited.value("exit_code").toInt() == 23, "Helper exit status retained");
+        const auto tail = exited.value("stderr").toString();
+        require(tail.size() <= 4096 && tail.endsWith("fixture-helper-exit\n"),
+                "Helper stderr is bounded and retains its final error");
+        setDiagnosticObserver({});
+        qunsetenv("KOBALT_TEST_WEBKIT_MODE");
+    }
     QTemporaryDir helperState;
     const auto pidFilePath = helperState.filePath("helper.pid");
     qputenv("KOBALT_TEST_WEBKIT_PID_FILE", QFile::encodeName(pidFilePath));
@@ -262,5 +293,6 @@ int main(int argc, char **argv)
     const auto shutdownPid = lastPid.readAll().toInt();
     require(shutdownPid > 0 && kill(shutdownPid, 0) == -1 && errno == ESRCH,
             "Shutdown reaps helper after worker join");
+    flushDiagnostics();
     return result;
 }

@@ -258,7 +258,7 @@ for (const element of body.querySelectorAll('img,svg,math')) {
 state.page = page;
 state.start = start;
 const excerpt = nodes.map(entry => entry.node.textContent).join('').slice(start, start + 160);
-return { source: document.URL, page, pages,
+return { source: document.URL, title: document.title, page, pages,
   location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
   viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
   content: { x: margin, y: margin, width: options.width - 2 * margin,
