@@ -272,6 +272,9 @@ public:
 
     QJsonObject state() const { return frame.state; }
 
+    // Transient navigation only. Do not persist this in a legacy position field.
+    QString navigationPosition() const;
+
     // The newest requested settings, including any whose frame is still rendering.
     QJsonObject requestedState() const { return desired; }
 

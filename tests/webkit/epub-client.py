@@ -28,6 +28,7 @@ def fixture(path):
         attack = "document.getElementById('guard').textContent='BOOK SCRIPT EXECUTED';fetch('http://127.0.0.1:18765/script')"
         book.writestr('EPUB/evil.js', attack)
         paragraphs = '<p id="unicode-target">Unique source anchor: Café 😀 e\u0301 العربية. A verified source position survives reflow.</p>'
+        paragraphs += '<p>rain<span>bow</span> co\u00adoperation extraordinary A𐐀word Reader’s 日本語 中文 Straße ﬁnal e‑mail Cafe\u0301 CAFÉ <span style="display:none">hiddenneedle</span></p><p>BlockAlpha</p><p>BlockBeta</p><p>LineAlpha<br/>LineBeta</p>'
         paragraphs += ''.join(f'<p>Paragraph {i:03}: A quiet reader turns the page. Typography and geometry stay tied to the source text through columns and viewport changes.</p>' for i in range(80))
         book.writestr('EPUB/one.xhtml', f'''<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title><link rel="stylesheet" href="style.css"/><script>{attack}</script><script src="evil.js"></script><meta http-equiv="refresh" content="0;url=http://127.0.0.1:18765/refresh"/></head><body onload="{attack}"><h1 id="guard">Book scripts blocked</h1><a href="two.xhtml#target">Chapter two</a><img src="picture.svg"/><img src="http://127.0.0.1:18765/image"/><iframe src="http://127.0.0.1:18765/frame"></iframe>{paragraphs}</body></html>''')
         book.writestr('EPUB/two.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1 id="target">Second chapter target</h1><a href="one.xhtml">Return to chapter one</a><p>End of the focused fixture.</p></body></html>')
@@ -158,11 +159,67 @@ try:
             frames.append(identity)
         return metadata
 
+    def query(spine, view_page, **request):
+        response = call(f'QUERY {spine} {view_page} ' + encoded(json.dumps(request)))
+        envelope = json.loads(base64.b64decode(response.split(' OK JSON ', 1)[1]))
+        assert envelope['spine'] == spine and envelope['page'] == view_page, envelope
+        assert 'error' not in envelope['data'], envelope
+        return envelope['data']['result']
+
     first = call(f'OPEN {encoded(synthetic)} 600 800')
     assert first['spine'] == 0 and first['layout']['pages'] > 1
     assert 'Book scripts blocked' in first['layout']['excerpt'], first
     assert len(first['document']['navigation']) == 2
     assert any(link['href'] == 'two.xhtml#target' for link in first['layout']['links'])
+    query_checks = []
+    def search(text, spine=0, pages=None):
+        found = []
+        for page in range(pages or first['layout']['pages']):
+            part = query(spine, 0, kind='search', text=text, page=page)
+            assert not part['limited'], part
+            assert all(hit['page'] == page for hit in part['hits']), part
+            found.extend(part['hits'])
+        assert len({hit['start']['cfi'] for hit in found}) == len(found), found
+        return found
+
+    for text in ('rainbow', 'cooperation', 'extraordinary', 'A𐐀word', "Reader's", '日本語', '中文',
+                 'STRASSE', 'final', 'e-mail', 'BlockAlpha BlockBeta', 'LineAlpha LineBeta'):
+        found = search(text)
+        assert len(found) == 1, (text, found)
+        expected = {'cooperation': 'cooperation', "Reader's": 'Reader’s', 'STRASSE': 'Straße',
+                    'final': 'ﬁnal', 'e-mail': 'e‑mail'}.get(text, text)
+        assert found[0]['text'] == expected, (text, found[0])
+        query_checks.append(text)
+    assert len(search('CAFÉ')) == 3
+    assert not search('hiddenneedle') and not search('BlockAlphaBlockBeta')
+    assert len(search('page. Typography')) == 80
+    for text in ('rainbow', 'A𐐀word', '日本語'):
+        hit = search(text)[0]
+        # Geometry and hit tests inspect the actual displayed column, including
+        # words split across inline nodes and surrogate pairs.
+        result = query(0, hit['page'], kind='range', start=hit['start'], end=hit['end'])
+        assert result['text'] == text and result['rectangles'], result
+        rect = result['rectangles'][0]
+        word = query(0, hit['page'], kind='word', x=rect['x'] + rect['width'] / 2,
+                     y=rect['y'] + rect['height'] / 2)
+        assert word and word['text'] == text, (text, result, word)
+        assert word['start']['offset'] == hit['start']['offset'] and word['end']['offset'] == hit['end']['offset']
+        reverse = query(0, hit['page'], kind='range', start=hit['end'], end=hit['start'])
+        assert reverse == result
+    assert query(0, 0, kind='word', x=575, y=25) is None
+    call('QUERY 0 0 ' + encoded('{bad JSON'), error='query-failed')
+    call('QUERY 999 0 ' + encoded('{}'), error='invalid-query')
+    # Queries don't allocate frames; inspect another spine while holding both
+    # frame slots, then verify those copied pixels and the normal renderer.
+    held_query = call('GOTO 0 0', release=False)
+    other_held = call('NEXT', release=False)
+    assert search('Second chapter target', 1, 1)
+    assert Path(held_query['pixels']).is_file() and Path(other_held['pixels']).is_file()
+    for frame in frames:
+        call(f'RELEASE {frame}')
+    frames.clear()
+    after_queries = call('GOTO 0 0')
+    assert after_queries['sha256'] == first['sha256']
     second = call('NEXT')
     assert second['layout']['page'] == 1 and second['layout']['location']['start'] > first['layout']['location']['start']
     assert second['sha256'] != first['sha256']
@@ -278,6 +335,16 @@ try:
         page = call(f'GOTO {index} 0')
         assert page['spine'] == index and page['layout']['pages'] >= 1
         assert page['layout']['location']['end'] > page['layout']['location']['start']
+    general_hits = []
+    for index in range(len(real['document']['spine'])):
+        chapter = call(f'GOTO {index} 0')
+        for page in range(chapter['layout']['pages']):
+            found = query(index, 0, kind='search', text='typography', page=page)
+            assert not found['limited'], found
+            for hit in found['hits']:
+                assert hit['text'].lower() == 'typography', hit
+            general_hits.extend(found['hits'])
+    assert len(general_hits) == 3, general_hits
     if len(sys.argv) > 4:
         corpus = Path(sys.argv[4])
         for book in sorted(corpus.glob('*.epub')):
@@ -300,7 +367,9 @@ try:
     active.close(0)
     active = None
     assert not hits, hits
-    (destination / 'epub-results.json').write_text(json.dumps(dict(network_attempts=hits, pages=transcript, cleanup=True), indent=2))
+    (destination / 'epub-results.json').write_text(json.dumps(dict(network_attempts=hits, pages=transcript,
+        text_queries=query_checks, source_range_geometry=True, word_hit_testing=True,
+        queries_preserve_frames=True, general_book_search=True, cleanup=True), indent=2))
     print('WEBKIT_EPUB_VERIFIED', flush=True)
 finally:
     if active is not None:

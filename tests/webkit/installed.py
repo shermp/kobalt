@@ -72,7 +72,7 @@ def prepare(root, device, package):
     (profile / 'live-state').touch()
 
 
-def check(device, output):
+def check(device, output, search_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -153,6 +153,69 @@ def check(device, output):
         event('frame-ready', before)
         device.wait_widget(name='rrPage')
 
+    def search(backend):
+        nonlocal current_page
+        original = state(description='source position before search')
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrSearchOpen')
+        capture(backend + '-search-menu')
+        device.tap_widget(name='rrSearchOpen')
+        device.wait_widget(name='rrSearchQuery')
+        capture(backend + '-search-entry')
+        (results / (backend + '-search-ui.json')).write_text(json.dumps(device.ui(), indent=2))
+        # Firmware 6's VirtualKey exposes no text property. Use the observed
+        # English keyboard rows from this pinned firmware, retaining its UI
+        # snapshot and screenshot as evidence rather than injecting text.
+        keys = [widget for widget in device.ui()['widgets'] if widget['class'] == 'VirtualKey'
+                and any(parent.get('name') == 'rrSearchKeyboard'
+                        for parent in widget.get('ancestors', []))]
+        rows = sorted({widget['y'] for widget in keys})
+        assert len(rows) == 5, rows
+        letters = {}
+        for y, alphabet in zip(rows[1:3], ('qwertyuiop', 'asdfghjkl@')):
+            row = sorted((widget for widget in keys if widget['y'] == y), key=lambda item: item['x'])
+            assert len(row) == len(alphabet), row
+            letters.update(zip(alphabet, row))
+        typed = ''
+        for letter in 'typography':
+            button = letters[letter]
+            call('tap', x=button['x'] + button['width'] // 2,
+                 y=button['y'] + button['height'] // 2)
+            typed += letter
+            device.wait_widget(name='rrSearchQuery', text=typed)
+        device.tap_widget(name='rrSearchSubmit')
+        device.wait_widget(name='rrSearchResult0', timeout=240)
+        device.wait_until(lambda: any(widget.get('name') == 'rrSearchStatus'
+                         and 'Searching' not in widget.get('text', '')
+                         for widget in device.ui()['widgets']),
+                         timeout=240, description='source search completion')
+        device.wait_widget(name='rrSearchStatus', text='3 matches')
+        capture(backend + '-search-results')
+        before = cursor()
+        device.tap_widget(name='rrSearchResult0')
+        event('frame-ready', before)
+        value = state(description='search result source destination')
+        current_page = value['page']
+        assert value.get('backend', 'crengine') == backend, value
+        capture(backend + '-search-destination')
+        transcript.append({'action': 'search', 'backend': backend, 'state': value})
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        device.tap_widget(name='rrSearchOpen')
+        device.wait_widget(name='rrSearchOriginal')
+        capture(backend + '-search-return')
+        before = cursor()
+        device.tap_widget(name='rrSearchOriginal')
+        event('frame-ready', before)
+        returned = state(description='return to original search position')
+        assert returned['page'] == original['page'], (original, returned)
+        if backend == 'webkit':
+            assert returned['source_position'] == original['source_position'], (original, returned)
+        current_page = returned['page']
+
     def turn(direction=1):
         nonlocal current_page
         before = current_page
@@ -188,6 +251,29 @@ def check(device, output):
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if search_only:
+            search('webkit')
+            saved_page = current_page
+            close_book()
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                open_book('crengine')
+                search('crengine')
+                close_book()
+            finally:
+                hidden.rename(launcher)
+            open_book('webkit', expected_page=saved_page)
+            close_book()
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'source_search': True,
+                      'search_return': True, 'creengine_comparison': True, 'reopen': True,
+                      'helper_cleanup': True, 'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_SEARCH_VERIFIED', flush=True)
+            return
         contents('webkit')
         forward = turn()
         assert forward['page'] > first['page']
@@ -259,6 +345,9 @@ def check(device, output):
         (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
         print('WEBKIT_INSTALLED_MOD_VERIFIED', flush=True)
     finally:
+        memory = subprocess.run(['podman', 'inspect', '--format', '{{json .State}}',
+                                 'virtualnickel-' + device.name], capture_output=True, text=True)
+        (results / 'container-state.json').write_text(memory.stdout)
         try:
             (results / 'final-ui.json').write_text(json.dumps(device.ui(), indent=2) + '\n')
             device.capture('installed-final', raw=True)

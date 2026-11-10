@@ -97,6 +97,46 @@ int main(int argc, char **argv)
         completion.exec();
         const auto anchor = session->state().value("source_position").toObject();
         require(sourceposition::valid(anchor), "Versioned source position captured");
+        require(sourceposition::fromToken(session->navigationPosition()) == anchor,
+                "Transient return navigation carries the backend source point");
+        const auto beforeSearch = digest(session->image());
+        QVector<SearchHit> hits;
+        const int searchBeats = beats;
+        session->search("Trevelyan", [&](SearchBatch batch) {
+            hits += batch.hits;
+            if (batch.done)
+                completion.quit();
+        });
+        completion.exec();
+        require(!hits.isEmpty() && beats > searchBeats,
+                "Source search streams without blocking the GUI");
+        require(session->state().value("source_position").toObject() == anchor
+                        && digest(session->image()) == beforeSearch,
+                "Cross-spine search preserves the displayed frame and logical source anchor");
+        require(session->goTo(hits.first().start), "Open a source search result");
+        completion.exec();
+        QVector<QRect> boxes;
+        session->rangeRects(hits.first().start, hits.first().end, [&](QVector<QRect> result) {
+            boxes = result;
+            completion.quit();
+        });
+        completion.exec();
+        require(!boxes.isEmpty(), "Search result has visible DOM range geometry");
+        session->wordAt(boxes.first().center(), [&](WordSelection word) {
+            require(word.text.contains("Trevelyan", Qt::CaseInsensitive)
+                            && !sourceposition::fromToken(word.start).isEmpty(),
+                    "Hit testing resolves the actual displayed word");
+            completion.quit();
+        });
+        completion.exec();
+        session->textRange(hits.first().start, hits.first().end, [&](TextRange range) {
+            require(range.text.compare("Trevelyan", Qt::CaseInsensitive) == 0,
+                    "Source range extracts search text");
+            completion.quit();
+        });
+        completion.exec();
+        require(session->goTo(sourceposition::token(anchor)), "Return from search result");
+        completion.exec();
         auto appearance = session->persistentState();
         appearance["font_pixels"] = 32;
         session->apply(appearance, { 800, 600 });
@@ -155,6 +195,10 @@ int main(int argc, char **argv)
                                                 { "source_position", anchor },
                                                 { "persistent_position", true },
                                                 { "toc_navigation", true },
+                                                { "source_search", true },
+                                                { "word_hit_testing", true },
+                                                { "text_ranges", true },
+                                                { "search_preserves_frame", true },
                                                 { "saved_data_preserved", true } })
                              .toJson());
         lease->cancel();

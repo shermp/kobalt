@@ -2,6 +2,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "reader_session.h"
+#include "source_position.h"
 #include "engine/crengine/engine_document.h"
 #include "engine/webkit/webkit_document.h"
 #include "sync/kosync.h"
@@ -211,6 +212,13 @@ ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     : fonts_(std::move(fonts)), placeholderFamily_(std::move(placeholderFamily))
 {
     engine_ = workerDocument(new EngineDocument(fonts_));
+}
+
+QString ReaderSession::navigationPosition() const
+{
+    return experimentalBackend()
+            ? sourceposition::token(frame.state.value("source_position").toObject())
+            : frame.state.value("position").toString();
 }
 
 ReaderSession::ReaderSession(std::shared_ptr<Document> retainedEngine, QString placeholderFamily)
@@ -1846,10 +1854,11 @@ void ReaderSession::searchNext(QString query, int page, int count, quint64 job,
 {
     auto engine = engine_;
     const auto lease = lease_;
+    const auto latest = newest;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, query, page, count, job, cancelled, finished, reset, lease] {
+            [engine, guard, query, page, count, job, cancelled, finished, reset, lease, latest] {
                 if (cancelled->load() || !lease || lease->revoked()) {
                     return;
                 }
@@ -1867,7 +1876,11 @@ void ReaderSession::searchNext(QString query, int page, int count, quint64 job,
                     if (cancelled->load() || lease->revoked()) {
                         return;
                     }
+                    engine->setCurrent([cancelled, lease, latest, job] {
+                        return !cancelled->load() && !lease->revoked() && latest->load() == job;
+                    });
                     auto part = engine->searchPage(query, result.nextPage);
+                    engine->setCurrent([lease] { return !lease->revoked(); });
                     result.nextPage = part.nextPage;
                     result.done = part.done;
                     result.limited = part.limited;

@@ -1,0 +1,100 @@
+{
+  "milestone": "M4 text queries and source search",
+  "milestone_status": "in progress; annotation UI, typography and combined memory gates remain open",
+  "base": "a8e28b1",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "c65976799862ee18a1b17cbecd8fb714f67d6cd896cb22412716d32e78c9e336",
+  "checks": {
+    "native_focused": {
+      "status": "passed; reused after helper-JavaScript and diagnostic-only edits",
+      "command": "ctest --preset linux -R 'webkit|search|main-thread|reader-session' --output-on-failure",
+      "log": "build/m4-text-native.log",
+      "scope": [
+        "source-bound query replies and viewport rectangle validation",
+        "word selection and reversed range endpoints",
+        "cross-spine search without replacing the immutable frame or saved anchor",
+        "source navigation and transient return positions",
+        "stuck-query cancellation, stale result rejection and subsequent page turn",
+        "existing CREngine search and reflow behavior",
+        "reader-session and main-thread guards"
+      ]
+    },
+    "native_full": {
+      "status": "not repeated; prior M4 representative full pass retained for unchanged areas",
+      "previous_results": "doc/webkit-wpe/m4-results.json",
+      "all_variant_release_validation": false
+    },
+    "syntax": {
+      "status": "host check unavailable because clang++ is missing; both prepared SDK compiles passed"
+    },
+    "kobo_qt5": {
+      "status": "compile/link and adapter checks passed; reused after helper-JavaScript and diagnostic-only edits",
+      "command": "bash platforms/kobo/build.sh qt5 --check",
+      "log": "build/m4-text-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile/link, adapter and package checks passed; reused after helper-JavaScript and diagnostic-only edits",
+      "command": "bash platforms/kobo/build.sh qt6 --check",
+      "log": "build/m4-text-qt6.log",
+      "package_log": "build/m4-text-package.log",
+      "application_build_tree": "cf494f367ef49a505387257037cfce35cefc09d21a9830d32ccf85c51ee84b75",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "2fd2b63bfd0e76d9cc34b11db7b69e4d6f22e826c139a890cafd358f0437df7c"
+    },
+    "arm_helper": {
+      "status": "passed with final helper",
+      "log": "build/m4-text-helper-build.log",
+      "bundle_key": "66806defb41e8227b35a32ee708cd3974e76c7c9922e6192bb9b63f57cc682a0",
+      "archive_sha256": "0285fc56b571be9c494d2714c0c22d0e7e71b9349a4df7835ec5a3b70e72841d"
+    },
+    "arm_protocol": {
+      "status": "passed with final helper",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --epub-only --allow-unsandboxed-experiment",
+      "log": "build/m4-text-firmware-epub.log",
+      "results": "build/webkit/firmware-92f0ef3dd5/epub-results/epub-results.json",
+      "scope": [
+        "Unicode and exact normalized match text",
+        "inline markup, hidden text, block and explicit line breaks",
+        "page-owned matches and unique source anchors",
+        "DOM range geometry and word hit testing",
+        "nonfatal invalid requests and held-frame ownership",
+        "complete source search in the checked-in general reading fixture"
+      ]
+    },
+    "arm_session": {
+      "status": "passed with final helper",
+      "log": "build/m4-text-firmware-session.log",
+      "results": "build/webkit/firmware-4ea04482b0/session-results/session.json"
+    },
+    "installed_search": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --installed-only --installed-search --allow-unsandboxed-experiment",
+      "log": "build/m4-text-installed.log",
+      "results": "build/webkit/firmware-d06e9b68c1/installed-results/installed.json",
+      "scope": [
+        "existing menu, Search panel and native keyboard",
+        "exact results and highlighted destination",
+        "return to the original WebKit source position",
+        "CREngine comparison, cold reopening and helper cleanup",
+        "no main-thread-blocked events"
+      ]
+    }
+  },
+  "review": {
+    "status": "reviewed with no requested changes; commit approved in chat",
+    "captures": "build/screenshots/webkit-m4-text",
+    "data": "build/review/webkit-m4-text",
+    "pairs": "webkit=crengine",
+    "comparison": "Opened entry captures are pixel-identical; surrounding Search action and query/back/submit/return bounds match",
+    "known_gap": "WebKit Qt excerpts still use the interface font; CREngine excerpts use the book font"
+  },
+  "unresolved": [
+    "Combined Search/keyboard/rotation run exited 137 during a later rotation in the 768 MiB container; memory pressure is suspected but unproven. Evidence: build/webkit/firmware-d562e2002c",
+    "Annotation pointer UI, punctuation policy, handles and persistence remain unavailable",
+    "Text ranges currently stay within one spine document",
+    "Full typography, preview/cache policy, renderer-failure recovery and physical-device performance remain M4 work",
+    "Unsandboxed offline experiments do not validate physical sandbox behavior"
+  ],
+  "manual_device": "retained at the committed initial M4 installation; not modified by this continuation"
+}

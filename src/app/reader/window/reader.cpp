@@ -1491,15 +1491,14 @@ void Reader::openSearch(const QString &query)
         clearAnnotationDraft();
     dismissControls();
     if (searchOriginal.isEmpty()) {
-        searchOriginal = session->state().value("position").toString();
+        searchOriginal = session->navigationPosition();
         searchOriginalPage = session->page();
     }
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(session->chapters());
     const auto safe = safeArea();
     searchPanel->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
-    searchPanel->open(session->state().value("position").toString() != searchOriginal,
-                      searchOriginalPage, query);
+    searchPanel->open(session->navigationPosition() != searchOriginal, searchOriginalPage, query);
     if (orientation)
         orientation->setBlocked(true);
     for (auto *widget : searchPanel->findChildren<QWidget *>())

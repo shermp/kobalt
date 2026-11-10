@@ -42,7 +42,7 @@ struct Renderer
     unsigned linkSpine = 0, linkPage = 0;
     unsigned fontSize = 24, lineHeight = 150, margin = 24, letterSpacing = 0, wordSpacing = 0;
     std::string family = "publisher", fragment, bridge, metadata;
-    std::string elementAnchor = "null", pendingError, sourcePosition;
+    std::string elementAnchor = "null", pendingError, sourcePosition, query;
     bool dark = false;
     std::set<unsigned> frames;
 };
@@ -50,6 +50,7 @@ struct Renderer
 static void paginate(Renderer &renderer);
 static std::string expectedUri(const Renderer &renderer);
 static void chapter(Renderer &renderer);
+static void query(Renderer &renderer);
 
 static void stop(Renderer &renderer, int result)
 {
@@ -106,7 +107,7 @@ static gboolean writeOutput(gint fd, GIOCondition condition, gpointer data)
 static void reply(Renderer &renderer, unsigned id, const std::string &body)
 {
     std::string line = "KWRP/1 " + std::to_string(id) + " " + body + "\n";
-    if (renderer.queued + line.size() > 65536) {
+    if (renderer.queued + line.size() > 1024 * 1024) {
         renderer.output.clear();
         renderer.queued = renderer.written = 0;
         stop(renderer, 1);
@@ -296,6 +297,11 @@ static void pageReady(GObject *object, GAsyncResult *result, gpointer data)
     renderer.metadata = json;
     g_free(json);
     g_object_unref(value);
+    if (!renderer.query.empty()) {
+        renderer.pageScriptPending = false;
+        query(renderer);
+        return;
+    }
     if (!renderer.pendingError.empty()) {
         g_source_remove(renderer.deadline);
         renderer.deadline = 0;
@@ -488,11 +494,56 @@ static std::string expectedUri(const Renderer &renderer)
                          : "kobalt-runtime://fixture/document.xhtml";
 }
 
+static void query(Renderer &renderer)
+{
+    const std::string script =
+            "return globalThis.kobaltQuery(JSON.parse(" + jsonString(renderer.query) + "));";
+    webkit_web_view_call_async_javascript_function(
+            renderer.view, script.data(), script.size(), nullptr, "kobalt-reader",
+            "kobalt-reader://query", renderer.cancellable,
+            +[](GObject *object, GAsyncResult *result, gpointer data) {
+                auto &renderer = *static_cast<Renderer *>(data);
+                GError *error = nullptr;
+                JSCValue *value = webkit_web_view_call_async_javascript_function_finish(
+                        WEBKIT_WEB_VIEW(object), result, &error);
+                if (!renderer.stopping) {
+                    JSCValue *source = value && jsc_value_is_object(value)
+                            ? jsc_value_object_get_property(value, "source")
+                            : nullptr;
+                    char *uri = source && jsc_value_is_string(source) ? jsc_value_to_string(source)
+                                                                      : nullptr;
+                    char *json = uri && expectedUri(renderer) == uri ? jsc_value_to_json(value, 0)
+                                                                     : nullptr;
+                    if (json && strlen(json) <= 512 * 1024) {
+                        const std::string envelope = "{\"spine\":" + std::to_string(renderer.spine)
+                                + ",\"page\":" + std::to_string(renderer.page) + ",\"data\":" + json
+                                + "}";
+                        char *encoded = g_base64_encode(
+                                reinterpret_cast<const guchar *>(envelope.data()), envelope.size());
+                        reply(renderer, renderer.request, std::string("OK JSON ") + encoded);
+                        g_free(encoded);
+                    } else
+                        reply(renderer, renderer.request, "ERROR query-failed");
+                    g_free(json);
+                    g_free(uri);
+                    g_clear_object(&source);
+                    if (renderer.deadline)
+                        g_source_remove(renderer.deadline);
+                    renderer.deadline = 0;
+                    renderer.request = 0;
+                    renderer.query.clear();
+                }
+                g_clear_object(&value);
+                g_clear_error(&error);
+            },
+            &renderer);
+}
+
 static bool epubCommand(Renderer &renderer, unsigned id, const std::string &action,
                         std::istringstream &stream)
 {
-    const std::set<std::string> commands{ "OPEN",   "NEXT",  "PREVIOUS", "GOTO",    "LINK",
-                                          "RESIZE", "STYLE", "CLOSE",    "RELEASE", "LOCATE" };
+    const std::set<std::string> commands{ "OPEN",  "NEXT",  "PREVIOUS", "GOTO",   "LINK", "RESIZE",
+                                          "STYLE", "CLOSE", "RELEASE",  "LOCATE", "QUERY" };
     if (!commands.count(action))
         return false;
     std::vector<std::string> args;
@@ -523,6 +574,35 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
             renderer.book = {};
             webkit_web_view_load_uri(renderer.view, "about:blank");
             reply(renderer, id, "OK CLOSED");
+        }
+        return true;
+    }
+    if (action == "QUERY") {
+        unsigned target = 0, page = 0;
+        std::string request;
+        if (!renderer.epub)
+            error("no-book");
+        else if (args.size() != 3 || !number(args[0], target) || !number(args[1], page)
+                 || target >= renderer.book.spine().size() || page > 100000
+                 || !decoded(args[2], request) || request.size() > 16384)
+            error("invalid-query");
+        else {
+            renderer.query = request;
+            beginRequest(renderer, id);
+            if (target == renderer.spine && page == renderer.page)
+                query(renderer);
+            else {
+                const bool reload = target != renderer.spine;
+                renderer.spine = target;
+                renderer.targetPage = page;
+                renderer.fragment.clear();
+                renderer.sourcePosition.clear();
+                renderer.preserveAnchor = false;
+                if (reload)
+                    chapter(renderer);
+                else
+                    paginate(renderer);
+            }
         }
         return true;
     }

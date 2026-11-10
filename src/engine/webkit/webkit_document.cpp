@@ -125,7 +125,7 @@ void WebKitDocument::close()
     input_.clear();
 }
 
-bool WebKitDocument::command(const QByteArray &body, bool pageResult)
+bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObject *json)
 {
     mainthread::blocking("WebKit IPC");
     if (!process_ || process_->state() == QProcess::NotRunning)
@@ -171,6 +171,18 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult)
             const auto reply = line.mid(prefix.size());
             if (reply.startsWith("ERROR "))
                 return fail("WebKit: " + QString::fromUtf8(reply.mid(6)));
+            if (json) {
+                if (!reply.startsWith("OK JSON "))
+                    return fail("Invalid WebKit query reply");
+                const auto base64 = reply.mid(8), bytes = QByteArray::fromBase64(base64);
+                QJsonParseError parse;
+                const auto document = QJsonDocument::fromJson(bytes, &parse);
+                if (bytes.toBase64() != base64 || parse.error != QJsonParseError::NoError
+                    || !document.isObject())
+                    return fail("Invalid WebKit query JSON");
+                *json = document.object();
+                return true;
+            }
             if (pageResult) {
                 if (!reply.startsWith("OK PAGE "))
                     return fail("Invalid WebKit page reply");
@@ -257,6 +269,7 @@ bool WebKitDocument::readFrame(const QString &path, unsigned id)
     frame_ = frame;
     image_ = std::move(image);
     position_ = std::move(position);
+    helperMoved_ = false;
     error_.clear();
     return true;
 }
@@ -353,19 +366,26 @@ bool WebKitDocument::paginateBook()
 
 bool WebKitDocument::locate(const QJsonObject &position)
 {
-    if (!sourceposition::valid(position))
+    const int index = sourceSpine(position);
+    if (index < 0)
         return fail("Invalid source position");
+    return command("LOCATE " + QByteArray::number(index) + ' '
+                           + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64(),
+                   true);
+}
+
+int WebKitDocument::sourceSpine(const QJsonObject &position) const
+{
+    if (!sourceposition::valid(position))
+        return -1;
     const auto paths = frame_.value("document").toObject().value("spine").toArray();
     const auto prefixes = frame_.value("document").toObject().value("spine_cfi").toArray();
     for (int index = 0; index < paths.size(); ++index)
         if (paths.at(index).toString() == position.value("href").toString()
             && position.value("cfi").toString().startsWith("epubcfi("
                                                            + prefixes.at(index).toString() + '!'))
-            return command(
-                    "LOCATE " + QByteArray::number(index) + ' '
-                            + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64(),
-                    true);
-    return fail("Source document is no longer in the reading order");
+            return index;
+    return -1;
 }
 
 bool WebKitDocument::resolveContents()
@@ -424,7 +444,7 @@ bool WebKitDocument::style()
 
 bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress)
 {
-    if (!ensureOpen())
+    if (!ensureOpen() || (helperMoved_ && !locate(position_)))
         return false;
     const auto restore = position_;
     const bool resized = size.isValid() && size != size_;
@@ -638,6 +658,162 @@ QString WebKitDocument::chapterTitle(const QString &position) const
 {
     const auto selected = selectContents(chapters_, sourceposition::fromToken(position));
     return selected.current >= 0 ? chapters_.at(selected.current).title : QString();
+}
+
+QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request)
+{
+    if (!ensureOpen() || index < 0 || index + 1 >= offsets_.size() || selected < 0
+        || selected >= offsets_.at(index + 1) - offsets_.at(index))
+        return {};
+    QJsonObject reply;
+    // Queries can load another spine without publishing a frame. Absolute page
+    // and source navigation still work; appearance changes first restore the
+    // visible source anchor before using the helper's relative reflow state.
+    helperMoved_ = true;
+    if (!command("QUERY " + QByteArray::number(index) + ' ' + QByteArray::number(selected) + ' '
+                         + QJsonDocument(request).toJson(QJsonDocument::Compact).toBase64(),
+                 false, &reply))
+        return {};
+    const auto data = reply.value("data").toObject();
+    QUrl expected(frame_.value("layout").toObject().value("source").toString());
+    expected.setPath(
+            '/'
+            + frame_.value("document").toObject().value("spine").toArray().at(index).toString());
+    if (reply.value("spine").toDouble(-1) != index || reply.value("page").toDouble(-1) != selected
+        || QUrl(data.value("source").toString()) != expected) {
+        fail("Invalid WebKit query source");
+        return {};
+    }
+    if (data.contains("error")) {
+        fail("WebKit query: " + data.value("error").toString());
+        return {};
+    }
+    error_.clear();
+    return data.value("result").toObject();
+}
+
+QString WebKitDocument::sourceToken(QJsonObject position, int index) const
+{
+    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    if (index < 0 || index >= paths.size())
+        return {};
+    position["href"] = paths.at(index).toString();
+    return sourceSpine(position) == index ? sourceposition::token(position) : QString();
+}
+
+QVector<QRect> WebKitDocument::queryRectangles(const QJsonObject &result) const
+{
+    const auto boxes = result.value("rectangles").toArray();
+    if (boxes.size() > 512)
+        return {};
+    QVector<QRect> rectangles;
+    for (const auto &item : boxes) {
+        const auto box = item.toObject();
+        const double x = box.value("x").toDouble(-1), y = box.value("y").toDouble(-1);
+        const double width = box.value("width").toDouble(-1);
+        const double height = box.value("height").toDouble(-1);
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width)
+            || !std::isfinite(height) || x < 0 || y < 0 || width <= 0 || height <= 0
+            || x + width > size_.width() || y + height > size_.height())
+            return {};
+        const auto rect =
+                QRectF(x, y, width, height).toAlignedRect().intersected(QRect(QPoint(), size_));
+        if (!rect.isEmpty())
+            rectangles.append(rect);
+    }
+    return rectangles;
+}
+
+WordSelection WebKitDocument::wordAt(QPoint point)
+{
+    if (!QRect(QPoint(), size_).contains(point))
+        return {};
+    const int index = spine();
+    const auto result =
+            query(index, chapterPage(),
+                  qt::object({ { "kind", "word" }, { "x", point.x() }, { "y", point.y() } }));
+    const auto start = sourceToken(result.value("start").toObject(), index);
+    const auto end = sourceToken(result.value("end").toObject(), index);
+    const auto text = result.value("text").toString();
+    const auto boxes = queryRectangles(result);
+    if (start.isEmpty() || end.isEmpty() || text.isEmpty() || text.size() > 8192 || boxes.isEmpty())
+        return {};
+    return { text, start, end, boxes };
+}
+
+QJsonObject WebKitDocument::queryRange(const QString &start, const QString &end)
+{
+    const auto first = sourceposition::fromToken(start), last = sourceposition::fromToken(end);
+    const int index = sourceSpine(first);
+    if (index < 0 || sourceSpine(last) != index)
+        return {};
+    return query(index, index == spine() ? chapterPage() : 0,
+                 qt::object({ { "kind", "range" }, { "start", first }, { "end", last } }));
+}
+
+TextRange WebKitDocument::textRange(const QString &start, const QString &end)
+{
+    const auto result = queryRange(start, end);
+    const int index = sourceSpine(sourceposition::fromToken(start));
+    const auto first = sourceToken(result.value("start").toObject(), index);
+    const auto last = sourceToken(result.value("end").toObject(), index);
+    const auto text = result.value("text").toString();
+    if (first.isEmpty() || last.isEmpty() || text.isEmpty() || text.size() > 8192)
+        return {};
+    return { first, last, text };
+}
+
+QVector<QRect> WebKitDocument::rangeRects(const QString &start, const QString &end, bool)
+{
+    if (sourceSpine(sourceposition::fromToken(start)) != spine()
+        || sourceSpine(sourceposition::fromToken(end)) != spine())
+        return {};
+    const auto result = queryRange(start, end);
+    if (sourceToken(result.value("start").toObject(), spine()).isEmpty()
+        || sourceToken(result.value("end").toObject(), spine()).isEmpty())
+        return {};
+    return queryRectangles(result);
+}
+
+SearchBatch WebKitDocument::searchPage(const QString &text, int selected)
+{
+    SearchBatch batch;
+    batch.nextPage = selected + 1;
+    batch.done = selected < 0 || selected + 1 >= pages() || text.trimmed().isEmpty()
+            || text.size() > 256;
+    if (selected < 0 || selected >= pages() || text.trimmed().isEmpty() || text.size() > 256)
+        return batch;
+    const int index =
+            int(std::upper_bound(offsets_.begin(), offsets_.end(), selected) - offsets_.begin())
+            - 1;
+    const int localPage = selected - offsets_.at(index);
+    const auto result =
+            query(index, 0,
+                  qt::object({ { "kind", "search" }, { "text", text }, { "page", localPage } }));
+    if (!result.value("hits").isArray() || !result.value("limited").isBool()
+        || result.value("hits").toArray().size() > 100) {
+        batch.done = true;
+        return batch;
+    }
+    batch.limited = result.value("limited").toBool();
+    batch.done |= batch.limited;
+    for (const auto &value : result.value("hits").toArray()) {
+        const auto hit = value.toObject();
+        const auto start = sourceToken(hit.value("start").toObject(), index);
+        const auto end = sourceToken(hit.value("end").toObject(), index);
+        const auto match = hit.value("text").toString();
+        const auto before = hit.value("before").toString(), after = hit.value("after").toString();
+        if (start.isEmpty() || end.isEmpty() || match.isEmpty() || match.size() > 2048
+            || before.size() > 192 || after.size() > 384
+            || hit.value("page").toDouble(-1) != localPage) {
+            fail("Invalid WebKit search match");
+            batch.hits.clear();
+            batch.done = true;
+            break;
+        }
+        batch.hits.append({ start, end, before, match, after, selected });
+    }
+    return batch;
 }
 
 ChapterSelection WebKitDocument::selectContents(const QVector<ChapterLink> &contents,

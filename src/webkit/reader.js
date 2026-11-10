@@ -264,14 +264,14 @@ function cfiPoint(cfi) {
   }
   return match[2] === undefined && node && body.contains(node) ? objectPoint(node) : null;
 }
-let restored = null;
-if (sourcePosition) {
-  const saved = sourcePosition;
-  if (saved.version !== 1 || !Number.isInteger(saved.offset) || saved.offset < 0 ||
-      typeof saved.before !== 'string' || saved.before.length > 64 ||
-      typeof saved.after !== 'string' || saved.after.length > 64)
-    return { source: document.URL, error: 'invalid-source-position' };
-  restored = cfiPoint(saved.cfi);
+function validPosition(saved) {
+  return saved && saved.version === 1 && Number.isInteger(saved.offset) && saved.offset >= 0 &&
+    typeof saved.before === 'string' && saved.before.length <= 64 &&
+    typeof saved.after === 'string' && saved.after.length <= 64;
+}
+function resolvePosition(saved) {
+  if (!validPosition(saved)) return null;
+  let restored = cfiPoint(saved.cfi);
   const asserts = offset => offset >= saved.before.length && offset <= text.length &&
     text.slice(offset - saved.before.length, offset) === saved.before &&
     text.slice(offset, offset + saved.after.length) === saved.after;
@@ -283,12 +283,16 @@ if (sourcePosition) {
       const quote = saved.before + saved.after;
       const first = quote ? text.indexOf(quote) : -1;
       if (first < 0 || text.indexOf(quote, first + 1) !== -1)
-        return { source: document.URL, error: 'unresolved-source-position' };
+        return null;
       restored = textPoint(first + saved.before.length);
     }
   }
-  if (!restored) return { source: document.URL, error: 'unresolved-source-position' };
+  return restored;
 }
+let restored = sourcePosition ? resolvePosition(sourcePosition) : null;
+if (sourcePosition && !restored)
+  return { source: document.URL, error: !validPosition(sourcePosition)
+    ? 'invalid-source-position' : 'unresolved-source-position' };
 let page = options.page, fragmentPoint = null;
 if (options.anchor !== null) {
   const object = options.element ? elementAt(options.element) : null;
@@ -363,13 +367,178 @@ state.start = start;
 let point = restored || fragmentPoint || (start < end ? textPoint(start) : null);
 if (!point && objects.length) point = objectPoint(elementAt(objects[0].path));
 if (!point) point = objectPoint(body);
-let quoteStart = Math.max(0, point.offset - 32), quoteEnd = Math.min(text.length, point.offset + 32);
-if (/[\uDC00-\uDFFF]/u.test(text[quoteStart] || '')) ++quoteStart;
-if (/[\uDC00-\uDFFF]/u.test(text[quoteEnd] || '')) --quoteEnd;
-const locator = { version: 1, cfi: `epubcfi(${options.cfiBase}!${cfiPath(point.node, point.local)})`,
-  offset: point.offset,
-  before: point.local === null ? '' : text.slice(quoteStart, point.offset),
-  after: point.local === null ? '' : text.slice(point.offset, quoteEnd) };
+function locatorAt(point) {
+  let quoteStart = Math.max(0, point.offset - 32), quoteEnd = Math.min(text.length, point.offset + 32);
+  if (/[\uDC00-\uDFFF]/u.test(text[quoteStart] || '')) ++quoteStart;
+  if (/[\uDC00-\uDFFF]/u.test(text[quoteEnd] || '')) --quoteEnd;
+  return { version: 1, cfi: `epubcfi(${options.cfiBase}!${cfiPath(point.node, point.local)})`,
+    offset: point.offset,
+    before: point.local === null ? '' : text.slice(quoteStart, point.offset),
+    after: point.local === null ? '' : text.slice(point.offset, quoteEnd) };
+}
+const locator = locatorAt(point);
+// Queries retain this layout's source map in the isolated world. They never
+// change selection, styles, scrolling or the logical reading anchor.
+let visible = null, searchIndex = null;
+function visibleText() {
+  if (visible) return visible;
+  if (text.length > 2000000) throw new Error('query-text-too-large');
+  const parts = [], starts = [], ends = [];
+  let previousBlock = null, lineBreak = false;
+  const sourceNodes = new Map(nodes.map(entry => [entry.node, entry]));
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT |
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION);
+  for (let node; (node = walker.nextNode());) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.localName === 'br' && getComputedStyle(node).display !== 'none' &&
+          Array.from(node.getClientRects()).some(r => r.height > 0)) lineBreak = true;
+      continue;
+    }
+    const entry = sourceNodes.get(node);
+    if (!entry) continue;
+    const range = document.createRange();
+    range.selectNodeContents(entry.node);
+    if (!Array.from(range.getClientRects()).some(r => r.width > 0 && r.height > 0) ||
+        getComputedStyle(entry.node.parentElement).visibility !== 'visible') continue;
+    let block = entry.node.parentElement;
+    while (block !== body && /^(inline|contents)$/u.test(getComputedStyle(block).display))
+      block = block.parentElement;
+    if (previousBlock && (previousBlock !== block || lineBreak)) {
+      parts.push('\n');
+      starts.push(entry.offset);
+      ends.push(entry.offset);
+    }
+    previousBlock = block;
+    lineBreak = false;
+    parts.push(entry.node.data);
+    for (let i = 0; i < entry.node.length; ++i) {
+      starts.push(entry.offset + i);
+      ends.push(entry.offset + i + 1);
+    }
+  }
+  return visible = { text: parts.join(''), starts, ends };
+}
+function cleanText(value) {
+  return value.replace(/[\u00ad\u200b\u2060\ufeff]/gu, '').replace(/\s+/gu, ' ');
+}
+function rangeResult(first, last) {
+  if (!first || !last || first.local === null || last.local === null) return null;
+  if (first.offset > last.offset) [first, last] = [last, first];
+  if (first.offset === last.offset) return null;
+  const rectangles = [];
+  for (const entry of nodes) {
+    const begin = Math.max(0, first.offset - entry.offset);
+    const finish = Math.min(entry.node.length, last.offset - entry.offset);
+    if (finish <= begin || getComputedStyle(entry.node.parentElement).visibility !== 'visible') continue;
+    const range = document.createRange();
+    range.setStart(entry.node, begin);
+    range.setEnd(entry.node, finish);
+    for (const rect of range.getClientRects()) {
+      const x = Math.max(margin, rect.left), y = Math.max(margin, rect.top);
+      const right = Math.min(options.width - margin, rect.right);
+      const bottom = Math.min(options.height - margin, rect.bottom);
+      if (right > x && bottom > y) {
+        if (rectangles.length >= 512) throw new Error('query-range-too-large');
+        rectangles.push({ x, y, width: right - x, height: bottom - y });
+      }
+    }
+  }
+  const stream = visibleText();
+  let begin = stream.ends.findIndex(end => end > first.offset);
+  let finish = begin;
+  while (finish >= 0 && finish < stream.text.length && stream.starts[finish] < last.offset) ++finish;
+  const selected = begin < 0 ? '' : cleanText(stream.text.slice(begin, finish)).trim();
+  if (selected.length > 8192) throw new Error('query-range-too-large');
+  return { start: locatorAt(first), end: locatorAt(last), text: selected, rectangles };
+}
+function fold(value) {
+  return value.normalize('NFKC').toLowerCase().replace(/[\u00df]/gu, 'ss')
+    .replace(/\u03c2/gu, '\u03c3').replace(/\p{Cf}/gu, '')
+    .replace(/[\u2018\u2019\u02bc]/gu, "'").replace(/[\u2010-\u2015\u2212]/gu, '-')
+    .replace(/\s+/gu, ' ');
+}
+function sourceIndex(values, target) {
+  let low = 0, high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+function search(query, requestedPage) {
+  if (typeof query !== 'string' || !query.trim() || query.length > 256 ||
+      !Number.isInteger(requestedPage) || requestedPage < 0 || requestedPage >= pages)
+    throw new Error('invalid-query');
+  const stream = visibleText();
+  if (!searchIndex) {
+    const normalized = [], starts = [], ends = [];
+    for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(stream.text)) {
+      for (const char of fold(part.segment)) {
+        const first = stream.starts[part.index], last = stream.ends[part.index + part.segment.length - 1];
+        if (char === ' ' && normalized.at(-1) === ' ') { ends[ends.length - 1] = last; continue; }
+        normalized.push(char);
+        for (let i = 0; i < char.length; ++i) { starts.push(first); ends.push(last); }
+      }
+    }
+    searchIndex = { text: normalized.join(''), starts, ends };
+  }
+  const { text: haystack, starts, ends } = searchIndex, needle = fold(query.trim());
+  const hits = [];
+  let limited = false, previous = -1;
+  if (!needle) return { hits, limited };
+  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
+    const begin = starts[at], end = ends[at + needle.length - 1];
+    if (begin === previous) continue; // A compatibility expansion can match twice.
+    previous = begin;
+    const first = textPoint(begin), last = textPoint(end);
+    const matchPage = Math.max(0, Math.min(pages - 1, pageAt(first.node, first.local) + page));
+    if (matchPage !== requestedPage) continue;
+    if (hits.length === 100) { limited = true; break; }
+    const rawBegin = sourceIndex(stream.starts, begin);
+    let rawEnd = rawBegin;
+    while (rawEnd < stream.ends.length && stream.ends[rawEnd] <= end) ++rawEnd;
+    hits.push({ start: locatorAt(first), end: locatorAt(last), page: matchPage,
+      before: cleanText(stream.text.slice(Math.max(0, rawBegin - 48), rawBegin)),
+      text: cleanText(stream.text.slice(rawBegin, rawEnd)).trim(),
+      after: cleanText(stream.text.slice(rawEnd, rawEnd + 96)) });
+  }
+  return { hits, limited };
+}
+globalThis.kobaltQuery = function(query) {
+  try {
+    let result;
+    if (!query || typeof query !== 'object') throw new Error('invalid-query');
+    if (query.kind === 'search') result = search(query.text, query.page);
+    else if (query.kind === 'range')
+      result = rangeResult(resolvePosition(query.start), resolvePosition(query.end));
+    else if (query.kind === 'word') {
+      const { x, y } = query;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < margin || y < margin ||
+          x >= options.width - margin || y >= options.height - margin)
+        throw new Error('invalid-query-point');
+      const caret = document.caretRangeFromPoint(x, y);
+      const entry = caret && nodes.find(entry => entry.node === caret.startContainer);
+      result = null;
+      if (entry) {
+        const stream = visibleText(), offset = entry.offset + caret.startOffset;
+        const index = stream.ends.findIndex(end => end > offset);
+        const words = new Intl.Segmenter(undefined, { granularity: 'word' }).segment(stream.text);
+        for (const at of [index < 0 ? stream.text.length - 1 : index, (index < 0 ? stream.text.length : index) - 1]) {
+          const word = at >= 0 ? words.containing(at) : null;
+          if (!word?.isWordLike) continue;
+          const candidate = rangeResult(textPoint(stream.starts[word.index]),
+            textPoint(stream.ends[word.index + word.segment.length - 1]));
+          if (candidate?.rectangles.some(r => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)) {
+            result = candidate;
+            break;
+          }
+        }
+      }
+    } else throw new Error('invalid-query');
+    return { source: document.URL, result };
+  } catch (error) { return { source: document.URL, error: String(error.message) }; }
+};
 const excerpt = text.slice(start, start + 160);
 return { source: document.URL, title: document.title, page, pages,
   locator,

@@ -49,6 +49,15 @@ int helper()
     }
     int width = 600, height = 800, spine = 0, page = 0, offset = 0;
     const int lengths[] = { 200, 100, 300 };
+    const auto locatorAt = [&](int selected) {
+        return QJsonObject{
+            { "version", mode == "bad-locator" ? 2 : 1 },
+            { "cfi", QString("epubcfi(/6/%1!/4/2/1:%2)").arg((spine + 1) * 2).arg(selected) },
+            { "offset", selected },
+            { "before", selected ? "before" : "" },
+            { "after", "after" }
+        };
+    };
     while (!stopped) {
         pollfd input{ 0, POLLIN, 0 };
         if (poll(&input, 1, 10) <= 0)
@@ -70,6 +79,71 @@ int helper()
         }
         if (mode == "hang")
             continue;
+        if (action == "QUERY") {
+            if (mode == "hang-query") {
+                QFile marker(QString::fromLocal8Bit(pidPath) + ".query");
+                require(marker.open(QIODevice::WriteOnly), "Query arrival marker");
+                marker.write("query");
+                continue;
+            }
+            std::string encoded;
+            request >> spine >> page >> encoded;
+            offset = page * (width == 800 ? 50 : 100);
+            const auto query = QJsonDocument::fromJson(
+                                       QByteArray::fromBase64(QByteArray::fromStdString(encoded)))
+                                       .object();
+            const auto kind = query.value("kind").toString();
+            auto start = locatorAt(offset + 10), end = locatorAt(offset + 16);
+            if (kind == "range") {
+                start = query.value("start").toObject();
+                end = query.value("end").toObject();
+                if (start.value("offset").toInt() > end.value("offset").toInt())
+                    std::swap(start, end);
+            }
+            if (mode == "bad-query-token")
+                start["cfi"] = "epubcfi(/6/999!/4/2/1:0)";
+            QJsonObject result{
+                { "text", "source" },
+                { "start", start },
+                { "end", end },
+                { "rectangles",
+                  QJsonArray{ QJsonObject{ { "x", 10 },
+                                           { "y", 20 },
+                                           { "width", mode == "bad-query-rect" ? 1e30 : 60 },
+                                           { "height", 20 } } } }
+            };
+            if (kind == "search") {
+                const int selected = query.value("page").toInt();
+                result = {
+                    { "hits",
+                      QJsonArray{ QJsonObject{
+                              { "start", locatorAt(selected * (width == 800 ? 50 : 100) + 10) },
+                              { "end", locatorAt(selected * (width == 800 ? 50 : 100) + 16) },
+                              { "text", "source" },
+                              { "before", "before " },
+                              { "after", " after" },
+                              { "page", selected } } } },
+                    { "limited", false }
+                };
+            }
+            const auto path = mode == "bad-query-source" ? "wrong"
+                    : spine == 2                         ? "two"
+                    : spine == 1                         ? "aside"
+                                                         : "one";
+            const QJsonObject envelope{
+                { "spine", spine },
+                { "page", page },
+                { "data",
+                  QJsonObject{ { "source", "kobalt-epub://fixture/" + QString(path) },
+                               { "result", result } } }
+            };
+            std::cout
+                    << prefix << "OK JSON "
+                    << QJsonDocument(envelope).toJson(QJsonDocument::Compact).toBase64().constData()
+                    << '\n'
+                    << std::flush;
+            continue;
+        }
         if (action == "OPEN") {
             std::string path;
             request >> path >> width >> height;
@@ -99,13 +173,7 @@ int helper()
         const int pages = (lengths[spine] + units - 1) / units;
         offset = qBound(0, offset, lengths[spine] - 1);
         page = offset / units;
-        const QJsonObject locator{
-            { "version", mode == "bad-locator" ? 2 : 1 },
-            { "cfi", QString("epubcfi(/6/%1!/4/2/1:%2)").arg((spine + 1) * 2).arg(offset) },
-            { "offset", offset },
-            { "before", offset ? "before" : "" },
-            { "after", "after" }
-        };
+        const auto locator = locatorAt(offset);
         const auto stem = runtime.filePath(QString("frame-%1").arg(id));
         QImage pixels(width, height, QImage::Format_ARGB32_Premultiplied);
         pixels.fill(QColor(10 + spine, 20 + page, 30));
@@ -141,6 +209,11 @@ int helper()
                                                  { "href", "kobalt-epub://fixture/two" } } } } } },
             { "layout",
               QJsonObject{
+                      { "source",
+                        QString("kobalt-epub://fixture/%1")
+                                .arg(spine == 2           ? "two"
+                                             : spine == 1 ? "aside"
+                                                          : "one") },
                       { "page", page },
                       { "pages", pages },
                       { "locator", locator },
@@ -199,6 +272,36 @@ int main(int argc, char **argv)
         require(document.goTo(contents.at(1).position) && document.page() == 1,
                 "TOC uses layout-independent source positions");
         const auto anchor = document.state().value("source_position").toObject();
+        const auto queryImage = document.image(document.page());
+        const auto word = document.wordAt({ 30, 30 });
+        require(word.text == "source" && !word.start.isEmpty() && !word.end.isEmpty()
+                        && word.rectangles == QVector<QRect>{ QRect(10, 20, 60, 20) },
+                "Word queries bind source anchors and viewport rectangles");
+        const auto range = document.textRange(word.end, word.start);
+        require(range.text == word.text && range.start == word.start && range.end == word.end,
+                "Source ranges support reverse endpoints without treating them as XPointers");
+        require(document.rangeRects(word.start, word.end) == word.rectangles,
+                "Selection geometry shares the source range");
+        require(document.wordAt({ -1, 30 }).text.isEmpty()
+                        && document.textRange("/legacy", word.end).text.isEmpty(),
+                "Invalid points and legacy anchors are not sent as source queries");
+        QVector<SearchHit> hits;
+        for (int selected = 0; selected < document.pages(); ++selected) {
+            const auto batch = document.searchPage("source", selected);
+            require(batch.nextPage == selected + 1 && batch.hits.size() == 1
+                            && batch.hits.first().page == selected,
+                    "Search streams matches in whole-book page order");
+            hits += batch.hits;
+        }
+        require(document.state().value("source_position").toObject() == anchor
+                        && document.page() == 1
+                        && document.image(document.page()).cacheKey() == queryImage.cacheKey(),
+                "Cross-spine text queries preserve the source position and immutable frame");
+        require(document.goTo(hits.last().start) && document.page() == 5,
+                "Search hits navigate through source positions");
+        require(document.goTo(sourceposition::token(anchor)), "Return after source query");
+        require(document.searchPage("source", 5).hits.size() == 1,
+                "Leave the helper on a different spine before reflow");
         require(sourceposition::fromToken(sourceposition::token(anchor)) == anchor,
                 "Source position token round trip");
         for (const auto *key : { "version", "href", "cfi", "offset", "before", "after" }) {
@@ -265,6 +368,16 @@ int main(int argc, char **argv)
                 "Restoration distinguishes repeated spine entries with the same href");
     }
     qunsetenv("KOBALT_TEST_WEBKIT_MODE");
+    for (const auto *mode : { "bad-query-source", "bad-query-token", "bad-query-rect" }) {
+        qputenv("KOBALT_TEST_WEBKIT_MODE", mode);
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Query guard fixture");
+        const auto position = document.state().value("source_position");
+        require(document.wordAt({ 30, 30 }).text.isEmpty(),
+                "Reject malformed query geometry or anchors");
+        require(document.state().value("source_position") == position && document.go(1),
+                "Rejected queries preserve the reading position and helper lifecycle");
+    }
     for (const auto *mode : { "bad-size", "bad-path", "bad-id", "bad-ready", "bad-locator" }) {
         qputenv("KOBALT_TEST_WEBKIT_MODE", mode);
         WebKitDocument document({}, "/unused.epub");
@@ -329,6 +442,9 @@ int main(int argc, char **argv)
         });
         opened.exec();
         int frames = 0;
+        require(sourceposition::fromToken(session->navigationPosition())
+                        == session->state().value("source_position").toObject(),
+                "Transient navigation positions carry source tokens without exposing a legacy field");
         session->updated = [&] {
             ++frames;
             opened.quit();
@@ -415,6 +531,40 @@ int main(int argc, char **argv)
                 opened.quit();
             });
             opened.exec();
+        }
+        {
+            qputenv("KOBALT_TEST_WEBKIT_MODE", "hang-query");
+            auto searching = std::make_unique<ReaderSession>(test::readerFonts(), "Libron");
+            auto searchRequest = request;
+            searchRequest.saved = {};
+            searchRequest.lease = std::make_shared<SourceLease>();
+            searchRequest.resources = localResourceFactory(path, searchRequest.lease);
+            searching->open(searchRequest, [&](OpeningResult result) {
+                require(result.ready() && searching->experimentalBackend(),
+                        "Search cancellation fixture");
+                opened.quit();
+            });
+            opened.exec();
+            bool published = false, cancelled = false;
+            QElapsedTimer cancelTime;
+            QTimer arrival;
+            QObject::connect(&arrival, &QTimer::timeout, &opened, [&] {
+                if (!QFile::exists(pidFilePath + ".query"))
+                    return;
+                arrival.stop();
+                cancelTime.start();
+                cancelled = true;
+                searching->cancelSearch();
+                searching->updated = [&] { opened.quit(); };
+                require(searching->turn(1), "A page turn can follow a cancelled helper query");
+            });
+            searching->search("source", [&](SearchBatch) { published = true; });
+            arrival.start(10);
+            opened.exec();
+            require(cancelled && !published && searching->page() == 1
+                            && searching->error().isEmpty() && cancelTime.elapsed() < 5000,
+                    "Cancellation interrupts IPC, drops stale search output and restores reading");
+            qunsetenv("KOBALT_TEST_WEBKIT_MODE");
         }
         session = std::make_unique<ReaderSession>(test::readerFonts(), "Libron");
         request.saved = {};

@@ -60,6 +60,10 @@ public:
 
     ChapterSelection chapterSelection(const QVector<ChapterLink> &) const override;
     QString chapterTitle(const QString &) const override;
+    WordSelection wordAt(QPoint) override;
+    TextRange textRange(const QString &, const QString &) override;
+    QVector<QRect> rangeRects(const QString &, const QString &, bool = false) override;
+    SearchBatch searchPage(const QString &, int) override;
 
 private:
     EngineFontInputs fonts_;
@@ -76,10 +80,16 @@ private:
     QVector<ChapterLink> chapters_;
     QMap<QString, bool> chapterStartsAtPage_;
     bool opened_ = false;
+    bool helperMoved_ = false;
     std::function<bool()> current_;
     bool start();
     bool ensureOpen();
-    bool command(const QByteArray &, bool page = false);
+    bool command(const QByteArray &, bool page = false, QJsonObject *json = nullptr);
+    QJsonObject query(int, int, const QJsonObject &);
+    QJsonObject queryRange(const QString &, const QString &);
+    int sourceSpine(const QJsonObject &) const;
+    QString sourceToken(QJsonObject, int) const;
+    QVector<QRect> queryRectangles(const QJsonObject &) const;
     bool readFrame(const QString &, unsigned);
     bool style();
     bool paginateBook();
