@@ -1,6 +1,7 @@
 #pragma once
 #include <QByteArray>
 #include <QHash>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -9,6 +10,12 @@ namespace kobalt {
 struct Bookmark;
 struct Highlight;
 struct HighlightExcerpt;
+enum class AnnotationPositionFormat { XPointer, SourceV1 };
+
+QString annotationIdentity(const QString &, AnnotationPositionFormat);
+bool annotationPositionValid(const QString &, AnnotationPositionFormat);
+bool annotationMetadataValid(const QString &folder, AnnotationPositionFormat, QString *error,
+                             QJsonObject *metadata = nullptr);
 
 // Captured by each store. Explicit 0/1 overrides the build default.
 bool annotationDatabaseEnabled();
@@ -18,6 +25,7 @@ struct AnnotationBook
     QString root, identity, title, key;
     QByteArray fingerprint;
     QString database = {};
+    AnnotationPositionFormat positions = AnnotationPositionFormat::XPointer;
 };
 
 struct AnnotationDatabaseState
@@ -54,7 +62,9 @@ public:
 private:
     static bool loadRows(const AnnotationBook &, int kind, QVector<Highlight> *,
                          AnnotationDatabaseState *, QString *error, bool compact = false);
-    static bool legacy(const QString &folder, QVector<Highlight> *, QString *error);
-    static bool legacy(const QString &folder, QVector<Bookmark> *, QString *error);
+    static bool legacy(const QString &folder, QVector<Highlight> *, QString *error,
+                       AnnotationPositionFormat);
+    static bool legacy(const QString &folder, QVector<Bookmark> *, QString *error,
+                       AnnotationPositionFormat);
 };
 } // namespace kobalt

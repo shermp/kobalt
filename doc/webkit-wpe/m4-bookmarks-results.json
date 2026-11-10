@@ -1,0 +1,130 @@
+{
+  "milestone": "M4 source bookmarks and isolated annotation storage",
+  "base": "fed0c51",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "f75de3fb4a98b14e9da24af4cba1bc457c29dc2fb2c8004fbae5299e67940c30",
+  "milestone_status": "bookmark slice validated; complete M4 parity remains open",
+  "checks": {
+    "native_annotations": {
+      "status": "passed; retained for unchanged UI/session behavior after storage-only hardening",
+      "command": "ctest --preset linux -L annotations --output-on-failure",
+      "log": "build/m4-bookmarks-native.log"
+    },
+    "native_focused": {
+      "status": "passed on final application source; later edits add only focused proxy/protocol assertions",
+      "command": "ctest --preset linux -R '^(model.(annotation-database|bookmark-store|highlight-store|profile-storage)|engine.webkit-document|model.main-thread|session.(reader-session|bookmark-session|highlight-session))$' --output-on-failure",
+      "log": "build/m4-bookmarks-native-focused.log",
+      "scope": [
+        "JSON and SQLite namespace separation and legacy preservation",
+        "source keys bound to content and stable across moves",
+        "legacy adoption cannot consume source rows",
+        "direct database scope/format validation",
+        "cross-format writes rejected without replacing lists",
+        "source pins, notes and endpoint provenance retained",
+        "source JSON import and profile preparation preserve originals",
+        "unsupported anchors and metadata block editing without data loss",
+        "unknown source metadata fields survive edits",
+        "page summaries, numeric source order and exclusive range ends",
+        "summary cache invalidation after reflow",
+        "source lookup preserves the displayed frame and reading point"
+      ]
+    },
+    "syntax": {
+      "status": "host clang++ unavailable; both prepared Kobo SDK compiles passed"
+    },
+    "native_proxy_final": {
+      "status": "passed with final test assertions, including numeric CFI ordering within one page",
+      "log": "build/m4-bookmarks-final-proxy.log"
+    },
+    "kobo_qt5": {
+      "status": "compile/link and adapter checks passed on final application source",
+      "command": "bash platforms/kobo/build.sh qt5 --check",
+      "log": "build/m4-bookmarks-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile/link, adapter and package checks passed on final application source",
+      "command": "bash platforms/kobo/build.sh qt6 --check",
+      "log": "build/m4-bookmarks-qt6.log",
+      "package_log": "build/m4-bookmarks-package.log",
+      "application_build_tree": "3dc8be12fe63f1d4fad98040b4da8a1b9dca4aaa8337f63256864e53566c32f9",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "60cd6916fb7f7a55bf6bc44bb3c77cff8be103aeb2bcb130777a5dc006c93339"
+    },
+    "helper": {
+      "status": "passed",
+      "log": "build/m4-bookmarks-helper-build.log",
+      "bundle_key": "c45c84eb6be080a15b8fa8bf53ae6e191c8fa1fefd094cc126e652eaaeda01e1",
+      "archive_sha256": "cbc063e2cf6d9ded7307c2f01ad3e7213e2379920d493a7a2af8243d7e7c037f"
+    },
+    "arm_protocol": {
+      "status": "passed with final helper",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --epub-only --allow-unsandboxed-experiment",
+      "log": "build/m4-bookmarks-protocol-final.log",
+      "results": "build/webkit/firmware-1db17e9a82/epub-results/epub-results.json",
+      "scope": [
+        "actual page-start summaries",
+        "exact source-to-page lookup",
+        "exclusive page-boundary ends",
+        "image-only page summaries and source bookmark lookup",
+        "summary differs correctly from a restored intra-page point",
+        "existing Unicode, resource, CFI and held-frame regressions"
+      ]
+    },
+    "arm_session": {
+      "status": "passed on final application source and helper",
+      "log": "build/m4-bookmarks-session-final.log",
+      "results": "build/webkit/firmware-9117715fa4/session-results/session.json",
+      "scope": [
+        "asynchronous bookmark creation under the interaction guard",
+        "legacy bookmark list preserved",
+        "source bookmark resolution after typography/viewport changes",
+        "bookmark navigation and cold store reload",
+        "existing search, source restoration and saved-state checks"
+      ]
+    },
+    "installed_bookmarks": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --installed-only --installed-bookmarks --allow-unsandboxed-experiment",
+      "log": "build/m4-bookmarks-installed.log",
+      "results": "build/webkit/firmware-51c41fc7d6/installed-results/installed.json",
+      "scope": [
+        "bookmark corner and ribbon",
+        "surrounding menu and opened list",
+        "bookmark jump and return to the departed passage",
+        "independent CREngine bookmark creation",
+        "cold WebKit reopening restores its own list",
+        "helper cleanup and no main-thread-blocked events"
+      ],
+      "reuse": "Final storage hardening covers invalid source scopes/metadata and unknown JSON fields. The installed scenario uses valid SQLite scopes with unchanged behavior; final guards are covered by focused native checks and the final ARM session."
+    },
+    "full_native_and_gallery": {
+      "status": "not repeated; affected annotations lane, focused checks and targeted captures used",
+      "all_variant_release_validation": false
+    }
+  },
+  "review": {
+    "status": "user authorized commit in chat; review records four seen screens, one unseen and no requested changes",
+    "captures": "build/screenshots/webkit-m4-bookmarks",
+    "data": "build/review/webkit-m4-bookmarks",
+    "pairs": ["webkit=crengine", "reopened=before-close"],
+    "comparison": "Surrounding toolbar and list/tab/sort/action bounds match CREngine captures; shared caption/date styling, padding and dividers retained; excerpt line count follows content",
+    "known_gap": "The M3/M4 excerpt-font and Aa bridge remains incomplete; WebKit Qt excerpts use the interface font while CREngine uses the book font"
+  },
+  "storage": {
+    "database_schema": 3,
+    "annotation_list_format": 1,
+    "source_namespace": "source-v1",
+    "legacy_conversion": "none; existing records remain independent",
+    "backup": "same database/WAL barrier and JSON migration archive contract"
+  },
+  "limits": [
+    "Pointer selection, punctuation policies, geometry handles and highlight editing remain later M4 work",
+    "Source annotations do not adopt changed publication content",
+    "CFI/XPointer/native conversion is unavailable",
+    "Annotation source tokens retain the existing 4096 UTF-16-unit position limit",
+    "The runtime is an unsandboxed offline experiment; physical sandbox, performance and power behavior remain unvalidated"
+  ],
+  "manual_device": "unchanged at the initial committed M4 installation",
+  "cleanup": "Disposable devices and helpers removed; current evidence and targeted review retained"
+}

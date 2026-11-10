@@ -149,6 +149,15 @@ int helper()
                       QJsonObject{ { "width", mode == "bad-layout-viewport" ? width + 1 : width },
                                    { "height", height } } }
                 };
+            } else if (kind == "summary") {
+                result = { { "start", locatorAt(offset) }, { "excerpt", "Source page excerpt" } };
+            } else if (kind == "position") {
+                const auto position = query.value("position").toObject();
+                const int selected = position.value("offset").toInt();
+                result = { { "locator", position },
+                           { "page",
+                             qMax(0, selected - (query.value("exclusive").toBool() ? 1 : 0))
+                                     / (width == 800 ? 50 : 100) } };
             }
             const auto path = mode == "bad-query-source" && kind != "layout" ? "wrong"
                     : spine == 2                                             ? "two"
@@ -308,6 +317,30 @@ int main(int argc, char **argv)
         require(document.goTo(contents.at(1).position) && document.page() == 1,
                 "TOC uses layout-independent source positions");
         const auto anchor = document.state().value("source_position").toObject();
+        const auto firstPage = document.pageStart(0), markedPage = document.pageStart(1);
+        const auto lastPage = document.pageStart(5);
+        require(!markedPage.isEmpty() && document.pageExcerpt(1) == "Source page excerpt",
+                "Page summaries expose source anchors and excerpts without image transfers");
+        QVector<int> sourceOrder;
+        require(document.pagesOf({ lastPage, markedPage, "/legacy", firstPage }, false,
+                                 &sourceOrder)
+                                == QVector<int>({ 5, 1, -1, 0 })
+                        && sourceOrder == QVector<int>({ 2, 1, -1, 0 }),
+                "Source bookmark pages and order reject legacy anchors");
+        require(document.pagesOf({ firstPage, markedPage }, true) == QVector<int>({ 0, 0 }),
+                "Exclusive range ends do not add an empty boundary page");
+        auto earlier = sourceposition::fromToken(firstPage), later = earlier;
+        earlier["offset"] = 2;
+        earlier["cfi"] = "epubcfi(/6/2!/4/2/1:2)";
+        later["offset"] = 10;
+        later["cfi"] = "epubcfi(/6/2!/4/2/1:10)";
+        require(document.pagesOf({ sourceposition::token(later), sourceposition::token(earlier) },
+                                 false, &sourceOrder)
+                                == QVector<int>({ 0, 0 })
+                        && sourceOrder == QVector<int>({ 1, 0 }),
+                "Source order compares CFI offsets numerically within one page");
+        require(document.state().value("source_position").toObject() == anchor,
+                "Bookmark resolution preserves the displayed source point");
         const auto queryImage = document.image(document.page());
         const auto word = document.wordAt({ 30, 30 });
         require(word.text == "source" && !word.start.isEmpty() && !word.end.isEmpty()
@@ -366,6 +399,10 @@ int main(int argc, char **argv)
                         && document.state().value("source_position").toObject() == anchor,
                 "Reflow restores the source character, not an old page number");
         require(document.chapters().at(1).page == 2, "TOC pages follow reflow");
+        require(document.pagesOf({ markedPage }) == QVector<int>{ 2 }
+                        && sourceposition::fromToken(document.pageStart(1)).value("offset").toInt()
+                                == 50,
+                "Bookmarks reflow from their source anchors and summary caches invalidate");
         require(document.image(document.page()).size() == QSize(800, 600), "resized image");
         const auto position = document.page();
         document.close();

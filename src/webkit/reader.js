@@ -377,6 +377,9 @@ function locatorAt(point) {
     after: point.local === null ? '' : text.slice(point.offset, quoteEnd) };
 }
 const locator = locatorAt(point);
+const firstPoint = start < end ? textPoint(start)
+  : objects.length ? objectPoint(elementAt(objects[0].path)) : objectPoint(body);
+const pageStart = locatorAt(firstPoint);
 // Queries retain this layout's source map in the isolated world. They never
 // change selection, styles, scrolling or the logical reading anchor.
 let visible = null, searchIndex = null;
@@ -517,6 +520,28 @@ globalThis.kobaltQuery = function(query) {
     let result;
     if (!query || typeof query !== 'object') throw new Error('invalid-query');
     if (query.kind === 'layout') result = layout;
+    else if (query.kind === 'summary') {
+      const stream = visibleText();
+      const first = stream.ends.findIndex(offset => offset > start);
+      let last = first;
+      while (last >= 0 && last < stream.starts.length && stream.starts[last] < end) ++last;
+      result = { start: pageStart,
+        excerpt: first < 0 ? '' : cleanText(stream.text.slice(first, last)).trim().slice(0, 200) };
+    } else if (query.kind === 'position') {
+      const resolved = resolvePosition(query.position);
+      if (!resolved) throw new Error('unresolved-source-position');
+      let located = resolved;
+      if (query.exclusive && resolved.local !== null && resolved.offset) {
+        const stream = visibleText();
+        let at = sourceIndex(stream.ends, resolved.offset + 1) - 1;
+        while (at >= 0 && (stream.ends[at] > resolved.offset || /\s/u.test(stream.text[at]))) --at;
+        if (at >= 0) located = textPoint(stream.starts[at]);
+      }
+      const selected = located.local === null
+        ? Math.floor((located.node.getBoundingClientRect().left - margin + 0.5) / options.width) + page
+        : pageAt(located.node, located.local) + page;
+      result = { page: Math.max(0, Math.min(pages - 1, selected)), locator: locatorAt(resolved) };
+    }
     else if (query.kind === 'search') result = search(query.text, query.page);
     else if (query.kind === 'range')
       result = rangeResult(resolvePosition(query.start), resolvePosition(query.end));

@@ -25,12 +25,15 @@ actions.add_argument('--font-resources-only', action='store_true')
 actions.add_argument('--session-only', action='store_true')
 actions.add_argument('--installed-only', action='store_true')
 parser.add_argument('--installed-search', action='store_true')
+parser.add_argument('--installed-bookmarks', action='store_true')
 parser.add_argument('--installed-search-rotation', action='store_true')
 args = parser.parse_args()
 if args.installed_search_rotation and not args.installed_search:
     parser.error('--installed-search-rotation requires --installed-search')
 if args.installed_search and not args.installed_only:
     parser.error('--installed-search requires --installed-only')
+if args.installed_bookmarks and (not args.installed_only or args.installed_search):
+    parser.error('--installed-bookmarks requires --installed-only without --installed-search')
 args.epub_tests |= args.epub_only or args.epub_corpus
 if args.epub_tests and (args.platform_probe_only or args.font_resources_only or args.session_only or args.installed_only):
     parser.error('Select EPUB rendering or a resource/platform diagnostic')
@@ -116,7 +119,8 @@ try:
         stdout=(output / 'package-check.log').open('w'))
     if args.installed_only:
         installed.check(device, output, search_only=args.installed_search,
-                        rotate_after_search=args.installed_search_rotation)
+                        rotate_after_search=args.installed_search_rotation,
+                        bookmarks_only=args.installed_bookmarks)
         sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(

@@ -48,6 +48,38 @@ Each book supports up to 2,000 bookmarks and 2,000 annotations. Bookmark files a
 
 The diagnostic JSON bookmark backend rejects the complete list when any row has an invalid position or the list exceeds its count limit. It does not keep a partial list. A failed load or changed-file adoption blocks saves and preserves the original bytes. SQLite imports retain their version, schema and full-list checks.
 
+The experimental WebKit backend selects the independent `SourceV1` annotation
+namespace. Its book key is `source-v1-` followed by the SHA-256 of the legacy
+book key, a newline and the verified publication fingerprint. Both bookmarks
+and highlights use that key; no CREngine list is converted or overwritten.
+The same sideloaded content retains this key when moved. Changed content gets
+a separate key, and source annotations do not adopt records from another edition.
+
+Source JSON uses the existing list fields and version 1 in its separate folder.
+Its `book.json` retains the original identity and adds `position_format:
+"source-v1"`. Supported unknown metadata fields survive edits. Unsupported or
+damaged source metadata and unsupported locator versions block the complete
+list and subsequent edits, preserving the original data. Profile preparation
+recognizes this namespace, imports it and archives its original JSON through
+the existing migration path.
+
+Source SQLite lists use the same profile database, transactions, revisions,
+pin records and writer thread. Their internal `books.identity` is the reserved
+`kobalt-source-v1://` prefix followed by base64 UTF-8 of the original identity.
+This prevents older path-based adoption from treating source rows as CREngine
+data. The namespace key and position format must agree even for direct database
+operations. Legacy writers cannot open that reserved identity as a native book ID.
+Source writes reject XPointers; legacy writes reject known source-token/CFI prefixes.
+
+Source anchors are validated `kobalt-source:1:` tokens, within the annotation
+store's existing 4096 UTF-16-unit position bound. Reading checkpoints retain
+their separate locator bound. Notes, styles, colors, pins and endpoint provenance
+keep their existing limits and meanings. Database schema 3 and legacy annotation
+formats stay unchanged. The source namespace is itself versioned; a future
+incompatible source format needs a distinct namespace and a validated migration.
+Backups retain these records through the same database/WAL barrier and JSON
+archive contract. See [M4 source bookmarks](webkit-wpe/m4-bookmarks.md).
+
 Add compatible optional fields within version 1. A change to required fields, their meaning or location needs an explicit format version and migration. Do not tie data versions to release names. This is the current format contract, not a promise that older builds preserve arbitrary unknown fields. Book-state imports reject unsupported schemas without replacing the source. Database record formats are versioned separately and unsupported formats block updates.
 
 `header_footer` also accepts `phone`. The Phone preset has no header and retains the usual chapter-pages-left and book-percentage footer. It is offered on phone screens, whose short edge is under 3.4 inches, and is the default only when no header/footer choice, legacy setting, custom layout or text sizing has been saved. Explicit choices survive device detection and rotation. This keeps settings schema 1 and book-record format 1. Older builds do not recognize `phone` and can use their default preset when loading it.

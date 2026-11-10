@@ -642,9 +642,14 @@ bool prepareProfile(const Paths &paths, ProfileRecovery *recovery)
                     readJsonFile(folder.filePath() + "/book.json", BookmarkStore::maxFileBytes);
             const auto identity = metadata.object.value("identity").toString();
             const auto fingerprint = metadata.object.value("fingerprint").toString().toLatin1();
+            const auto positionFormat = metadata.object.value("position_format").toString();
+            const auto positions = positionFormat == "source-v1"
+                    ? AnnotationPositionFormat::SourceV1
+                    : AnnotationPositionFormat::XPointer;
             if (metadata.status != ReadStatus::Ok
                 || metadata.object.value("version") != QJsonValue(1) || identity.isEmpty()
-                || BookmarkStore::bookKey(identity, fingerprint) != folder.fileName()) {
+                || (!positionFormat.isEmpty() && positionFormat != "source-v1")
+                || BookmarkStore::bookKey(identity, fingerprint, positions) != folder.fileName()) {
                 ok = false;
                 continue;
             }
@@ -669,10 +674,10 @@ bool prepareProfile(const Paths &paths, ProfileRecovery *recovery)
             QVector<Bookmark> bookmarks;
             AnnotationDatabaseState state;
             QString error;
-            if (!AnnotationDatabase::load({ paths.annotations(), identity,
-                                            metadata.object.value("title").toString(),
-                                            folder.fileName(), fingerprint, paths.database() },
-                                          &bookmarks, &state, &error)) {
+            if (!AnnotationDatabase::load(
+                        { paths.annotations(), identity, metadata.object.value("title").toString(),
+                          folder.fileName(), fingerprint, paths.database(), positions },
+                        &bookmarks, &state, &error)) {
                 ok = false;
                 continue;
             }

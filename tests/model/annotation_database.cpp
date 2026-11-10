@@ -5,6 +5,7 @@
 #include "storage/bookmark_store.h"
 #include "storage/highlight_store.h"
 #include "storage/reader_storage.h"
+#include "reading/source_position.h"
 #include "support/qt_compat.h"
 #include "check.h"
 #include <QCoreApplication>
@@ -1360,6 +1361,212 @@ void defaultBackend()
 }
 
 // Checks the SQLite annotation database: JSON import, profile location, schema checks, failed writes, quotas and order limits.
+void sourceAnnotationIsolation()
+{
+    const auto format = AnnotationPositionFormat::SourceV1;
+    const auto point = [](int offset) {
+        return sourceposition::token(
+                qt::object({ { "version", 1 },
+                             { "href", "OEBPS/one.xhtml" },
+                             { "cfi", QString("epubcfi(/6/2!/4/2/1:%1)").arg(offset) },
+                             { "offset", offset },
+                             { "before", "" },
+                             { "after", "" } }));
+    };
+    const auto first = point(10), last = point(20);
+    const auto created = QDateTime::fromString("2026-11-11T00:00:00Z", Qt::ISODate).toUTC();
+    const Bookmark legacyMark{ "/legacy/1", "Chapter", "Legacy bookmark", created };
+    const Bookmark sourceMark{
+        first, "Chapter", "Source bookmark", created, "Pinned source", "star"
+    };
+    auto legacyHighlight = highlight();
+    legacyHighlight.start = "/legacy/1";
+    legacyHighlight.end = "/legacy/2";
+    auto sourceHighlight = legacyHighlight;
+    sourceHighlight.start = first;
+    sourceHighlight.end = last;
+    sourceHighlight.chosenStart = first;
+    sourceHighlight.chosenEnd = last;
+    sourceHighlight.sentenceStartPolicy = sourceHighlight.sentenceEndPolicy = true;
+    sourceHighlight.note = "Source note retained";
+    for (const auto *backend : { "0", "1" }) {
+        storage::closeProfile();
+        qputenv("KOBALT_ANNOTATIONS_SQLITE", backend);
+        QTemporaryDir root;
+        BookmarkStore legacy(root.path(), identity, fingerprint, "Book");
+        HighlightStore oldHighlights(root.path(), identity, fingerprint, "Book");
+        require(legacy.load() && oldHighlights.load(), "Open legacy namespace");
+        legacy.setBookmarks({ legacyMark });
+        oldHighlights.setHighlights({ legacyHighlight });
+        require(legacy.save() && oldHighlights.save(), "Save legacy namespace");
+        BookmarkStore source(root.path(), identity, fingerprint, "Book", {}, format);
+        HighlightStore highlights(root.path(), identity, fingerprint, "Book", {}, format);
+        require(source.folder() != legacy.folder() && source.load() && highlights.load()
+                        && source.bookmarks().isEmpty() && highlights.highlights().isEmpty(),
+                "Source namespaces cannot import legacy anchors");
+        if (QByteArray(backend) == "1") {
+            const AnnotationBook wrongScope{
+                root.path(), identity, "Book", BookmarkStore::bookKey(identity, fingerprint),
+                fingerprint, {},       format
+            };
+            AnnotationDatabaseState state;
+            QVector<Bookmark> loaded;
+            require(!AnnotationDatabase::load(wrongScope, &loaded, &state, nullptr)
+                            && !AnnotationDatabase::save(wrongScope,
+                                                         QVector<Bookmark>{ sourceMark }, {},
+                                                         &state, nullptr),
+                    "Direct database operations cannot put source records in a legacy scope");
+        }
+        source.setBookmarks({ sourceMark });
+        highlights.setHighlights({ sourceHighlight });
+        require(source.save() && highlights.save(), "Save independent source anchors");
+        require(legacy.load() && legacy.bookmarks() == QVector<Bookmark>{ legacyMark }
+                        && oldHighlights.load() && oldHighlights.highlights().size() == 1
+                        && oldHighlights.highlights().first().start == legacyHighlight.start,
+                "Source writes preserve legacy rows");
+        require(source.load() && source.bookmarks() == QVector<Bookmark>{ sourceMark }
+                        && highlights.load()
+                        && highlights.highlights().first().note == sourceHighlight.note
+                        && highlights.highlights().first().chosenEnd == last,
+                "Source pins, notes and endpoint provenance survive reopening");
+        require(highlights.loadCompact(), "Source namespace supports compact annotation loads");
+        legacy.setBookmarks({ sourceMark });
+        source.setBookmarks({ legacyMark });
+        require(!legacy.save() && !source.save(), "Cross-format bookmark writes are rejected");
+        oldHighlights.setHighlights({ sourceHighlight });
+        highlights.setHighlights({ legacyHighlight });
+        require(!oldHighlights.save() && !highlights.save(),
+                "Cross-format highlight writes are rejected");
+        require(source.load() && source.bookmarks().first().position == first && legacy.load()
+                        && legacy.bookmarks().first().position == legacyMark.position,
+                "Rejected writes retain both original lists");
+        const QByteArray editedFingerprint(64, 'b');
+        BookmarkStore edited(root.path(), identity, editedFingerprint, "Edited", {}, format);
+        require(edited.load() && edited.bookmarks().isEmpty(),
+                "Source annotations are content-bound; an edited file cannot relabel old CFIs");
+        storage::closeProfile();
+        QTemporaryDir onlySource;
+        BookmarkStore alone(onlySource.path(), identity, fingerprint, "Book", {}, format);
+        require(alone.load(), "Open source-only namespace");
+        alone.setBookmarks({ sourceMark });
+        require(alone.save(), "Prepare source-only namespace");
+        BookmarkStore moved(onlySource.path(), "file:///moved.epub", fingerprint, "Book", {},
+                            format);
+        require(moved.load() && moved.bookmarks().first().position == first,
+                "The same sideloaded content keeps source annotations when moved");
+        BookmarkStore originalReader(onlySource.path(), identity, fingerprint, "Book");
+        BookmarkStore editedReader(onlySource.path(), identity, editedFingerprint, "Edited");
+        require(originalReader.load() && originalReader.bookmarks().isEmpty() && editedReader.load()
+                        && editedReader.bookmarks().isEmpty(),
+                "Legacy adoption ignores source annotations, including on an edited path");
+        storage::closeProfile();
+    }
+    require(BookmarkStore::bookKey(annotationIdentity(identity, format), fingerprint).isEmpty(),
+            "Reserved source identities cannot be opened as legacy native IDs");
+    require(BookmarkStore::bookKey("native-id", {}, format).isEmpty(),
+            "Source records require a verified content fingerprint");
+    QTemporaryDir imported;
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
+    BookmarkStore json(imported.path(), identity, fingerprint, "Book", {}, format);
+    HighlightStore jsonHighlights(imported.path(), identity, fingerprint, "Book", {}, format);
+    require(json.load() && jsonHighlights.load(), "Prepare source JSON import");
+    json.setBookmarks({ sourceMark });
+    jsonHighlights.setHighlights({ sourceHighlight });
+    require(json.save() && jsonHighlights.save(), "Save source JSON import");
+    const auto original = bytes(json.folder() + "/bookmarks.json");
+    const auto originalHighlights = bytes(json.folder() + "/highlights.json");
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
+    BookmarkStore sqlite(imported.path(), identity, fingerprint, "Book", {}, format);
+    HighlightStore sqliteHighlights(imported.path(), identity, fingerprint, "Book", {}, format);
+    require(sqlite.load() && sqlite.bookmarks() == QVector<Bookmark>{ sourceMark }
+                    && sqliteHighlights.load()
+                    && sqliteHighlights.highlights().first().note == sourceHighlight.note
+                    && bytes(json.folder() + "/bookmarks.json") == original
+                    && bytes(json.folder() + "/highlights.json") == originalHighlights,
+            "Source JSON imports preserve source fields and original files");
+    storage::closeProfile();
+
+    QTemporaryDir profile;
+    const storage::Paths paths{ profile.path() };
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
+    BookmarkStore profileSource(paths.annotations(), identity, fingerprint, "Book", {}, format);
+    require(profileSource.load(), "Prepare source profile migration");
+    profileSource.setBookmarks({ sourceMark });
+    require(profileSource.save(), "Save source profile migration fixture");
+    const auto sourceFolder = QFileInfo(profileSource.folder()).fileName();
+    const auto originalProfile = bytes(profileSource.folder() + "/bookmarks.json");
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
+    require(storage::prepareProfile(paths), "Profile preparation imports the source namespace");
+    BookmarkStore prepared(paths.annotations(), identity, fingerprint, "Book", paths.database(),
+                           format);
+    require(prepared.load() && prepared.bookmarks() == QVector<Bookmark>{ sourceMark }
+                    && bytes(paths.directory + "/migration-backup/annotations/" + sourceFolder
+                             + "/bookmarks.json")
+                            == originalProfile,
+            "Profile preparation preserves source rows and archives the original JSON");
+    storage::closeProfile();
+    for (const auto *backend : { "0", "1" }) {
+        qputenv("KOBALT_ANNOTATIONS_SQLITE", backend);
+        QTemporaryDir damaged;
+        BookmarkStore source(damaged.path(), identity, fingerprint, "Book", {}, format);
+        require(source.load(), "Prepare future source-anchor fixture");
+        source.setBookmarks({ sourceMark });
+        require(source.save(), "Save future source-anchor fixture");
+        auto future = first;
+        future.replace("kobalt-source:1:", "kobalt-source:2:");
+        QByteArray raw;
+        const auto key = QFileInfo(source.folder()).fileName();
+        if (QByteArray(backend) == "0") {
+            auto mark = bookmarkJson(sourceMark);
+            mark["position"] = future;
+            raw = QJsonDocument(
+                          qt::object({ { "version", 1 }, { "bookmarks", qt::array({ mark }) } }))
+                          .toJson();
+            write(source.folder() + "/bookmarks.json", raw);
+        } else {
+            sql(damaged.path(),
+                "UPDATE entries SET start='" + future + "' WHERE book='" + key + "' AND kind=0");
+        }
+        require(!source.load(), "Unsupported source versions block the complete annotation list");
+        source.setBookmarks({});
+        require(!source.save(), "Failed source loads cannot replace stored records");
+        require(QByteArray(backend) == "0"
+                        ? bytes(source.folder() + "/bookmarks.json") == raw
+                        : sql(damaged.path(),
+                              "SELECT start FROM entries WHERE book='" + key + "' AND kind=0")
+                                        .toString()
+                                == future,
+                "Unsupported source-anchor bytes remain recoverable");
+        storage::closeProfile();
+    }
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
+    QTemporaryDir metadataRoot;
+    BookmarkStore metadataMarks(metadataRoot.path(), identity, fingerprint, "Book", {}, format);
+    HighlightStore metadataHighlights(metadataRoot.path(), identity, fingerprint, "Book", {},
+                                      format);
+    require(metadataMarks.load() && metadataHighlights.load(), "Prepare source metadata fixture");
+    metadataMarks.setBookmarks({ sourceMark });
+    metadataHighlights.setHighlights({ sourceHighlight });
+    require(metadataMarks.save(), "Save source metadata fixture");
+    const auto metadataPath = metadataMarks.folder() + "/book.json";
+    auto metadata = QJsonDocument::fromJson(bytes(metadataPath)).object();
+    metadata["future_optional"] = "retain";
+    write(metadataPath, QJsonDocument(metadata).toJson());
+    require(metadataMarks.save() && metadataHighlights.save()
+                    && QJsonDocument::fromJson(bytes(metadataPath))
+                                    .object()
+                                    .value("future_optional")
+                            == "retain",
+            "Source list edits preserve unknown metadata fields");
+    metadata["version"] = 99;
+    const auto unsupported = QJsonDocument(metadata).toJson();
+    write(metadataPath, unsupported);
+    require(!metadataMarks.load() && !metadataHighlights.load() && !metadataMarks.save()
+                    && !metadataHighlights.save() && bytes(metadataPath) == unsupported,
+            "Unsupported source metadata blocks edits and preserves its bytes");
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
+}
+
 int main(int argc, char **argv)
 {
     // Firmware runners supply a writable isolated parent on user storage.
@@ -1417,6 +1624,7 @@ int main(int argc, char **argv)
         std::_Exit(0); // End without closing the profile, like a crash.
     }
     defaultBackend();
+    sourceAnnotationIsolation();
     profileDatabaseLocation();
     pinnedBookmarks();
     beta3();

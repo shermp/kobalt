@@ -140,6 +140,20 @@ void validate(const QVector<Highlight> &rows, int kind, bool allowCompact = fals
     }
 }
 
+void validatePositions(const QVector<Highlight> &rows, int kind, AnnotationPositionFormat format)
+{
+    for (const auto &h : rows) {
+        check(annotationPositionValid(h.start, format), "invalid-position-format");
+        if (kind == highlightKind) {
+            check(annotationPositionValid(h.end, format)
+                          && (!h.sentenceStartPolicy
+                              || annotationPositionValid(h.chosenStart, format))
+                          && (!h.sentenceEndPolicy || annotationPositionValid(h.chosenEnd, format)),
+                  "invalid-position-format");
+        }
+    }
+}
+
 QVector<Highlight> normalized(const QVector<Bookmark> &marks)
 {
     QVector<Highlight> rows;
@@ -217,8 +231,9 @@ void writePins(Connection &c, const QString &key, const QVector<Highlight> &rows
 
 void putBook(Connection &c, const AnnotationBook &book)
 {
+    const auto owner = annotationIdentity(book.identity, book.positions);
     check(QJsonDocument(qt::object({ { "version", 1 },
-                                     { "identity", book.identity },
+                                     { "identity", owner },
                                      { "title", book.title },
                                      { "fingerprint", QString::fromLatin1(book.fingerprint) } }))
                           .toJson()
@@ -230,14 +245,14 @@ void putBook(Connection &c, const AnnotationBook &book)
                   "INSERT OR IGNORE INTO books VALUES(CAST(? AS TEXT),CAST(? AS TEXT),CAST(? AS TEXT),CAST(? AS TEXT))"),
           "database-write");
     q.addBindValue(sqlUtf8(book.key));
-    q.addBindValue(sqlUtf8(book.identity));
+    q.addBindValue(sqlUtf8(owner));
     q.addBindValue(sqlUtf8(QString::fromLatin1(book.fingerprint)));
     q.addBindValue(sqlUtf8(book.title));
     execute(q);
     check(q.prepare(
                   "UPDATE books SET identity=CAST(? AS TEXT),fingerprint=CAST(? AS TEXT),title=CAST(? AS TEXT) WHERE book=?"),
           "database-write");
-    q.addBindValue(sqlUtf8(book.identity));
+    q.addBindValue(sqlUtf8(owner));
     q.addBindValue(sqlUtf8(QString::fromLatin1(book.fingerprint)));
     q.addBindValue(sqlUtf8(book.title));
     q.addBindValue(book.key);
@@ -507,7 +522,8 @@ Source source(Connection &c, const AnnotationBook &book, int kind)
     const QFileInfo ownFile(own + '/' + listName(kind) + ".json");
     if (ownFile.exists())
         return { book.key, own, ownFile.lastModified().toMSecsSinceEpoch(), false };
-    if (!book.identity.startsWith("file://"))
+    if (book.positions != AnnotationPositionFormat::XPointer
+        || !book.identity.startsWith("file://"))
         return {};
     Source best;
     QSet<QString> migrated;
@@ -595,6 +611,7 @@ void ensureBook(Connection &c, const AnnotationBook &book, const LegacyReader &r
             rows = reader(selected.folder, kind);
         }
         validate(rows, kind);
+        validatePositions(rows, kind, book.positions);
         state.rowBytes.clear();
         for (const auto &h : rows)
             state.rowBytes.insert(h.id, rowBytes(h, kind));
@@ -627,7 +644,13 @@ void ensureBook(Connection &c, const AnnotationBook &book, const LegacyReader &r
 void saveRows(const AnnotationBook &book, int kind, const QVector<Highlight> &rows,
               const QVector<Highlight> &previous, AnnotationDatabaseState *state)
 {
+    check(!book.key.isEmpty()
+                  && book.key
+                          == BookmarkStore::bookKey(book.identity, book.fingerprint,
+                                                    book.positions),
+          "invalid-annotation-scope");
     validate(rows, kind, true);
+    validatePositions(rows, kind, book.positions);
     QHash<QString, int> oldIndices;
     for (int i = 0; i < previous.size(); ++i)
         oldIndices.insert(previous[i].id, i);
@@ -768,16 +791,18 @@ QString AnnotationDatabase::path(const QString &root)
     return storage::Paths{ root }.database();
 }
 
-bool AnnotationDatabase::legacy(const QString &folder, QVector<Highlight> *rows, QString *error)
+bool AnnotationDatabase::legacy(const QString &folder, QVector<Highlight> *rows, QString *error,
+                                AnnotationPositionFormat format)
 {
-    HighlightStore store({}, "migration", {}, {});
+    HighlightStore store({}, "migration", {}, {}, {}, format);
     const bool ok = store.readFolder(folder, error);
     if (ok)
         *rows = store.highlights();
     return ok;
 }
 
-bool AnnotationDatabase::legacy(const QString &folder, QVector<Bookmark> *rows, QString *error)
+bool AnnotationDatabase::legacy(const QString &folder, QVector<Bookmark> *rows, QString *error,
+                                AnnotationPositionFormat format)
 {
     const auto read =
             storage::readJsonFile(folder + "/bookmarks.json", BookmarkStore::maxFileBytes);
@@ -791,7 +816,7 @@ bool AnnotationDatabase::legacy(const QString &folder, QVector<Bookmark> *rows, 
             *error = "invalid-or-unsupported-bookmarks";
         return false;
     }
-    BookmarkStore store({}, "migration", {}, {});
+    BookmarkStore store({}, "migration", {}, {}, {}, format);
     if (!store.readFolder(folder, error))
         return false;
     // Verify the complete list before publishing an import to SQLite.
@@ -809,24 +834,30 @@ bool AnnotationDatabase::loadRows(const AnnotationBook &book, int requestedKind,
                                   QString *error, bool compact)
 {
     return guarded(error, [&] {
+        check(!book.key.isEmpty()
+                      && book.key
+                              == BookmarkStore::bookKey(book.identity, book.fingerprint,
+                                                        book.positions),
+              "invalid-annotation-scope");
         Connection c;
         c.open(book.root, book.database);
         ensureBook(c, book, [&](const QString &folder, int kind) {
             QString problem;
             if (kind == highlightKind) {
                 QVector<Highlight> loaded;
-                if (!legacy(folder, &loaded, &problem))
+                if (!legacy(folder, &loaded, &problem, book.positions))
                     throw Failure{ problem };
                 return loaded;
             }
             QVector<Bookmark> loaded;
-            if (!legacy(folder, &loaded, &problem))
+            if (!legacy(folder, &loaded, &problem, book.positions))
                 throw Failure{ problem };
             return normalized(loaded);
         });
         AnnotationDatabaseState loaded;
         c.beginRead();
         auto result = readRows(c, book.key, requestedKind, &loaded, compact);
+        validatePositions(result, requestedKind, book.positions);
         c.commit();
         *rows = std::move(result);
         *state = loaded;
@@ -864,6 +895,7 @@ bool AnnotationDatabase::details(const AnnotationBook &book, const QStringList &
             seen.insert(id);
             result.append(readDetail(query, book.key, id, state.rowBytes.value(id)));
         }
+        validatePositions(result, highlightKind, book.positions);
         c.commit();
         *rows = std::move(result);
     });

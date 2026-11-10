@@ -19,7 +19,10 @@ HighlightSession::HighlightSession(ReaderSession &session, std::function<QString
                                    const QString &database)
     : session_(session),
       layout(std::move(layout)),
-      store_(std::make_unique<HighlightStore>(annotations, identity, fingerprint, title, database))
+      store_(std::make_unique<HighlightStore>(annotations, identity, fingerprint, title, database,
+                                              session.experimentalBackend()
+                                                      ? AnnotationPositionFormat::SourceV1
+                                                      : AnnotationPositionFormat::XPointer))
 {
     if (!store_->available()) {
         store_.reset();

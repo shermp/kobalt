@@ -115,13 +115,14 @@ QString highlightDisplayStyle(const QString &style)
 }
 
 HighlightStore::HighlightStore(QString root, QString identity, QByteArray fingerprint,
-                               QString title, QString database)
+                               QString title, QString database, AnnotationPositionFormat format)
     : root_(std::move(root)),
       identity_(std::move(identity)),
       title_(std::move(title)),
       database_(std::move(database)),
-      key_(BookmarkStore::bookKey(identity_, fingerprint)),
-      fingerprint_(std::move(fingerprint))
+      key_(BookmarkStore::bookKey(identity_, fingerprint, format)),
+      fingerprint_(std::move(fingerprint)),
+      positionFormat_(format)
 {
 }
 
@@ -132,6 +133,8 @@ QString HighlightStore::folder() const
 
 bool HighlightStore::readFolder(const QString &folder, QString *error)
 {
+    if (!annotationMetadataValid(folder, positionFormat_, error))
+        return false;
     const auto read = storage::readJsonFile(folder + "/highlights.json", maxFileBytes);
     if (read.status == storage::ReadStatus::Missing) {
         highlights_.clear();
@@ -195,7 +198,11 @@ bool HighlightStore::readFolder(const QString &folder, QString *error)
             h.sentenceStartPolicy = true;
         }
         // Refuse edits to damaged lists rather than silently overwriting lost passages.
-        if (!valid(h) || ids.contains(h.id)) {
+        if (!valid(h) || !annotationPositionValid(h.start, positionFormat_)
+            || !annotationPositionValid(h.end, positionFormat_)
+            || (h.sentenceStartPolicy && !annotationPositionValid(h.chosenStart, positionFormat_))
+            || (h.sentenceEndPolicy && !annotationPositionValid(h.chosenEnd, positionFormat_))
+            || ids.contains(h.id)) {
             return problem(error, "invalid-highlight");
         }
         ids.insert(h.id);
@@ -225,7 +232,8 @@ bool HighlightStore::load(bool compact, QString *error)
         return problem(error, "no-stable-key");
     }
     if (sqlite_) {
-        const AnnotationBook book{ root_, identity_, title_, key_, fingerprint_, database_ };
+        const AnnotationBook book{ root_,        identity_, title_,         key_,
+                                   fingerprint_, database_, positionFormat_ };
         loadFailed_ =
                 !(compact ? AnnotationDatabase::loadCompact(book, &highlights_, &databaseState_,
                                                             error)
@@ -235,7 +243,9 @@ bool HighlightStore::load(bool compact, QString *error)
         return !loadFailed_;
     }
     QString source = folder();
-    if (!QFile::exists(source + "/highlights.json") && identity_.startsWith("file://")) {
+    if (!QFile::exists(source + "/highlights.json")
+        && positionFormat_ == AnnotationPositionFormat::XPointer
+        && identity_.startsWith("file://")) {
         const auto folders =
                 QDir(root_).entryList({ "file-*" }, QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         QDateTime newest;
@@ -268,8 +278,8 @@ bool HighlightStore::details(const QStringList &ids, QVector<Highlight> *rows, Q
         return problem(error, "storage-limit");
     if (sqlite_)
         return AnnotationDatabase::details(
-                { root_, identity_, title_, key_, fingerprint_, database_ }, ids, databaseState_,
-                rows, error);
+                { root_, identity_, title_, key_, fingerprint_, database_, positionFormat_ }, ids,
+                databaseState_, rows, error);
     QVector<Highlight> result;
     QHash<QString, Highlight> indexed;
     for (const auto &h : highlights_)
@@ -294,8 +304,8 @@ bool HighlightStore::excerpts(const QStringList &ids, QVector<HighlightExcerpt> 
         return problem(error, "storage-limit");
     if (sqlite_)
         return AnnotationDatabase::excerpts(
-                { root_, identity_, title_, key_, fingerprint_, database_ }, ids, databaseState_,
-                rows, error);
+                { root_, identity_, title_, key_, fingerprint_, database_, positionFormat_ }, ids,
+                databaseState_, rows, error);
     QVector<Highlight> full;
     if (!details(ids, &full, error))
         return false;
@@ -327,7 +337,8 @@ bool HighlightStore::save(QString *error)
         return problem(error, "no-stable-key");
     }
     if (sqlite_) {
-        const AnnotationBook book{ root_, identity_, title_, key_, fingerprint_, database_ };
+        const AnnotationBook book{ root_,        identity_, title_,         key_,
+                                   fingerprint_, database_, positionFormat_ };
         if (databaseState_.revision < 0
             && !AnnotationDatabase::load(book, &persistedHighlights_, &databaseState_, error))
             return false;
@@ -344,7 +355,11 @@ bool HighlightStore::save(QString *error)
     QJsonArray list;
     QSet<QString> ids;
     for (const auto &h : highlights_) {
-        if (!valid(h) || ids.contains(h.id)) {
+        if (!valid(h) || !annotationPositionValid(h.start, positionFormat_)
+            || !annotationPositionValid(h.end, positionFormat_)
+            || (h.sentenceStartPolicy && !annotationPositionValid(h.chosenStart, positionFormat_))
+            || (h.sentenceEndPolicy && !annotationPositionValid(h.chosenEnd, positionFormat_))
+            || ids.contains(h.id)) {
             return problem(error, "invalid-highlight");
         }
         ids.insert(h.id);
@@ -352,12 +367,16 @@ bool HighlightStore::save(QString *error)
     }
     const auto bytes =
             QJsonDocument(qt::object({ { "version", 1 }, { "highlights", list } })).toJson();
-    const auto metadata =
-            QJsonDocument(qt::object({ { "version", 1 },
-                                       { "identity", identity_ },
-                                       { "title", title_ },
-                                       { "fingerprint", QString::fromLatin1(fingerprint_) } }))
-                    .toJson();
+    QJsonObject metadataObject;
+    if (!annotationMetadataValid(folder(), positionFormat_, error, &metadataObject))
+        return false;
+    metadataObject["version"] = 1;
+    metadataObject["identity"] = identity_;
+    metadataObject["title"] = title_;
+    metadataObject["fingerprint"] = QString::fromLatin1(fingerprint_);
+    if (positionFormat_ == AnnotationPositionFormat::SourceV1)
+        metadataObject["position_format"] = QStringLiteral("source-v1");
+    const auto metadata = QJsonDocument(metadataObject).toJson();
     if (bytes.size() > maxFileBytes || metadata.size() > BookmarkStore::maxFileBytes) {
         return problem(error, "storage-limit");
     }

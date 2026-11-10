@@ -37,11 +37,13 @@ public:
     static constexpr qint64 maxFileBytes = 1024 * 1024;
 
     // The folder name for a book, or an empty string when it has no stable key.
-    static QString bookKey(const QString &identity, const QByteArray &fingerprint);
+    static QString bookKey(const QString &identity, const QByteArray &fingerprint,
+                           AnnotationPositionFormat = AnnotationPositionFormat::XPointer);
 
     // An omitted database path uses kobalt.sqlite under root for standalone stores.
     BookmarkStore(QString root, QString identity, QByteArray fingerprint, QString title,
-                  QString database = {});
+                  QString database = {},
+                  AnnotationPositionFormat = AnnotationPositionFormat::XPointer);
     // Reads the book's folder. A sideloaded file that changed has a new
     // fingerprint; its bookmarks then come from the folder that last saw its
     // path, and the next save writes them to the new folder.
@@ -73,6 +75,7 @@ private:
     friend class AnnotationDatabase;
     QString root_, identity_, title_, database_, key_, adoptedFrom_;
     QByteArray fingerprint_;
+    AnnotationPositionFormat positionFormat_;
     QVector<Bookmark> bookmarks_;
     QVector<Bookmark> persistedBookmarks_;
     AnnotationDatabaseState databaseState_;

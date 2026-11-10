@@ -3,6 +3,7 @@
 #include "reading/reader_session.h"
 #include "reading/reading_book.h"
 #include "reading/source_position.h"
+#include "reading/bookmark_session.h"
 #include "support/main_thread.h"
 #include <QGuiApplication>
 #include <QCryptographicHash>
@@ -99,6 +100,48 @@ int main(int argc, char **argv)
         require(sourceposition::valid(anchor), "Versioned source position captured");
         require(sourceposition::fromToken(session->navigationPosition()) == anchor,
                 "Transient return navigation carries the backend source point");
+        QTemporaryDir annotations;
+        const storage::Paths annotationPaths{ annotations.path() };
+        const auto fingerprint = session->sourceHash();
+        BookmarkStore legacy(annotationPaths.annotations(), request.identity, fingerprint, "Book",
+                             annotationPaths.database());
+        require(legacy.load(), "Prepare legacy bookmark fixture");
+        const Bookmark oldMark{
+            "/legacy/retained", "Legacy chapter", "Legacy text",
+            QDateTime::fromString("2026-11-11T00:00:00Z", Qt::ISODate).toUTC()
+        };
+        legacy.setBookmarks({ oldMark });
+        require(legacy.save(), "Save legacy bookmark fixture");
+        auto bookmarks = std::make_unique<BookmarkSession>(
+                *session,
+                [&] {
+                    return bookmarkLayoutKey(session->pages(), session->state(),
+                                             session->image().size());
+                },
+                annotationPaths.annotations(), request.identity, fingerprint, "Book",
+                annotationPaths.database());
+        require(bookmarks->sync() && bookmarks->bookmarks().isEmpty(),
+                "Source bookmark namespace starts independently");
+        bookmarks->failed = [] { require(false, "Source bookmark save failed"); };
+        QTimer bookmarkReady;
+        QObject::connect(&bookmarkReady, &QTimer::timeout, &completion, [&] {
+            if (!bookmarks->saving() && bookmarks->resolved() && bookmarks->bookmarks().size() == 1)
+                completion.quit();
+        });
+        {
+            mainthread::Interaction reading([] { return true; });
+            require(bookmarks->toggle(session->page()) == BookmarkSession::Toggle::Adding,
+                    "Source bookmark creation queued");
+            bookmarkReady.start(10);
+            completion.exec();
+            bookmarkReady.stop();
+            require(bookmarks->marked(session->page()), "Source page is bookmarked");
+        }
+        const auto markedSource = bookmarks->bookmarks().first().position;
+        require(!sourceposition::fromToken(markedSource).isEmpty(),
+                "Bookmark uses a versioned source point");
+        require(legacy.load() && legacy.bookmarks() == QVector<Bookmark>{ oldMark },
+                "Source bookmark save preserves the original CREngine list");
         const auto beforeSearch = digest(session->image());
         QVector<SearchHit> hits;
         const int searchBeats = beats;
@@ -144,7 +187,26 @@ int main(int argc, char **argv)
         require(session->error().isEmpty()
                         && session->state().value("source_position").toObject() == anchor,
                 "Typography and viewport changes retain the exact source anchor");
-        const auto fingerprint = session->sourceHash();
+        if (!bookmarks->sync()) {
+            bookmarkReady.start(10);
+            completion.exec();
+            bookmarkReady.stop();
+        }
+        require(bookmarks->resolved() && bookmarks->page(0) >= 0,
+                "Source bookmark resolves after reflow");
+        require(session->goTo(markedSource), "Bookmark source destination queued");
+        completion.exec();
+        require(session->error().isEmpty() && session->page() == bookmarks->page(0),
+                "Source bookmark navigation uses the reflowed page");
+        require(session->goTo(sourceposition::token(anchor)), "Return after source bookmark");
+        completion.exec();
+        bookmarks.reset();
+        BookmarkStore coldMarks(annotationPaths.annotations(), request.identity, fingerprint,
+                                "Book", annotationPaths.database(),
+                                AnnotationPositionFormat::SourceV1);
+        require(coldMarks.load() && coldMarks.bookmarks().size() == 1
+                        && coldMarks.bookmarks().first().position == markedSource,
+                "Cold annotation store restores source bookmarks");
         const auto identity = request.identity;
         QTemporaryDir profile;
         require(profile.isValid(), "Create diagnostic profile");
@@ -198,6 +260,8 @@ int main(int argc, char **argv)
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },
+                                                { "source_bookmarks", true },
+                                                { "legacy_bookmarks_preserved", true },
                                                 { "search_preserves_frame", true },
                                                 { "saved_data_preserved", true } })
                              .toJson());

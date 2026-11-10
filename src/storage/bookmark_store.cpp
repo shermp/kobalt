@@ -1,4 +1,5 @@
 #include "bookmark_store.h"
+#include "reading/source_position.h"
 #include "support/main_thread.h"
 #include "reader_storage.h"
 #include <QDir>
@@ -241,11 +242,62 @@ bool bookmarkFromJson(const QJsonObject &object, Bookmark *bookmark)
     return true;
 }
 
-QString BookmarkStore::bookKey(const QString &identity, const QByteArray &fingerprint)
+QString annotationIdentity(const QString &identity, AnnotationPositionFormat format)
+{
+    // This reserved URI cannot be a legacy native ID (which forbids slashes)
+    // or a file:// identity. Older writers cannot adopt these rows by path.
+    return format == AnnotationPositionFormat::SourceV1
+            ? "kobalt-source-v1://" + QString::fromLatin1(identity.toUtf8().toBase64())
+            : identity;
+}
+
+bool annotationPositionValid(const QString &position, AnnotationPositionFormat format)
+{
+    if (position.isEmpty() || position.size() > 4096)
+        return false;
+    return format == AnnotationPositionFormat::SourceV1
+            ? !sourceposition::fromToken(position).isEmpty()
+            : !position.startsWith("kobalt-source:") && !position.startsWith("epubcfi(");
+}
+
+bool annotationMetadataValid(const QString &folder, AnnotationPositionFormat format, QString *error,
+                             QJsonObject *metadata)
+{
+    if (format == AnnotationPositionFormat::XPointer || !QFileInfo::exists(folder))
+        return true;
+    const auto read = storage::readJsonFile(folder + "/book.json", BookmarkStore::maxFileBytes);
+    const auto identity = read.object.value("identity").toString();
+    const auto fingerprint = read.object.value("fingerprint").toString().toLatin1();
+    if (read.status != storage::ReadStatus::Ok || read.object.value("version") != QJsonValue(1)
+        || !read.object.value("title").isString()
+        || read.object.value("position_format") != QJsonValue(QStringLiteral("source-v1"))
+        || BookmarkStore::bookKey(identity, fingerprint, format) != QFileInfo(folder).fileName()) {
+        if (error)
+            *error = "invalid-source-metadata";
+        return false;
+    }
+    if (metadata)
+        *metadata = read.object;
+    return true;
+}
+
+QString BookmarkStore::bookKey(const QString &identity, const QByteArray &fingerprint,
+                               AnnotationPositionFormat format)
 {
     static const QRegularExpression legacyUuid(
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
     static const QRegularExpression digest("^[0-9a-f]{64}$");
+    if (format == AnnotationPositionFormat::SourceV1) {
+        const auto legacy = bookKey(identity, fingerprint);
+        if (legacy.isEmpty() || !digest.match(QString::fromLatin1(fingerprint)).hasMatch())
+            return {};
+        // A separate, versioned key preserves legacy lists and isolates source
+        // anchors by publication content. No changed-file adoption is implied.
+        return "source-v1-"
+                + QString::fromLatin1(QCryptographicHash::hash(legacy.toUtf8() + '\n' + fingerprint,
+                                                               QCryptographicHash::Sha256)
+                                              .toHex());
+    }
     // Keep existing UUID folders. Other server IDs get a case-sensitive hash
     // so their length and filename characters cannot affect annotation paths.
     if (legacyUuid.match(identity).hasMatch())
@@ -263,13 +315,14 @@ QString BookmarkStore::bookKey(const QString &identity, const QByteArray &finger
 }
 
 BookmarkStore::BookmarkStore(QString root, QString identity, QByteArray fingerprint, QString title,
-                             QString database)
+                             QString database, AnnotationPositionFormat format)
     : root_(std::move(root)),
       identity_(std::move(identity)),
       title_(std::move(title)),
       database_(std::move(database)),
-      key_(bookKey(identity_, fingerprint)),
-      fingerprint_(std::move(fingerprint))
+      key_(bookKey(identity_, fingerprint, format)),
+      fingerprint_(std::move(fingerprint)),
+      positionFormat_(format)
 {
 }
 
@@ -280,6 +333,8 @@ QString BookmarkStore::folder() const
 
 bool BookmarkStore::readFolder(const QString &folder, QString *error)
 {
+    if (!annotationMetadataValid(folder, positionFormat_, error))
+        return false;
     QString problem;
     const auto object = readObject(folder + "/bookmarks.json", &problem);
     if (!problem.isEmpty()) {
@@ -306,6 +361,7 @@ bool BookmarkStore::readFolder(const QString &folder, QString *error)
     for (const auto &value : rows) {
         Bookmark bookmark;
         if (!bookmarkFromJson(value.toObject(), &bookmark)
+            || !annotationPositionValid(bookmark.position, positionFormat_)
             || (bookmark.pinned() && ++pins > maxPins)) {
             if (error)
                 *error = "invalid";
@@ -330,8 +386,8 @@ bool BookmarkStore::load(QString *error)
     }
     if (sqlite_) {
         loadFailed_ = !AnnotationDatabase::load(
-                { root_, identity_, title_, key_, fingerprint_, database_ }, &bookmarks_,
-                &databaseState_, error);
+                { root_, identity_, title_, key_, fingerprint_, database_, positionFormat_ },
+                &bookmarks_, &databaseState_, error);
         if (!loadFailed_) {
             persistedBookmarks_ = bookmarks_;
             adoptedFrom_ = databaseState_.adoptedFrom;
@@ -342,9 +398,11 @@ bool BookmarkStore::load(QString *error)
         loadFailed_ = !readFolder(folder(), error);
         return !loadFailed_;
     }
+    if (!annotationMetadataValid(folder(), positionFormat_, error))
+        return false;
     // A sideloaded file that was edited has a new fingerprint. Keep the
     // bookmarks of the folder that last saw this path.
-    if (!identity_.startsWith("file://")) {
+    if (positionFormat_ != AnnotationPositionFormat::XPointer || !identity_.startsWith("file://")) {
         loadFailed_ = false;
         return true;
     }
@@ -397,6 +455,11 @@ bool BookmarkStore::save(QString *error)
 {
     int pins = 0;
     for (const auto &bookmark : bookmarks_) {
+        if (!annotationPositionValid(bookmark.position, positionFormat_)) {
+            if (error)
+                *error = "invalid-position-format";
+            return false;
+        }
         if (bookmark.name.size() > 128 || bookmark.icon.size() > 64
             || (bookmark.pinned() && ++pins > maxPins)) {
             if (error)
@@ -416,7 +479,8 @@ bool BookmarkStore::save(QString *error)
         return false;
     }
     if (sqlite_) {
-        const AnnotationBook book{ root_, identity_, title_, key_, fingerprint_, database_ };
+        const AnnotationBook book{ root_,        identity_, title_,         key_,
+                                   fingerprint_, database_, positionFormat_ };
         if (databaseState_.revision < 0
             && !AnnotationDatabase::load(book, &persistedBookmarks_, &databaseState_, error))
             return false;
@@ -428,8 +492,12 @@ bool BookmarkStore::save(QString *error)
         return true;
     }
     QJsonObject book;
+    if (!annotationMetadataValid(folder(), positionFormat_, error, &book))
+        return false;
     book["version"] = formatVersion;
     book["identity"] = identity_;
+    if (positionFormat_ == AnnotationPositionFormat::SourceV1)
+        book["position_format"] = QStringLiteral("source-v1");
     book["title"] = title_;
     book["fingerprint"] = QString::fromLatin1(fingerprint_);
     QJsonArray list;
@@ -451,7 +519,8 @@ bool BookmarkStore::save(QString *error)
     const bool sameMetadata = metadata.size() == bookBytes.size()
             && metadata.open(QIODevice::ReadOnly) && metadata.readAll() == bookBytes;
     metadata.close();
-    const auto index = identity_.startsWith("file://") && !sameMetadata
+    const auto index = positionFormat_ == AnnotationPositionFormat::XPointer
+                    && identity_.startsWith("file://") && !sameMetadata
             ? readIndex(root_, annotationFolders(root_))
             : PathIndex{};
     if (!QDir().mkpath(folder())) {

@@ -176,6 +176,9 @@ try:
     assert len(first['document']['navigation']) == 2
     assert any(link['href'] == 'two.xhtml#target' for link in first['layout']['links'])
     assert query(0, 0, kind='layout') == first['layout']
+    summary = query(0, 0, kind='summary')
+    assert summary['start'] == first['layout']['locator'] and summary['excerpt'], summary
+    assert query(0, 0, kind='position', position=summary['start'])['page'] == 0
     query_checks = []
     def search(text, spine=0, pages=None):
         found = []
@@ -234,6 +237,12 @@ try:
     second = call('NEXT')
     assert second['layout']['page'] == 1 and second['layout']['location']['start'] > first['layout']['location']['start']
     assert second['sha256'] != first['sha256']
+    summary_second = query(0, 1, kind='summary')
+    located = query(0, 0, kind='position', position=summary_second['start'])
+    assert located['page'] == 1, (summary_second, located)
+    previous_end = query(0, 0, kind='position', position=summary_second['start'], exclusive=True)
+    assert previous_end['page'] == 0, previous_end
+    call('GOTO 0 1')
     back = call('PREVIOUS')
     assert back['sha256'] == first['sha256'], (first, back)
     call('PREVIOUS', error='start-of-book')
@@ -267,6 +276,9 @@ try:
     call('GOTO 1 0')
     restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
     assert restored['layout']['locator'] == source
+    page_summary = query(0, restored['layout']['page'], kind='summary')
+    assert page_summary['start']['offset'] == restored['layout']['location']['start']
+    assert query(0, 0, kind='position', position=source)['page'] == restored['layout']['page']
     call('RESIZE 600 900')
     restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
     assert restored['layout']['locator'] == source
@@ -331,6 +343,10 @@ try:
     call(f'OPEN {encoded(images)} 600 800')
     image_page = call('NEXT')
     assert image_page['layout']['page'] == 1 and image_page['layout']['location']['element'] == [1], image_page
+    image_summary = query(0, 1, kind='summary')
+    assert image_summary['excerpt'] == '' and image_summary['start']['cfi'] == image_page['layout']['locator']['cfi']
+    assert query(0, 0, kind='position', position=image_summary['start'])['page'] == 1
+    call('GOTO 0 1')
     resized_image = call('RESIZE 800 600')
     assert resized_image['layout']['page'] == 1 and resized_image['layout']['location']['element'] == [1], resized_image
     assert resized_image['layout']['objects'][0]['width'] > 0

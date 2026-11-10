@@ -8,6 +8,14 @@ SQLite is the default backend, with an explicit legacy JSON override as document
 
 Physical-device touch and e-ink refresh still need device validation.
 
+The annotation-database regression also checks WebKit's independent source
+namespace in JSON and SQLite: cross-format rejection, legacy-row preservation,
+content-bound keys, moved files, source JSON import/profile preparation,
+unknown metadata preservation and failure without replacement for unsupported
+source anchors or metadata. The WebKit proxy and ARM session diagnostics add
+source bookmark lookup, reflow and asynchronous saves; the installed bookmark
+action is documented in [M4 source bookmarks](../webkit-wpe/m4-bookmarks.md).
+
 ## Export
 
 `model.highlight-store` builds the export archives, and `desktop.annotations` exports through the reader with both the Kobo default folder and the save picker. Headless Qt uses its widget file picker for these checks. Native Mac save sheets, Android document-provider writes and Nickel's import scan still need platform validation.

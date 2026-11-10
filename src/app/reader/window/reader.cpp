@@ -1639,7 +1639,7 @@ void Reader::goToPassage(const QString &target, bool pinnedShortcut)
     if (target.isEmpty() || session->busy() || closing || lifecycleHidden || services.suspended()) {
         return;
     }
-    const LinkVisit origin{ session->state().value("position").toString(), session->page(),
+    const LinkVisit origin{ session->navigationPosition(), session->page(),
                             (session->chapterTitle().isEmpty() ? strings::get("reader.reading")
                                                                : session->chapterTitle())
                                     .toUpper(),

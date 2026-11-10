@@ -206,8 +206,7 @@ void Reader::syncFrameState()
     if (!session->busy() && !pendingPassage.position.isEmpty()) {
         // Accept the visit only after the engine confirms a different passage.
         const auto origin = std::exchange(pendingPassage, {});
-        if (session->error().isEmpty()
-            && session->state().value("position").toString() != origin.position) {
+        if (session->error().isEmpty() && session->navigationPosition() != origin.position) {
             // One return point covers a chain of pinned reference shortcuts.
             // Ordinary links can still nest above it and return normally.
             if (!origin.pinnedShortcut || linkHistory.isEmpty()
@@ -217,8 +216,7 @@ void Reader::syncFrameState()
     }
     if (returningFromLink && !session->busy()) {
         returningFromLink = false;
-        if (!linkHistory.isEmpty()
-            && session->state().value("position").toString() == linkHistory.last().position)
+        if (!linkHistory.isEmpty() && session->navigationPosition() == linkHistory.last().position)
             linkHistory.removeLast();
     }
     applyTheme(session->state().value("dark_mode").toBool(false));

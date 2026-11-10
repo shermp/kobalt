@@ -72,7 +72,7 @@ def prepare(root, device, package):
     (profile / 'live-state').touch()
 
 
-def check(device, output, search_only=False, rotate_after_search=False):
+def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -286,12 +286,99 @@ def check(device, output, search_only=False, rotate_after_search=False):
             if index == 0:
                 capture('webkit-landscape')
 
+    def open_marks():
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        device.tap_widget(name='rrBookmarks')
+        device.wait_widget(name='rrBookmarkList')
+
+    def close_marks():
+        device.tap_widget(name='rrBookmarkListClose')
+        device.wait_until(lambda: not any(w['name'] == 'rrBookmarkList' for w in device.ui()['widgets']),
+                          description='bookmark panel closed')
+        if any(w['name'] == 'rrBookmarks' for w in device.ui()['widgets']):
+            paper = device.wait_widget(name='rrPage')
+            call('tap', x=paper['x'] + 20, y=paper['y'] + paper['height'] // 2)
+            device.wait_until(lambda: not any(w['name'] == 'rrBookmarks' for w in device.ui()['widgets']),
+                              description='bookmark menu dismissed')
+
+    def bookmark(backend):
+        nonlocal current_page
+        original = state(description='position before source bookmark')
+        paper = device.wait_widget(name='rrPage')
+        before = cursor()
+        call('tap', x=paper['x'] + int(paper['width'] * 0.835), y=paper['y'] + 60)
+        saved = event('bookmarks-saved', before)
+        assert not saved.get('failed', False) and saved['count'] == 1, saved
+        # Adding a ribbon need not publish another reader frame or state dump.
+        # The save event and visible list establish the edit before the next turn.
+        capture(backend + '-bookmark-page')
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrBookmarks')
+        capture(backend + '-bookmark-menu')
+        device.tap_widget(name='rrBookmarks')
+        device.wait_widget(name='rrBookmark0')
+        capture(backend + '-bookmark-list')
+        close_marks()
+        departure = turn()
+        open_marks()
+        before = cursor()
+        device.tap_widget(name='rrBookmark0')
+        arrived = event('frame-ready', before)
+        assert arrived['page'] == original['page'], (arrived, original)
+        capture(backend + '-bookmark-destination')
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=paper['y'] + paper['height'] // 2)
+        returning = device.wait_until(lambda: next((w for w in device.ui()['widgets']
+                  if w['name'] in ('rrLinkReturn', 'rrScrubberReturn')), None),
+                  description='bookmark return action')
+        before = cursor()
+        device.tap_widget(name=returning['name'])
+        returned = event('frame-ready', before)
+        assert returned['page'] == departure['page'], (returned, departure)
+        current_page = returned['page']
+        transcript.append({'action': 'bookmark', 'backend': backend, 'source': original,
+                           'returned': returned})
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if bookmarks_only:
+            bookmark('webkit')
+            saved_page = current_page
+            close_book()
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                value = open_book('crengine')
+                assert value['bookmark_count'] == 0, value
+                bookmark('crengine')
+                close_book()
+            finally:
+                hidden.rename(launcher)
+            value = open_book('webkit', expected_page=saved_page)
+            assert value['bookmark_count'] == 1, value
+            open_marks()
+            device.wait_widget(name='rrBookmark0')
+            capture('webkit-bookmark-reopened')
+            close_marks()
+            close_book()
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'source_bookmarks': True,
+                      'bookmark_return': True, 'backend_isolation': True, 'reopen': True,
+                      'helper_cleanup': True, 'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_BOOKMARKS_VERIFIED', flush=True)
+            return
         if search_only:
             search('webkit')
             if rotate_after_search:

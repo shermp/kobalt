@@ -28,7 +28,10 @@ BookmarkSession::BookmarkSession(ReaderSession &session, std::function<QString()
                                  const QString &database)
     : session(session),
       layout(std::move(layout)),
-      store(std::make_unique<BookmarkStore>(annotations, identity, fingerprint, title, database))
+      store(std::make_unique<BookmarkStore>(annotations, identity, fingerprint, title, database,
+                                            session.experimentalBackend()
+                                                    ? AnnotationPositionFormat::SourceV1
+                                                    : AnnotationPositionFormat::XPointer))
 {
     if (!store->available()) {
         store.reset();

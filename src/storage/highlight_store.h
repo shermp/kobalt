@@ -49,7 +49,8 @@ public:
     // root contains legacy JSON; database selects the shared profile database.
     // An omitted database path uses kobalt.sqlite under root for standalone stores.
     HighlightStore(QString root, QString identity, QByteArray fingerprint, QString title,
-                   QString database = {});
+                   QString database = {},
+                   AnnotationPositionFormat = AnnotationPositionFormat::XPointer);
 
     bool available() const { return !key_.isEmpty(); }
 
@@ -85,6 +86,7 @@ private:
     bool load(bool compact, QString *error);
     QString root_, identity_, title_, database_, key_;
     QByteArray fingerprint_;
+    AnnotationPositionFormat positionFormat_;
     QVector<Highlight> highlights_;
     QVector<Highlight> persistedHighlights_;
     AnnotationDatabaseState databaseState_;

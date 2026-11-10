@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcessEnvironment>
+#include <QRegularExpression>
 #include <QSysInfo>
 #include <QUrl>
 #include <QtMath>
@@ -285,6 +286,7 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     chapters_.clear();
     chapterStartsAtPage_.clear();
     position_ = {};
+    summaries_.clear();
     bool supported = true;
     const auto positions = saved.value("backend_positions");
     if (!positions.isUndefined() && !positions.isObject())
@@ -459,6 +461,7 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
     const auto restore = position_;
     const bool resized = size.isValid() && size != size_;
     if (resized) {
+        summaries_.clear();
         if (size.width() < 100 || size.height() < 100 || size.width() > 2048
             || size.height() > 2048)
             return fail("WebKit viewport must be between 100 and 2048 pixels");
@@ -476,6 +479,7 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
     }
     if (appearance::same(appearance_, settings) && !resized)
         return true;
+    summaries_.clear();
     appearance_ = settings;
     return style() && paginateBook() && resolveContents() && locate(restore);
 }
@@ -852,6 +856,101 @@ SearchBatch WebKitDocument::searchPage(const QString &text, int selected)
         batch.hits.append({ start, end, before, match, after, selected });
     }
     return batch;
+}
+
+QJsonObject WebKitDocument::summary(int selected)
+{
+    if (selected < 0 || selected >= pages())
+        return {};
+    if (summaries_.contains(selected))
+        return summaries_.value(selected);
+    const int index =
+            int(std::upper_bound(offsets_.begin(), offsets_.end(), selected) - offsets_.begin())
+            - 1;
+    const auto result =
+            query(index, selected - offsets_.at(index), qt::object({ { "kind", "summary" } }));
+    const auto start = sourceToken(result.value("start").toObject(), index);
+    if (start.isEmpty() || !result.value("excerpt").isString()
+        || result.value("excerpt").toString().size() > 200)
+        return {};
+    auto stored = result;
+    stored["token"] = start;
+    if (summaries_.size() >= 8)
+        summaries_.erase(summaries_.begin());
+    summaries_[selected] = stored;
+    return stored;
+}
+
+QString WebKitDocument::pageStart(int selected) const
+{
+    // Worker-owned lookups may move the helper DOM, but never the logical
+    // source point or published frame. The shared interface is logically const.
+    return const_cast<WebKitDocument *>(this)->summary(selected).value("token").toString();
+}
+
+QString WebKitDocument::pageExcerpt(int selected) const
+{
+    return const_cast<WebKitDocument *>(this)->summary(selected).value("excerpt").toString();
+}
+
+QVector<int> WebKitDocument::pagesOf(const QStringList &positions, bool endpoints,
+                                     QVector<int> *order, std::function<bool()> current) const
+{
+    auto &self = *const_cast<WebKitDocument *>(this);
+    if (order)
+        order->fill(-1, positions.size());
+    const auto previous = self.current_;
+    self.current_ = [previous, current] {
+        return (!previous || previous()) && (!current || current());
+    };
+    const auto resolve = [&]() -> QVector<int> {
+        QVector<int> result(positions.size(), -1), indices;
+        QVector<QVector<qulonglong>> paths(positions.size());
+        QVector<QJsonObject> points;
+        for (int i = 0; i < positions.size(); ++i)
+            points.append(sourceposition::fromToken(positions.at(i)));
+        for (int i = 0; i < positions.size(); ++i)
+            if (sourceSpine(points.at(i)) >= 0)
+                indices.append(i);
+        std::stable_sort(indices.begin(), indices.end(), [&](int a, int b) {
+            return sourceSpine(points.at(a)) < sourceSpine(points.at(b));
+        });
+        const QRegularExpression digits("[0-9]+");
+        for (int i : indices) {
+            if (current && !current())
+                return {};
+            const int index = sourceSpine(points.at(i));
+            const auto located =
+                    self.query(index, 0,
+                               qt::object({ { "kind", "position" },
+                                            { "position", points.at(i) },
+                                            { "exclusive", endpoints && i % 2 == 1 } }));
+            const int local = located.value("page").toInt(-1);
+            const auto canonical = located.value("locator").toObject();
+            if (local < 0 || local >= offsets_.at(index + 1) - offsets_.at(index)
+                || sourceToken(canonical, index).isEmpty())
+                continue;
+            result[i] = offsets_.at(index) + local;
+            auto matched = digits.globalMatch(canonical.value("cfi").toString());
+            while (matched.hasNext())
+                paths[i].append(matched.next().captured().toULongLong());
+        }
+        if (order) {
+            indices.erase(std::remove_if(indices.begin(), indices.end(),
+                                         [&](int i) { return result.at(i) < 0; }),
+                          indices.end());
+            std::stable_sort(indices.begin(), indices.end(), [&](int a, int b) {
+                return std::lexicographical_compare(paths.at(a).begin(), paths.at(a).end(),
+                                                    paths.at(b).begin(), paths.at(b).end());
+            });
+            for (int i = 0; i < indices.size(); ++i)
+                (*order)[indices.at(i)] = i;
+        }
+        return current && !current() ? QVector<int>() : result;
+    };
+    const auto result = resolve();
+    self.current_ = previous;
+    return result;
 }
 
 ChapterSelection WebKitDocument::selectContents(const QVector<ChapterLink> &contents,

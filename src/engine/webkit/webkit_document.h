@@ -64,6 +64,10 @@ public:
     TextRange textRange(const QString &, const QString &) override;
     QVector<QRect> rangeRects(const QString &, const QString &, bool = false) override;
     SearchBatch searchPage(const QString &, int) override;
+    QVector<int> pagesOf(const QStringList &, bool = false, QVector<int> * = nullptr,
+                         std::function<bool()> = {}) const override;
+    QString pageStart(int) const override;
+    QString pageExcerpt(int) const override;
 
 private:
     EngineFontInputs fonts_;
@@ -79,6 +83,7 @@ private:
     QVector<bool> linear_;
     QVector<ChapterLink> chapters_;
     QMap<QString, bool> chapterStartsAtPage_;
+    QMap<int, QJsonObject> summaries_;
     bool opened_ = false;
     bool helperMoved_ = false;
     std::function<bool()> current_;
@@ -87,6 +92,7 @@ private:
     bool command(const QByteArray &, bool page = false, QJsonObject *json = nullptr);
     QJsonObject query(int, int, const QJsonObject &, const QString &fragment = {});
     QJsonObject layout(int, const QString &fragment = {});
+    QJsonObject summary(int);
     QJsonObject queryRange(const QString &, const QString &);
     int sourceSpine(const QJsonObject &) const;
     QString sourceToken(QJsonObject, int) const;

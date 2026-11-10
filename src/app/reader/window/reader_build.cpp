@@ -860,7 +860,7 @@ void Reader::buildBottomControls()
             dismissControls();
             return;
         }
-        const LinkVisit origin{ session->state().value("position").toString(), session->page(),
+        const LinkVisit origin{ session->navigationPosition(), session->page(),
                                 session->chapterTitle().toUpper() };
         if (!session->go(target))
             return;
