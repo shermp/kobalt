@@ -347,21 +347,21 @@ bool WebKitDocument::ensureOpen()
 
 bool WebKitDocument::paginateBook()
 {
-    const auto restore = position_;
     const auto description = frame_.value("document").toObject();
     const int count = description.value("spine").toArray().size();
     const auto linear = description.value("linear").toArray();
     QVector<int> offsets{ 0 };
     QVector<bool> flags;
     for (int i = 0; i < count; ++i) {
-        if (!command("GOTO " + QByteArray::number(i) + " 0", true))
+        const auto inspected = layout(i);
+        if (inspected.isEmpty())
             return false;
-        offsets.append(offsets.last() + chapterPages());
+        offsets.append(offsets.last() + inspected.value("pages").toInt());
         flags.append(linear.size() == count ? linear.at(i).toBool() : true);
     }
     offsets_ = std::move(offsets);
     linear_ = std::move(flags);
-    return locate(restore);
+    return true;
 }
 
 bool WebKitDocument::locate(const QJsonObject &position)
@@ -390,33 +390,43 @@ int WebKitDocument::sourceSpine(const QJsonObject &position) const
 
 bool WebKitDocument::resolveContents()
 {
-    const auto restore = position_;
     QVector<ChapterLink> contents;
     QMap<QString, bool> boundaries;
     const auto navigation = frame_.value("document").toObject().value("navigation").toArray();
+    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    const QUrl origin(frame_.value("layout").toObject().value("source").toString());
     if (navigation.size() > 4096)
         return fail("Oversized WebKit table of contents");
     for (const auto &entry : navigation) {
         const auto item = entry.toObject();
-        if (!command("LINK " + encoded(item.value("href").toString()), true)) {
+        const QUrl destination(item.value("href").toString());
+        if (destination.scheme() != origin.scheme() || destination.host() != origin.host())
+            continue;
+        int index = -1;
+        for (int candidate = 0; candidate < paths.size(); ++candidate)
+            if (paths.at(candidate).toString() == destination.path().mid(1)) {
+                index = candidate;
+                break;
+            }
+        if (index < 0)
+            continue;
+        const auto inspected = layout(index, destination.fragment(QUrl::FullyDecoded));
+        if (inspected.isEmpty()) {
             if (!error_.endsWith("missing-link-target"))
                 return false;
             error_.clear();
             continue;
         }
-        const auto position = sourceposition::token(position_);
-        boundaries[position] = position_.value("offset").toInt() <= frame_.value("layout")
-                                                                            .toObject()
-                                                                            .value("location")
-                                                                            .toObject()
-                                                                            .value("start")
-                                                                            .toInt();
-        contents.append({ item.value("title").toString().simplified().left(512), position, page(),
+        const auto position = sourceToken(inspected.value("locator").toObject(), index);
+        boundaries[position] = inspected.value("locator").toObject().value("offset").toInt()
+                <= inspected.value("location").toObject().value("start").toInt();
+        contents.append({ item.value("title").toString().simplified().left(512), position,
+                          offsets_.at(index) + inspected.value("page").toInt(),
                           qBound(0, item.value("depth").toInt(), 256) });
     }
     chapters_ = std::move(contents);
     chapterStartsAtPage_ = std::move(boundaries);
-    return locate(restore);
+    return true;
 }
 
 bool WebKitDocument::style()
@@ -543,6 +553,10 @@ bool WebKitDocument::goTo(const QString &href)
         return false;
     if (href.startsWith("kobalt-source:"))
         return locate(sourceposition::fromToken(href));
+    // Relative publication links belong to the displayed spine, even when a
+    // metadata/search query most recently loaded another document in the helper.
+    if (helperMoved_ && !locate(position_))
+        return false;
     return command("LINK " + encoded(href), true);
 }
 
@@ -660,10 +674,12 @@ QString WebKitDocument::chapterTitle(const QString &position) const
     return selected.current >= 0 ? chapters_.at(selected.current).title : QString();
 }
 
-QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request)
+QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request,
+                                  const QString &fragment)
 {
-    if (!ensureOpen() || index < 0 || index + 1 >= offsets_.size() || selected < 0
-        || selected >= offsets_.at(index + 1) - offsets_.at(index))
+    if (!ensureOpen() || index < 0
+        || index >= frame_.value("document").toObject().value("spine").toArray().size()
+        || selected < 0 || selected >= maximumChapterPages)
         return {};
     QJsonObject reply;
     // Queries can load another spine without publishing a frame. Absolute page
@@ -671,7 +687,8 @@ QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &re
     // visible source anchor before using the helper's relative reflow state.
     helperMoved_ = true;
     if (!command("QUERY " + QByteArray::number(index) + ' ' + QByteArray::number(selected) + ' '
-                         + QJsonDocument(request).toJson(QJsonDocument::Compact).toBase64(),
+                         + QJsonDocument(request).toJson(QJsonDocument::Compact).toBase64()
+                         + (fragment.isEmpty() ? QByteArray() : ' ' + encoded(fragment)),
                  false, &reply))
         return {};
     const auto data = reply.value("data").toObject();
@@ -679,7 +696,10 @@ QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &re
     expected.setPath(
             '/'
             + frame_.value("document").toObject().value("spine").toArray().at(index).toString());
-    if (reply.value("spine").toDouble(-1) != index || reply.value("page").toDouble(-1) != selected
+    if (reply.value("spine").toDouble(-1) != index
+        || (fragment.isEmpty() ? reply.value("page").toDouble(-1) != selected
+                               : reply.value("page").toDouble(-1)
+                            != data.value("result").toObject().value("page").toDouble(-2))
         || QUrl(data.value("source").toString()) != expected) {
         fail("Invalid WebKit query source");
         return {};
@@ -690,6 +710,24 @@ QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &re
     }
     error_.clear();
     return data.value("result").toObject();
+}
+
+QJsonObject WebKitDocument::layout(int index, const QString &fragment)
+{
+    const auto result = query(index, 0, qt::object({ { "kind", "layout" } }), fragment);
+    const double count = result.value("pages").toDouble(-1),
+                 page = result.value("page").toDouble(-1);
+    const auto viewport = result.value("viewport").toObject();
+    if (count < 1 || count > maximumChapterPages || std::floor(count) != count || page < 0
+        || page >= count || std::floor(page) != page
+        || viewport.value("width").toDouble(-1) != size_.width()
+        || viewport.value("height").toDouble(-1) != size_.height()
+        || sourceToken(result.value("locator").toObject(), index).isEmpty()) {
+        if (error_.isEmpty())
+            fail("Invalid WebKit layout query");
+        return {};
+    }
+    return result;
 }
 
 QString WebKitDocument::sourceToken(QJsonObject position, int index) const

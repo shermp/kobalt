@@ -297,18 +297,19 @@ static void pageReady(GObject *object, GAsyncResult *result, gpointer data)
     renderer.metadata = json;
     g_free(json);
     g_object_unref(value);
-    if (!renderer.query.empty()) {
-        renderer.pageScriptPending = false;
-        query(renderer);
-        return;
-    }
     if (!renderer.pendingError.empty()) {
         g_source_remove(renderer.deadline);
         renderer.deadline = 0;
         reply(renderer, renderer.request, "ERROR " + renderer.pendingError);
         renderer.request = 0;
         renderer.pendingError.clear();
+        renderer.query.clear();
         renderer.pageScriptPending = false;
+        return;
+    }
+    if (!renderer.query.empty()) {
+        renderer.pageScriptPending = false;
+        query(renderer);
         return;
     }
     webkit_web_view_get_snapshot(renderer.view, WEBKIT_SNAPSHOT_REGION_VISIBLE,
@@ -579,23 +580,26 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
     }
     if (action == "QUERY") {
         unsigned target = 0, page = 0;
-        std::string request;
+        std::string request, fragment;
         if (!renderer.epub)
             error("no-book");
-        else if (args.size() != 3 || !number(args[0], target) || !number(args[1], page)
-                 || target >= renderer.book.spine().size() || page > 100000
-                 || !decoded(args[2], request) || request.size() > 16384)
+        else if ((args.size() != 3 && args.size() != 4) || !number(args[0], target)
+                 || !number(args[1], page) || target >= renderer.book.spine().size()
+                 || page > 100000 || !decoded(args[2], request) || request.size() > 16384
+                 || (args.size() == 4 && !decoded(args[3], fragment)))
             error("invalid-query");
         else {
             renderer.query = request;
             beginRequest(renderer, id);
-            if (target == renderer.spine && page == renderer.page)
+            if (fragment.empty() && target == renderer.spine && page == renderer.page)
                 query(renderer);
             else {
                 const bool reload = target != renderer.spine;
+                renderer.linkSpine = renderer.spine;
+                renderer.linkPage = renderer.page;
                 renderer.spine = target;
                 renderer.targetPage = page;
-                renderer.fragment.clear();
+                renderer.fragment = fragment;
                 renderer.sourcePosition.clear();
                 renderer.preserveAnchor = false;
                 if (reload)
@@ -940,7 +944,16 @@ int main()
     webkit_settings_set_serif_font_family(settings, serif.c_str());
     webkit_settings_set_sans_serif_font_family(settings, sans.c_str());
     webkit_settings_set_monospace_font_family(settings, mono.c_str());
-    auto *context = webkit_web_context_new();
+    // Nickel shares device memory with the helper. WebKit's system-RAM-based
+    // default and 30-second poll leave too little headroom during reflow.
+    // This is a reclamation policy, not a process-kill or address-space limit.
+    auto *pressure = webkit_memory_pressure_settings_new();
+    webkit_memory_pressure_settings_set_memory_limit(
+            pressure, std::min(512u, webkit_memory_pressure_settings_get_memory_limit(pressure)));
+    webkit_memory_pressure_settings_set_poll_interval(pressure, 2);
+    auto *context = WEBKIT_WEB_CONTEXT(
+            g_object_new(WEBKIT_TYPE_WEB_CONTEXT, "memory-pressure-settings", pressure, nullptr));
+    webkit_memory_pressure_settings_free(pressure);
     webkit_web_context_set_cache_model(context, WEBKIT_CACHE_MODEL_DOCUMENT_VIEWER);
     webkit_web_context_add_path_to_sandbox(context, bundle, TRUE);
     webkit_web_context_register_uri_scheme(context, "kobalt-runtime", resource, &renderer, nullptr);

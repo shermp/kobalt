@@ -85,7 +85,8 @@ private:
     bool start();
     bool ensureOpen();
     bool command(const QByteArray &, bool page = false, QJsonObject *json = nullptr);
-    QJsonObject query(int, int, const QJsonObject &);
+    QJsonObject query(int, int, const QJsonObject &, const QString &fragment = {});
+    QJsonObject layout(int, const QString &fragment = {});
     QJsonObject queryRange(const QString &, const QString &);
     int sourceSpine(const QJsonObject &) const;
     QString sourceToken(QJsonObject, int) const;

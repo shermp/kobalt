@@ -1,0 +1,136 @@
+{
+  "milestone": "M4 metadata scans and memory headroom",
+  "base": "928a9b2",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "9853dbbeb00607496c538ab4fc24289e8c1fd9c75f3ecfc45a0118ed63b03ca0",
+  "milestone_status": "validated continuation; full M4 feature parity and physical-device gates remain open",
+  "changes": [
+    "Spine pagination and TOC resolution use validated layout metadata without allocating or transferring page buffers",
+    "Optional fragment argument on QUERY retains nonfatal missing-target recovery",
+    "Relative publication links use the displayed source after a metadata/search scan",
+    "Web-process reclamation base is capped at the smaller of the platform default and 512 MB, with a two-second poll",
+    "Conservative/strict fractions and disabled process-kill threshold remain unchanged",
+    "Installed diagnostics capture cgroup memory and enforce headroom for Search followed by rotation and cold reopening"
+  ],
+  "memory_experiments": {
+    "container_limit_bytes": 805306368,
+    "original_failure": {
+      "evidence": "build/webkit/firmware-d562e2002c",
+      "exit_code": 137,
+      "cause": "unproven; subsequent instrumented baseline did not reproduce the kill"
+    },
+    "instrumented_baseline": {
+      "application": "928a9b2",
+      "status": "Search/rotation and reopen passed, but reached the container ceiling",
+      "peak_bytes": 805306368,
+      "evidence": "build/webkit/firmware-ee774480de/installed-results",
+      "log": "build/m4-memory-before.log",
+      "oom_kills": 0
+    },
+    "metadata_without_policy": {
+      "status": "passed; did not reduce the peak below the container ceiling",
+      "peak_bytes": 805306368,
+      "evidence": "build/webkit/firmware-a43dd30330/installed-results",
+      "log": "build/m4-memory-after.log",
+      "oom_kills": 0
+    },
+    "policy_trial": {
+      "status": "passed with a fixed 512 MB base before preserving smaller platform defaults",
+      "peak_bytes": 730652672,
+      "evidence": "build/webkit/firmware-7cf01c9257/installed-results",
+      "log": "build/m4-memory-policy-installed.log",
+      "oom_kills": 0
+    },
+    "final_policy": {
+      "status": "passed Search, rotation, CREngine comparison, cold reopening and cleanup",
+      "peak_bytes": 729350144,
+      "headroom_bytes": 75956224,
+      "minimum_required_headroom_bytes": 33554432,
+      "evidence": "build/webkit/firmware-b9323aba56/installed-results",
+      "log": "build/m4-memory-final-installed.log",
+      "oom_kills": 0,
+      "main_thread_blocked": []
+    }
+  },
+  "checks": {
+    "native_focused": {
+      "status": "passed; reused after helper-only policy and diagnostic edits",
+      "command": "ctest --preset linux -R '^(engine.webkit-document|session.reader-session|model.main-thread)$' --output-on-failure",
+      "log": "build/m4-memory-native.log",
+      "scope": [
+        "opening and reflow visible-frame allocation budgets",
+        "validated layout counts, locators and viewport",
+        "TOC fragments, nesting, duplicate destinations and source restoration",
+        "relative links after a scan on another spine",
+        "existing immutable-frame, query, cancellation and saved-data checks"
+      ]
+    },
+    "syntax": {
+      "status": "host clang++ unavailable; prepared Qt5 and Qt6 SDK compiles passed"
+    },
+    "kobo_qt5": {
+      "status": "compile/link and adapter checks passed; application sources unchanged after this pass",
+      "log": "build/m4-memory-qt5.log",
+      "command": "bash platforms/kobo/build.sh qt5 --check"
+    },
+    "kobo_qt6": {
+      "status": "compile/link, adapter and package checks passed; application sources unchanged after this pass",
+      "log": "build/m4-memory-qt6.log",
+      "package_log": "build/m4-memory-package.log",
+      "application_build_tree": "42721f85f4a6f9fc08c72a093f44229729e51c31e27c329358d7de1b3063d3c2",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "2b6ba47bb487eba8dcf0452b369c9d469eabdaa9b77970e37d6f03d1d080a884"
+    },
+    "helper": {
+      "status": "final build passed in the pinned prepared image",
+      "log": "build/m4-memory-final-helper.log",
+      "bundle_key": "2dbc5895c1bf097d435fe2f75f6b1e4111f14e21adc26f05da7056bb324c1aa4",
+      "archive_sha256": "fa69c9d85c39b134d5ec95869e77dc60d2006438c611d8ac63b71e45af982581"
+    },
+    "arm_protocol": {
+      "status": "passed with the 512 MB policy; reused after limiting it to the smaller platform default",
+      "log": "build/m4-memory-policy-protocol.log",
+      "results": "build/webkit/firmware-121e342034/epub-results/epub-results.json",
+      "reuse": "Final ARM session and installed checks exercise the final helper. This runtime retains the same 512 MB setting; protocol and script behavior did not change.",
+      "scope": [
+        "layout metadata equal to rendered-frame metadata",
+        "fragment queries with both frame slots held",
+        "nonfatal missing fragments on the current and another spine",
+        "existing Unicode, text-query, resource and source-position regressions"
+      ]
+    },
+    "arm_session": {
+      "status": "passed with final helper",
+      "log": "build/m4-memory-final-session.log",
+      "results": "build/webkit/firmware-8fc51f633a/session-results/session.json"
+    },
+    "installed": {
+      "status": "passed with final helper and unchanged 768 MiB container limit",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /home/sherman/kobo-dev/VirtualNickel --installed-only --installed-search --installed-search-rotation --allow-unsandboxed-experiment",
+      "log": "build/m4-memory-final-installed.log",
+      "results": "build/webkit/firmware-b9323aba56/installed-results/installed.json",
+      "postcheck_log": "build/m4-memory-final-postcheck.log",
+      "postcheck": "The additional child-OOM assertion was added after this run and checked against every retained raw memory.events sample; all oom_kill values are zero. Runtime behavior was not rerun for that assertion-only edit."
+    },
+    "ui_comparison": {
+      "status": "Search menu, opened entry, results, destination and return captures are pixel-identical to the approved text slice",
+      "reference": "build/webkit/firmware-d06e9b68c1/installed-results",
+      "candidate": "build/webkit/firmware-b9323aba56/installed-results",
+      "review": "No visible UI change; previous round remains approved"
+    },
+    "full_native_and_gallery": {
+      "status": "not repeated for this backend-only continuation; focused checks and prior results reused",
+      "all_variant_release_validation": false
+    }
+  },
+  "limits": [
+    "The original exit-137 cause is not proven; this verifies mitigation and scenario headroom, not a root-cause diagnosis",
+    "Memory includes firmware and QEMU; no native Kobo memory, latency or battery result is claimed",
+    "The policy is soft reclamation and does not impose a hard per-process memory cap",
+    "The experiment remains unsandboxed and offline; physical sandbox behavior is unverified",
+    "Annotation UI/persistence, excerpt-font parity and other M4 feature gates remain open"
+  ],
+  "manual_device": "unchanged at the initial committed M4 installation",
+  "cleanup": "Disposable devices and helpers reaped; useful baseline, final results and original failure evidence retained"
+}

@@ -25,7 +25,10 @@ actions.add_argument('--font-resources-only', action='store_true')
 actions.add_argument('--session-only', action='store_true')
 actions.add_argument('--installed-only', action='store_true')
 parser.add_argument('--installed-search', action='store_true')
+parser.add_argument('--installed-search-rotation', action='store_true')
 args = parser.parse_args()
+if args.installed_search_rotation and not args.installed_search:
+    parser.error('--installed-search-rotation requires --installed-search')
 if args.installed_search and not args.installed_only:
     parser.error('--installed-search requires --installed-only')
 args.epub_tests |= args.epub_only or args.epub_corpus
@@ -112,7 +115,8 @@ try:
     run(['podman', 'exec', '--workdir', prefix, container, 'sha256sum', '-c', 'SHA256SUMS'],
         stdout=(output / 'package-check.log').open('w'))
     if args.installed_only:
-        installed.check(device, output, search_only=args.installed_search)
+        installed.check(device, output, search_only=args.installed_search,
+                        rotate_after_search=args.installed_search_rotation)
         sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(

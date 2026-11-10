@@ -505,11 +505,19 @@ function search(query, requestedPage) {
   }
   return { hits, limited };
 }
+const excerpt = text.slice(start, start + 160);
+const layout = { source: document.URL, title: document.title, page, pages,
+  locator,
+  location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
+  viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
+  content: { x: margin, y: margin, width: options.width - 2 * margin,
+    height: options.height - 2 * margin }, links, objects, excerpt };
 globalThis.kobaltQuery = function(query) {
   try {
     let result;
     if (!query || typeof query !== 'object') throw new Error('invalid-query');
-    if (query.kind === 'search') result = search(query.text, query.page);
+    if (query.kind === 'layout') result = layout;
+    else if (query.kind === 'search') result = search(query.text, query.page);
     else if (query.kind === 'range')
       result = rangeResult(resolvePosition(query.start), resolvePosition(query.end));
     else if (query.kind === 'word') {
@@ -539,10 +547,4 @@ globalThis.kobaltQuery = function(query) {
     return { source: document.URL, result };
   } catch (error) { return { source: document.URL, error: String(error.message) }; }
 };
-const excerpt = text.slice(start, start + 160);
-return { source: document.URL, title: document.title, page, pages,
-  locator,
-  location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
-  viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
-  content: { x: margin, y: margin, width: options.width - 2 * margin,
-    height: options.height - 2 * margin }, links, objects, excerpt };
+return layout;

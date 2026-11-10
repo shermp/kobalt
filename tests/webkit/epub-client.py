@@ -159,10 +159,14 @@ try:
             frames.append(identity)
         return metadata
 
-    def query(spine, view_page, **request):
-        response = call(f'QUERY {spine} {view_page} ' + encoded(json.dumps(request)))
+    def query(spine, view_page, fragment=None, **request):
+        action = f'QUERY {spine} {view_page} ' + encoded(json.dumps(request))
+        if fragment is not None:
+            action += ' ' + encoded(fragment)
+        response = call(action)
         envelope = json.loads(base64.b64decode(response.split(' OK JSON ', 1)[1]))
-        assert envelope['spine'] == spine and envelope['page'] == view_page, envelope
+        assert envelope['spine'] == spine, envelope
+        assert envelope['page'] == (view_page if fragment is None else envelope['data']['result']['page']), envelope
         assert 'error' not in envelope['data'], envelope
         return envelope['data']['result']
 
@@ -171,6 +175,7 @@ try:
     assert 'Book scripts blocked' in first['layout']['excerpt'], first
     assert len(first['document']['navigation']) == 2
     assert any(link['href'] == 'two.xhtml#target' for link in first['layout']['links'])
+    assert query(0, 0, kind='layout') == first['layout']
     query_checks = []
     def search(text, spine=0, pages=None):
         found = []
@@ -214,6 +219,12 @@ try:
     held_query = call('GOTO 0 0', release=False)
     other_held = call('NEXT', release=False)
     assert search('Second chapter target', 1, 1)
+    inspected = query(0, 0, kind='layout', fragment='unicode-target')
+    assert inspected['locator']['after'].startswith('Unique source anchor:'), inspected
+    for spine in (0, 1):
+        call(f'QUERY {spine} 0 ' + encoded(json.dumps({'kind': 'layout'})) + ' ' + encoded('missing'),
+             error='missing-link-target')
+        assert query(spine, 0, kind='layout')['pages'] >= 1
     assert Path(held_query['pixels']).is_file() and Path(other_held['pixels']).is_file()
     for frame in frames:
         call(f'RELEASE {frame}')
@@ -369,7 +380,8 @@ try:
     assert not hits, hits
     (destination / 'epub-results.json').write_text(json.dumps(dict(network_attempts=hits, pages=transcript,
         text_queries=query_checks, source_range_geometry=True, word_hit_testing=True,
-        queries_preserve_frames=True, general_book_search=True, cleanup=True), indent=2))
+        queries_preserve_frames=True, general_book_search=True,
+        metadata_without_frames=True, cleanup=True), indent=2))
     print('WEBKIT_EPUB_VERIFIED', flush=True)
 finally:
     if active is not None:

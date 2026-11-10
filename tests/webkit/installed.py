@@ -1,6 +1,6 @@
 """Installed-mod diagnostics through the existing Device API; no build logic."""
 import json
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import zipfile
@@ -72,7 +72,7 @@ def prepare(root, device, package):
     (profile / 'live-state').touch()
 
 
-def check(device, output, search_only=False):
+def check(device, output, search_only=False, rotate_after_search=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -81,6 +81,32 @@ def check(device, output, search_only=False):
     results.mkdir()
     transcript = []
     current_page = None
+    memory_samples = []
+    memory_root = None
+
+    def memory_sample(phase):
+        nonlocal memory_root
+        container = 'virtualnickel-' + device.name
+        sample = {'phase': phase}
+        inspected = subprocess.run(['podman', 'inspect', '--format', '{{json .State}}', container],
+                                   capture_output=True, text=True)
+        try:
+            sample['container'] = json.loads(inspected.stdout)
+            pid = sample['container'].get('Pid', 0)
+            if pid:
+                group = (Path('/proc') / str(pid) / 'cgroup').read_text().splitlines()
+                unified = next(line.split(':', 2)[2] for line in group if line.startswith('0::'))
+                memory_root = Path('/sys/fs/cgroup') / unified.lstrip('/')
+            if memory_root:
+                sample['cgroup'] = {name: (memory_root / ('memory.' + name)).read_text().strip()
+                                   for name in ('current', 'peak', 'max', 'events', 'stat')}
+        except (OSError, ValueError, StopIteration) as error:
+            sample['collection_error'] = str(error)
+        processes = subprocess.run(['podman', 'top', container, 'hpid,pid,ppid,rss,comm'],
+                                   capture_output=True, text=True)
+        sample['processes'] = processes.stdout
+        memory_samples.append(sample)
+        (results / 'memory.json').write_text(json.dumps(memory_samples, indent=2) + '\n')
 
     def events():
         log = profile / 'diagnostics/events.jsonl'
@@ -115,6 +141,7 @@ def check(device, output, search_only=False):
         device.capture(name, raw=True)
         for suffix in ('.bmp', '.json'):
             shutil.copy2(device.folder / 'artifacts' / (name + suffix), results)
+        memory_sample(name)
 
     def call(action, **values):
         answer = device.command(action, **values)
@@ -245,6 +272,20 @@ def check(device, output, search_only=False):
         assert not remaining.strip(), remaining
         transcript.append({'action': 'close', 'helper_cleanup': True})
 
+    def rotations():
+        memory_sample('before-rotations')
+        for index in range(4):
+            before = cursor()
+            call('rotate')
+            event('frame-ready', before)
+            device.wait_until(lambda: any(w['name'] == 'rrPage' and
+                              ((w['width'] > w['height']) == (index % 2 == 0))
+                              for w in device.ui()['widgets']), timeout=60,
+                              description='installed rotated viewport')
+            memory_sample('rotation-' + str(index + 1))
+            if index == 0:
+                capture('webkit-landscape')
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
@@ -253,6 +294,11 @@ def check(device, output, search_only=False):
         assert first['chapters'] > 0, first
         if search_only:
             search('webkit')
+            if rotate_after_search:
+                contents('webkit')
+                turn()
+                turn(-1)
+                rotations()
             saved_page = current_page
             close_book()
             launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
@@ -265,12 +311,26 @@ def check(device, output, search_only=False):
             finally:
                 hidden.rename(launcher)
             open_book('webkit', expected_page=saved_page)
+            memory_sample('after-reopen')
             close_book()
             blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
             assert not blocked, blocked
             report = {'status': 'passed', 'installed_mod': True, 'source_search': True,
                       'search_return': True, 'creengine_comparison': True, 'reopen': True,
                       'helper_cleanup': True, 'main_thread_blocked': blocked, 'transcript': transcript}
+            if rotate_after_search:
+                report['rotation_after_search'] = True
+                assert all('cgroup' in sample for sample in memory_samples), memory_samples
+                peak = max(int(sample['cgroup']['peak']) for sample in memory_samples)
+                limit = int(memory_samples[-1]['cgroup']['max'])
+                # Leave room for the next frame/keyboard allocations rather
+                # than passing only because the kernel reclaimed at its cap.
+                assert peak + 32 * 1024 * 1024 < limit, (peak, limit)
+                assert all(not sample['container'].get('OOMKilled') for sample in memory_samples)
+                assert all(int(dict(line.split() for line in sample['cgroup']['events'].splitlines())
+                               .get('oom_kill', '-1')) == 0 for sample in memory_samples)
+                report.update(memory_peak_bytes=peak, memory_limit_bytes=limit,
+                              memory_headroom_bytes=limit - peak, memory_oom_kills=0)
             (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
             print('WEBKIT_INSTALLED_SEARCH_VERIFIED', flush=True)
             return
@@ -282,21 +342,7 @@ def check(device, output, search_only=False):
         assert backward['page'] == first['page']
         # The installed UI and helper must survive both geometry and power
         # transitions. Report markers are independent of persistent positions.
-        before = cursor()
-        call('rotate')
-        event('frame-ready', before)
-        device.wait_until(lambda: any(w['name'] == 'rrPage' and w['width'] > w['height']
-                          for w in device.ui()['widgets']), timeout=60,
-                          description='installed landscape viewport')
-        capture('webkit-landscape')
-        # Continue through the rotation cycle to ordinary portrait.
-        for _ in range(3):
-            before = cursor()
-            call('rotate')
-            event('frame-ready', before)
-        device.wait_until(lambda: any(w['name'] == 'rrPage' and w['height'] > w['width']
-                          for w in device.ui()['widgets']), timeout=60,
-                          description='installed portrait viewport')
+        rotations()
         before = cursor()
         call('power')
         event('reader-hidden', before)
@@ -345,6 +391,7 @@ def check(device, output, search_only=False):
         (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
         print('WEBKIT_INSTALLED_MOD_VERIFIED', flush=True)
     finally:
+        memory_sample('final')
         memory = subprocess.run(['podman', 'inspect', '--format', '{{json .State}}',
                                  'virtualnickel-' + device.name], capture_output=True, text=True)
         (results / 'container-state.json').write_text(memory.stdout)

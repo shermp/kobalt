@@ -10,6 +10,7 @@
 #include <QGuiApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
@@ -80,19 +81,29 @@ int helper()
         if (mode == "hang")
             continue;
         if (action == "QUERY") {
-            if (mode == "hang-query") {
+            std::string encoded, fragment;
+            request >> spine >> page >> encoded >> fragment;
+            offset = page * (width == 800 ? 50 : 100);
+            if (!fragment.empty()) {
+                const auto target = QByteArray::fromBase64(QByteArray::fromStdString(fragment));
+                if (target == "middle")
+                    offset = 100;
+                else {
+                    std::cout << prefix << "ERROR missing-link-target\n" << std::flush;
+                    continue;
+                }
+                page = offset / (width == 800 ? 50 : 100);
+            }
+            const auto query = QJsonDocument::fromJson(
+                                       QByteArray::fromBase64(QByteArray::fromStdString(encoded)))
+                                       .object();
+            const auto kind = query.value("kind").toString();
+            if (mode == "hang-query" && kind == "search") {
                 QFile marker(QString::fromLocal8Bit(pidPath) + ".query");
                 require(marker.open(QIODevice::WriteOnly), "Query arrival marker");
                 marker.write("query");
                 continue;
             }
-            std::string encoded;
-            request >> spine >> page >> encoded;
-            offset = page * (width == 800 ? 50 : 100);
-            const auto query = QJsonDocument::fromJson(
-                                       QByteArray::fromBase64(QByteArray::fromStdString(encoded)))
-                                       .object();
-            const auto kind = query.value("kind").toString();
             auto start = locatorAt(offset + 10), end = locatorAt(offset + 16);
             if (kind == "range") {
                 start = query.value("start").toObject();
@@ -125,11 +136,24 @@ int helper()
                               { "page", selected } } } },
                     { "limited", false }
                 };
+            } else if (kind == "layout") {
+                result = {
+                    { "page", page },
+                    { "pages",
+                      mode == "bad-layout-pages" ? 0
+                                                 : (lengths[spine] + (width == 800 ? 49 : 99))
+                                      / (width == 800 ? 50 : 100) },
+                    { "locator", mode == "bad-layout-locator" ? QJsonObject() : locatorAt(offset) },
+                    { "location", QJsonObject{ { "start", page * (width == 800 ? 50 : 100) } } },
+                    { "viewport",
+                      QJsonObject{ { "width", mode == "bad-layout-viewport" ? width + 1 : width },
+                                   { "height", height } } }
+                };
             }
-            const auto path = mode == "bad-query-source" ? "wrong"
-                    : spine == 2                         ? "two"
-                    : spine == 1                         ? "aside"
-                                                         : "one";
+            const auto path = mode == "bad-query-source" && kind != "layout" ? "wrong"
+                    : spine == 2                                             ? "two"
+                    : spine == 1 && mode != "duplicate-spine"                ? "aside"
+                                                                             : "one";
             const QJsonObject envelope{
                 { "spine", spine },
                 { "page", page },
@@ -166,7 +190,8 @@ int helper()
             std::string encoded;
             request >> encoded;
             const auto href = QByteArray::fromBase64(QByteArray::fromStdString(encoded));
-            spine = href.contains("two") ? 2 : 0;
+            if (!href.startsWith('#'))
+                spine = href.contains("two") ? 2 : 0;
             offset = href.contains("#middle") ? 100 : 0;
         }
         const int units = width == 800 ? 50 : 100;
@@ -174,6 +199,12 @@ int helper()
         offset = qBound(0, offset, lengths[spine] - 1);
         page = offset / units;
         const auto locator = locatorAt(offset);
+        const auto frameLog = qgetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
+        if (!frameLog.isEmpty()) {
+            QFile log(QString::fromLocal8Bit(frameLog));
+            require(log.open(QIODevice::WriteOnly | QIODevice::Append), "Frame allocation log");
+            log.write("frame\n");
+        }
         const auto stem = runtime.filePath(QString("frame-%1").arg(id));
         QImage pixels(width, height, QImage::Format_ARGB32_Premultiplied);
         pixels.fill(QColor(10 + spine, 20 + page, 30));
@@ -250,9 +281,14 @@ int main(int argc, char **argv)
     qputenv("KOBALT_WEBKIT_LAUNCHER", QFile::encodeName(app.applicationFilePath()));
     qunsetenv("KOBALT_WEBKIT_MODE");
     qunsetenv("KOBALT_WEBKIT_QEMU_PREFIX");
+    QTemporaryDir frameBudget;
+    const auto frameLog = frameBudget.filePath("frames.log");
+    qputenv("KOBALT_TEST_WEBKIT_FRAME_LOG", QFile::encodeName(frameLog));
     {
         WebKitDocument document({}, "/unused.epub");
         require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "proxy opening");
+        require(QFileInfo(frameLog).size() <= 3 * 6,
+                "Opening metadata scans do not allocate chapter or TOC page buffers");
         require(document.pages() == 6, "whole-book page counts");
         require(document.chapterProgress().title == "Opening",
                 "Chapter header uses the navigation title rather than an archive path");
@@ -302,6 +338,10 @@ int main(int argc, char **argv)
         require(document.goTo(sourceposition::token(anchor)), "Return after source query");
         require(document.searchPage("source", 5).hits.size() == 1,
                 "Leave the helper on a different spine before reflow");
+        require(document.goTo("#middle") && document.page() == 1,
+                "Relative links use the displayed source after metadata/search scans");
+        require(document.searchPage("source", 5).hits.size() == 1,
+                "Inspect another spine before checking reflow restoration");
         require(sourceposition::fromToken(sourceposition::token(anchor)) == anchor,
                 "Source position token round trip");
         for (const auto *key : { "version", "href", "cfi", "offset", "before", "after" }) {
@@ -318,7 +358,10 @@ int main(int argc, char **argv)
         require(!sourceposition::valid(traversal), "Source locators cannot escape the publication");
         require(sourceposition::fromToken(sourceposition::token(anchor) + "!").isEmpty(),
                 "Source token rejects noncanonical base64");
+        const auto beforeReflow = QFileInfo(frameLog).size();
         require(document.applyAppearance({ { "font_pixels", 30 } }, { 800, 600 }), "resize/style");
+        require(QFileInfo(frameLog).size() - beforeReflow <= 5 * 6,
+                "Reflow metadata scans retain a bounded visible-frame allocation budget");
         require(document.page() == 2
                         && document.state().value("source_position").toObject() == anchor,
                 "Reflow restores the source character, not an old page number");
@@ -348,6 +391,7 @@ int main(int argc, char **argv)
                         && !error.isEmpty() && !openingResult.ready(),
                 "Unsupported saved source positions cannot be silently replaced");
     }
+    qunsetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
     qputenv("KOBALT_TEST_WEBKIT_MODE", "duplicate-spine");
     {
         WebKitDocument document({}, "/unused.epub");
@@ -378,7 +422,8 @@ int main(int argc, char **argv)
         require(document.state().value("source_position") == position && document.go(1),
                 "Rejected queries preserve the reading position and helper lifecycle");
     }
-    for (const auto *mode : { "bad-size", "bad-path", "bad-id", "bad-ready", "bad-locator" }) {
+    for (const auto *mode : { "bad-size", "bad-path", "bad-id", "bad-ready", "bad-locator",
+                              "bad-layout-pages", "bad-layout-locator", "bad-layout-viewport" }) {
         qputenv("KOBALT_TEST_WEBKIT_MODE", mode);
         WebKitDocument document({}, "/unused.epub");
         require(!document.openResources({}, {}, { 600, 800 }, {}, nullptr), "reject invalid frame");
