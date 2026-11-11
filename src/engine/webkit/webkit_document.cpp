@@ -91,7 +91,10 @@ bool WebKitDocument::start()
         return true;
     if (current_ && !current_())
         return fail("WebKit opening cancelled");
+    if (auto *previous = rendererOwner_->document)
+        previous->close();
     process_ = std::make_unique<QProcess>();
+    rendererOwner_->document = this;
     // Never inherit Nickel's library injection into the supervisor. The
     // supervisor constructs the worker's private environment itself.
     auto environment = QProcessEnvironment::systemEnvironment();
@@ -130,8 +133,13 @@ bool WebKitDocument::start()
 
 void WebKitDocument::close()
 {
-    if (!process_)
+    if (!process_) {
+        // A book's sleep or close also stops the helper while its draft
+        // owns it. Disposing of an unused draft leaves the book warm.
+        if (!appearancePreview_ && rendererOwner_->document && rendererOwner_->document != this)
+            rendererOwner_->document->close();
         return;
+    }
     mainthread::blocking("stop WebKit helper");
     if (process_->state() != QProcess::NotRunning) {
         // SIGTERM reaches the supervisor; it reaps the complete WebKit tree.
@@ -142,6 +150,7 @@ void WebKitDocument::close()
         }
     }
     process_.reset();
+    rendererOwner_->document = nullptr;
     opened_ = false;
     input_.clear();
 }
@@ -329,6 +338,8 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
                                    std::function<void()>)
 {
     close();
+    rendererOwner_ = std::make_shared<RendererOwner>();
+    appearancePreview_ = false;
     frame_ = {};
     image_ = {};
     offsets_.clear();
@@ -384,10 +395,69 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     return opened;
 }
 
+bool WebKitDocument::openPreview(Document &source, QSize size, QString *error)
+{
+    auto *book = dynamic_cast<WebKitDocument *>(&source);
+    if (!book || book == this || book->appearancePreview_ || book->image_.isNull()) {
+        if (error)
+            *error = QStringLiteral("No WebKit page to preview");
+        return false;
+    }
+    close();
+    appearancePreview_ = true;
+    rendererOwner_ = book->rendererOwner_;
+    path_ = book->path_;
+    fingerprint_ = book->fingerprint_;
+    size_ = book->size_;
+    appearance_ = book->appearance_;
+    frame_ = book->frame_;
+    image_ = book->image_;
+    position_ = book->position_;
+    offsets_ = book->offsets_;
+    linear_ = book->linear_;
+    chapters_.clear();
+    chapterGraphOrder_.clear();
+    counts_ = {};
+    chapterStartsAtPage_.clear();
+    summaries_.clear();
+    sourcePoints_.clear();
+    geometryPage_ = -1;
+    queriesBlocked_ = false;
+    error_.clear();
+    const bool opened = size == size_ || applyAppearance(appearance_, size);
+    if (error)
+        *error = opened ? QString() : error_;
+    return opened;
+}
+
+bool WebKitDocument::takeWarmRenderer()
+{
+    auto *previous = rendererOwner_->document;
+    if (!previous || previous == this || !previous->opened_ || !previous->process_
+        || previous->process_->state() != QProcess::Running || previous->size_ != size_
+        || previous->position_ != position_
+        || !appearance::same(previous->appearance_, appearance_))
+        return false;
+    process_ = std::move(previous->process_);
+    input_ = std::move(previous->input_);
+    ready_ = std::move(previous->ready_);
+    processError_ = std::move(previous->processError_);
+    runtime_ = std::move(previous->runtime_);
+    readySeen_ = previous->readySeen_;
+    request_ = previous->request_;
+    helperMoved_ = previous->helperMoved_;
+    previous->opened_ = false;
+    rendererOwner_->document = this;
+    opened_ = true;
+    return true;
+}
+
 bool WebKitDocument::ensureOpen()
 {
     if (opened_)
         return process_ && process_->state() != QProcess::NotRunning ? true : processExited();
+    if (takeWarmRenderer())
+        return true;
     const auto restore = position_;
     const auto previousFrame = frame_;
     const auto previousImage = image_;
@@ -681,6 +751,8 @@ bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
     if (helperMoved_ && !locate(position_))
         return false;
     const auto restore = position_;
+    const int previewSpine = spine();
+    const int previousPages = chapterPages();
     const bool resized = size.isValid() && size != size_;
     if (resized) {
         summaries_.clear();
@@ -706,7 +778,18 @@ bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
     sourcePoints_.clear();
     geometryPage_ = -1;
     appearance_ = settings;
-    return style() && scanBook(false) && locate(restore);
+    if (!style())
+        return false;
+    if (!appearancePreview_)
+        return scanBook(false) && locate(restore);
+    if (!locate(restore) || spine() != previewSpine)
+        return false;
+    // The draft only paginates the displayed spine. Keep its page indices
+    // usable for source geometry; the book scans all spines on apply.
+    const int changed = chapterPages() - previousPages;
+    for (int index = previewSpine + 1; index < offsets_.size(); ++index)
+        offsets_[index] += changed;
+    return true;
 }
 
 int WebKitDocument::spine() const
@@ -957,7 +1040,7 @@ QVector<ChapterLink> WebKitDocument::chapterGraph() const
 QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request,
                                   const QString &fragment)
 {
-    if (queriesBlocked_)
+    if (queriesBlocked_ || (appearancePreview_ && !process_))
         return {};
     const auto previousError = error_;
     QJsonObject result;
@@ -1593,6 +1676,12 @@ QJsonObject WebKitDocument::summary(int selected)
 {
     if (selected < 0 || selected >= pages())
         return {};
+    // A draft only needs a text sample for the resize placeholder. A
+    // paint-triggered summary must not reclaim the helper after apply.
+    if (appearancePreview_)
+        return selected == page()
+                ? qt::object({ { "excerpt", frame_.value("layout").toObject().value("excerpt") } })
+                : QJsonObject();
     if (summaries_.contains(selected))
         return summaries_.value(selected);
     const int index =

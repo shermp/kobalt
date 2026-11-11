@@ -78,7 +78,8 @@ def prepare(root, device, package, preview_menu=False):
 
 
 def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False,
-          annotations_only=False, recovery_only=False, previews_only=False, stats_only=False):
+          annotations_only=False, recovery_only=False, previews_only=False, stats_only=False,
+          appearance_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -172,17 +173,18 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'open', 'backend': backend, 'state': value})
         return value
 
-    def contents(backend):
+    def contents(backend, chapter=0):
         paper = device.wait_widget(name='rrPage')
         call('tap', x=paper['x'] + paper['width'] // 2,
              y=paper['y'] + paper['height'] // 2)
         device.wait_widget(name='rrNavChapters')
         capture(backend + '-chapters-menu')
         device.tap_widget(name='rrNavChapters')
-        device.wait_widget(name='rrChapter0')
+        target = 'rrChapter' + str(chapter)
+        device.wait_widget(name=target)
         capture(backend + '-contents')
         before = cursor()
-        device.tap_widget(name='rrChapter0')
+        device.tap_widget(name=target)
         arrived = event('frame-ready', before)
         device.wait_widget(name='rrPage')
         return arrived
@@ -588,12 +590,71 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         assert turn()['page'] == title_page + 1
         assert turn(-1)['page'] == title_page
 
+    def appearance(backend):
+        contents(backend, chapter=1)
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2, y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrNavText')
+        capture(backend + '-appearance-entry')
+        device.tap_widget(name='rrNavText')
+        device.wait_widget(name='rrLarger')
+        capture(backend + '-text')
+
+        def edit(button, value):
+            initial = device.wait_widget(name=value)['text']
+            before = cursor()
+            device.tap_widget(name=button)
+            rendered = event('render-end', before)
+            assert not rendered['failed'], rendered
+            event('frame-ready', before)
+            changed = device.wait_widget(name=value)['text']
+            assert changed != initial, (initial, changed)
+            return {'before': initial, 'after': changed, 'render_ms': rendered['elapsed_ms']}
+
+        text_size = edit('rrLarger', 'rrTextSizeValue')
+        capture(backend + '-text-draft')
+        device.tap_widget(name='rrNavLayout')
+        device.wait_widget(name='rrWider')
+        margin = edit('rrWider', 'rrMarginsValue')
+        capture(backend + '-layout-draft')
+        panel = device.wait_widget(name='rrMenu')
+        before = cursor()
+        call('tap', x=paper['x'] + paper['width'] // 2,
+             y=(paper['y'] + panel['y']) // 2)
+        rendered = event('render-end', before)
+        assert not rendered['failed'], rendered
+        event('frame-ready', before)
+        device.wait_until(lambda: not any(w['name'] == 'rrMenu' for w in device.ui()['widgets']),
+                          description='applied appearance and closed panel')
+        capture(backend + '-appearance-applied')
+        transcript.append({'action': 'appearance', 'backend': backend,
+                           'text_size': text_size, 'side_margin': margin,
+                           'apply_ms': rendered['elapsed_ms']})
+        close_book()
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if appearance_only:
+            appearance('webkit')
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                open_book('crengine')
+                appearance('crengine')
+            finally:
+                hidden.rename(launcher)
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'appearance_previews': True,
+                      'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_APPEARANCE_VERIFIED', flush=True)
+            return
         if stats_only:
             stats('webkit', close=False)
             learn_pace()

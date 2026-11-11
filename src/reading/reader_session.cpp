@@ -909,6 +909,20 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
     pendingTurn = 0;
     preview_ = true;
     desiredSize = size;
+    ReaderFrame warmFrame;
+    if (source.experimentalBackend()) {
+        engine_ = workerDocument(new WebKitDocument(fonts_, {}));
+        if (source.image().size() == size) {
+            // The displayed pixels and resolved markup already match this
+            // viewport. Warm-up can leave the book's renderer undisturbed.
+            warmFrame = source.frame;
+            warmFrame.turnDirection = 0;
+            warmFrame.damage = {};
+            warmFrame.damageFrom = 0;
+        }
+    } else if (QString::fromLatin1(engine_->backend()) == "webkit") {
+        engine_ = workerDocument(new EngineDocument(fonts_));
+    }
     QPointer<ReaderSession> guard(this);
     const auto positions = positions_;
     const auto markup = markupRequest_;
@@ -918,7 +932,7 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
     kobalt::qt::invoke(
             engineWorker(),
             [guard, engine, book, size, finished, lease, job, positions, latest, markup,
-             markupGeneration] {
+             markupGeneration, warmFrame = std::move(warmFrame)]() mutable {
                 EngineJob activity;
                 if (latest->load() != job) {
                     return;
@@ -928,13 +942,16 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                 diagnostic("preview-start");
                 QString error;
                 ReaderFrame result;
+                engine->setCurrent([lease] { return lease && !lease->revoked(); });
                 if (!lease || lease->revoked())
                     result.error = strings::get("error.opening_interrupted");
                 else if (!engine->openPreview(*book, size, &error))
                     result.error = error;
                 else if (latest->load() != job) {
                     return;
-                } else
+                } else if (!warmFrame.image.isNull())
+                    result = std::move(warmFrame);
+                else
                     result = capture(*engine, positions, false, markup, markupGeneration);
                 diagnostic("preview-end",
                            { { "elapsed_ms", double(timer.elapsed()) },

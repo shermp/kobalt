@@ -26,6 +26,7 @@ public:
     bool openResources(std::shared_ptr<ResourceCache>, const QMap<QString, qint64> &, QSize,
                        const QJsonObject &, QString *, OpeningProgress = {},
                        OpeningResult * = nullptr, std::function<void()> = {}) override;
+    bool openPreview(Document &source, QSize size, QString *error) override;
     bool applyAppearance(const QJsonObject &, QSize = {}, OpeningProgress = {}) override;
     bool go(int) override;
     bool goTo(const QString &) override;
@@ -89,6 +90,16 @@ private:
     EngineFontInputs fonts_;
     QString path_, error_, runtime_;
     std::unique_ptr<QProcess> process_;
+
+    // The book and its draft share one live helper. Ownership is only
+    // accessed on the document worker.
+    struct RendererOwner
+    {
+        WebKitDocument *document = nullptr;
+    };
+
+    std::shared_ptr<RendererOwner> rendererOwner_ = std::make_shared<RendererOwner>();
+    bool appearancePreview_ = false;
     QByteArray input_, ready_, processError_;
     QByteArray fingerprint_;
     bool readySeen_ = false;
@@ -130,6 +141,7 @@ private:
     bool queriesBlocked_ = false;
     std::function<bool()> current_;
     bool start();
+    bool takeWarmRenderer();
     bool ensureOpen();
     bool runOperation(const std::function<bool()> &, bool changesLayout = false);
     bool applyLayout(const QJsonObject &, QSize);

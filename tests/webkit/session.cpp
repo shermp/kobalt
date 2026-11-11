@@ -362,6 +362,37 @@ int main(int argc, char **argv)
                 "Cold store restores source highlight text, anchors and punctuation provenance");
         require(session->goTo(sourceposition::token(anchor)), "Return after source highlight");
         completion.exec();
+        {
+            const auto size = session->image().size();
+            const auto original = digest(session->image());
+            const int originalMargin = session->margin();
+            const int changedMargin = originalMargin + 20;
+            ReaderSession draft(EngineFontInputs{}, "serif");
+            draft.openPreview(*session, size, [&](QString error) {
+                require(error.isEmpty(), "Open the WebKit appearance preview");
+                completion.quit();
+            });
+            completion.exec();
+            require(draft.experimentalBackend() && digest(draft.image()) == original
+                            && draft.navigationPosition() == session->navigationPosition(),
+                    "Preview initially shares the displayed WebKit frame");
+            draft.updated = [&] { completion.quit(); };
+            require(draft.style(draft.fontSize(), draft.spacing(), draft.fontFace(), changedMargin),
+                    "Queue a real WebKit margin preview");
+            completion.exec();
+            require(draft.error().isEmpty() && draft.margin() == changedMargin
+                            && draft.navigationPosition() == sourceposition::token(anchor)
+                            && digest(draft.image()) != original
+                            && session->margin() == originalMargin
+                            && digest(session->image()) == original,
+                    "Draft reflow changes the preview and preserves the original source frame");
+            session->apply(draft.requestedState(), size);
+            completion.exec();
+            require(session->error().isEmpty() && session->margin() == changedMargin
+                            && session->navigationPosition() == draft.navigationPosition()
+                            && digest(session->image()) == digest(draft.image()),
+                    "Applying the draft uses the same layout at the same source point");
+        }
         bookmarks.reset();
         BookmarkStore coldMarks(annotationPaths.annotations(), request.identity, fingerprint,
                                 "Book", annotationPaths.database(),
@@ -527,6 +558,7 @@ int main(int argc, char **argv)
                                                 { "session_clock", true },
                                                 { "source_history", true },
                                                 { "source_pace_restored", true },
+                                                { "appearance_preview", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },

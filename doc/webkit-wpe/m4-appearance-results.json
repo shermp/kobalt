@@ -1,0 +1,58 @@
+{
+  "milestone": "M4 appearance previews",
+  "base": "4125f53",
+  "branch": "feature/webkit-wpe-m4",
+  "source_tree": "e073a356529f4e6d063c935994a20c45934a2a30a1fc7b455c75ef6cd9225847",
+  "checks": {
+    "native_layout": {
+      "status": "passed. Reused after preview-only metadata queries were confined to the live draft",
+      "log": "build/m4-appearance-native-layout.log"
+    },
+    "native_appearance": {
+      "status": "passed",
+      "log": "build/m4-appearance-native-focused.log"
+    },
+    "native_webkit": {
+      "status": "passed on final application source",
+      "log": "build/m4-appearance-native-webkit.log"
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both pinned Kobo SDK checks passed",
+      "log": "build/m4-appearance-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-appearance-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-appearance-qt6-check.log",
+      "package_log": "build/m4-appearance-package.log",
+      "diagnostic_package_sha256": "109f2fb1538202c750eabd41c25ec52d1c5026b402e7cbcbeb6f5d9b9cb68744"
+    },
+    "arm_session": {
+      "status": "passed",
+      "log": "build/m4-appearance-arm-session.log",
+      "result": "build/webkit/firmware-5a854a0519/session-results/session.json",
+      "scope": ["draft and main frame isolation", "applied bitmap", "source anchor"]
+    },
+    "installed": {
+      "status": "passed",
+      "device": "Libra Colour",
+      "firmware": "6.0.274403",
+      "log": "build/m4-appearance-installed.log",
+      "result": "build/webkit/firmware-9be5351b27/installed-results/installed.json",
+      "main_thread_blocked": [],
+      "webkit_text_size_preview_ms": 518,
+      "webkit_side_margin_preview_ms": 304,
+      "webkit_apply_ms": 8714,
+      "peak_mib": 682,
+      "memory_limit_mib": 768
+    },
+    "screen_review": {
+      "status": "commit authorized in chat with one screen unseen and no requested changes",
+      "data": "build/review/webkit-m4-appearance",
+      "manifest": "build/screenshots/webkit-m4-appearance/manifest.json"
+    }
+  }
+}

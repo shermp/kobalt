@@ -732,6 +732,51 @@ int main(int argc, char **argv)
         return file.readAll().toInt();
     };
     {
+        qputenv("KOBALT_TEST_WEBKIT_QUERY_LOG", QFile::encodeName(queryLog));
+        WebKitDocument book({}, "/unused.epub");
+        const QSize size(600, 800);
+        require(book.openResources({}, {}, size, {}, nullptr), "Appearance preview fixture");
+        const auto anchor = book.state().value("source_position");
+        const auto before = book.image(book.page());
+        const int pid = helperPid();
+        QString error;
+        {
+            WebKitDocument warm({}, {});
+            require(warm.openPreview(book, size, &error) && helperPid() == pid
+                            && warm.image(warm.page()).cacheKey() == before.cacheKey(),
+                    "A warm preview shares the current pixels without starting a helper");
+        }
+        require(kill(pid, 0) == 0, "Closing an unused draft leaves the book helper running");
+        WebKitDocument draft({}, {});
+        const auto queryBytes = QFileInfo(queryLog).size();
+        const QJsonObject settings{ { "font_pixels", 32 } };
+        require(draft.openPreview(book, size, &error) && draft.applyAppearance(settings, size)
+                        && helperPid() == pid && QFileInfo(queryLog).size() == queryBytes
+                        && draft.state().value("font_pixels").toInt() == 32
+                        && draft.state().value("source_position") == anchor,
+                "Draft edits reuse the live helper and reflow only the displayed spine");
+        require(book.image(book.page()).cacheKey() == before.cacheKey()
+                        && book.state().value("font_pixels") != 32
+                        && book.state().value("source_position") == anchor,
+                "Preview leaves the displayed reading frame and settings intact");
+        require(book.applyAppearance(settings, size) && book.state().value("font_pixels") == 32
+                        && book.state().value("source_position") == anchor
+                        && QFileInfo(queryLog).size() > queryBytes,
+                "Applying the draft updates whole-book pagination at the original source point");
+        require(helperPid() != pid && kill(pid, 0) == -1 && errno == ESRCH,
+                "The draft helper is reaped before applying the book layout");
+        WebKitDocument sleepingDraft({}, {});
+        require(sleepingDraft.openPreview(book, size, &error)
+                        && sleepingDraft.applyAppearance({ { "font_pixels", 35 } }, size),
+                "A later draft can take the book helper");
+        const int sleepingPid = helperPid();
+        book.close();
+        require(kill(sleepingPid, 0) == -1 && errno == ESRCH && book.go(1)
+                        && book.state().value("font_pixels") == 32,
+                "Book sleep reaps a live draft and preserves the applied layout");
+        qunsetenv("KOBALT_TEST_WEBKIT_QUERY_LOG");
+    }
+    {
         WebKitDocument document({}, "/unused.epub");
         require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Recovery fixture");
         int retries = 0;
