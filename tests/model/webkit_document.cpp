@@ -891,6 +891,7 @@ int main(int argc, char **argv)
                 book.saveReadingActivity();
                 QJsonObject snapshot;
                 require(book.checkpoint(&snapshot, true), "Background source checkpoint queued");
+                book.stopReading(true);
                 bool closed = false;
                 book.checkpointForClose([&](bool ok) {
                     require(ok, "Source checkpoint saved");

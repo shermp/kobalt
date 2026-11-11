@@ -4,6 +4,7 @@
 #include "appearance_settings.h"
 #include "session_timeout.h"
 #include "reader_session.h"
+#include "storage/bookmark_store.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/annotation_database.h"
@@ -104,10 +105,15 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     activitySaved.start();
     activityFailed.invalidate();
     appearanceFailed.invalidate();
-    if (annotationDatabaseEnabled() && savesReadingState())
-        history = std::make_unique<ReadingHistory>(paths_.directory, identity_, this->digest,
-                                                   std::move(sourceKey), session_->title(),
-                                                   session_->author(), this->utc);
+    if (annotationDatabaseEnabled()) {
+        const auto format = savesReadingState() ? AnnotationPositionFormat::XPointer
+                                                : AnnotationPositionFormat::SourceV1;
+        if (savesReadingState()
+            || !BookmarkStore::bookKey(identity_, this->digest, format).isEmpty())
+            history = std::make_unique<ReadingHistory>(paths_.directory, identity_, this->digest,
+                                                       std::move(sourceKey), session_->title(),
+                                                       session_->author(), this->utc, format);
+    }
     if (!this->bridge && savesReadingState()) {
         speed = std::make_unique<ReadingSpeed>();
         speed->restore(storage::readRecord(paths_.directory, "reading-speed", paths_.readingSpeed())
@@ -235,16 +241,14 @@ void ReadingBook::observeReading(bool learnPace)
             const auto now = utc();
             if (sleepingTimeout > 0 && now >= sleepingAt && now - sleepingAt >= sleepingTimeout) {
                 if (history)
-                    history->stop(completedReadingMilliseconds,
-                                  session_->state().value("position").toString());
+                    history->stop(completedReadingMilliseconds, session_->navigationPosition());
                 sessionBaseline = completedReadingMilliseconds;
             }
         }
         sleepingReading = false;
         activeReading.start();
         if (history) {
-            history->start(completedReadingMilliseconds,
-                           session_->state().value("position").toString());
+            history->start(completedReadingMilliseconds, session_->navigationPosition());
         }
     }
     if (speed) {
@@ -310,7 +314,7 @@ void ReadingBook::stopReading(bool background, bool nativeAllowed)
     }
     // Freeze the duration before history work so both use the same boundary.
     if (history) {
-        const auto position = session_->state().value("position").toString();
+        const auto position = session_->navigationPosition();
         if (sleepingReading)
             history->pause(completedReadingMilliseconds, position);
         else
@@ -334,7 +338,7 @@ bool ReadingBook::checkpointReadingHistory(bool background)
     if (!history)
         return true;
     if (activeReading.isValid())
-        history->update(readingMilliseconds(), session_->state().value("position").toString());
+        history->update(readingMilliseconds(), session_->navigationPosition());
     return history->save(background);
 }
 
@@ -360,28 +364,28 @@ bool ReadingBook::activitySaveDue(int intervalMilliseconds) const
 void ReadingBook::saveReadingActivity(bool durable)
 {
     if (!savesReadingState()) {
-        QJsonObject snapshot;
-        if (sourceposition::valid(session_->state().value("source_position").toObject())
-            && checkpoint(&snapshot, true))
-            activitySaved.restart();
-        return;
+        if (!sourceposition::valid(session_->state().value("source_position").toObject()))
+            return;
+        if (!history) {
+            QJsonObject snapshot;
+            if (checkpoint(&snapshot, true))
+                activitySaved.restart();
+            return;
+        }
     }
     if (activityPending || checkpointAfterActivity || !closesAfterActivity.isEmpty()
         || closeCheckpointPending || activitySaveCoolingDown())
         return;
-    retryAppearanceSave();
+    if (savesReadingState())
+        retryAppearanceSave();
     auto save = std::make_shared<ActivitySave>();
     save->checkpoint = persistedCheckpoint(checkpointState());
-    save->persisted = save->checkpoint;
-    for (const auto *key : appearance::layoutKeys)
-        save->persisted.remove(key);
-    for (const auto *key : appearance::marginKeys)
-        save->persisted.remove(key);
+    save->persisted = bookRecord(save->checkpoint);
     if (speed && speed->dirty())
         save->speed = speed->state();
     if (history) {
         if (activeReading.isValid())
-            history->update(readingMilliseconds(), session_->state().value("position").toString());
+            history->update(readingMilliseconds(), session_->navigationPosition());
         save->history = history->snapshot();
     }
     save->durable = durable;
@@ -930,6 +934,17 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
     return checkpoint;
 }
 
+QJsonObject ReadingBook::bookRecord(QJsonObject checkpoint) const
+{
+    if (savesReadingState()) {
+        for (const auto *key : appearance::layoutKeys)
+            checkpoint.remove(key);
+        for (const auto *key : appearance::marginKeys)
+            checkpoint.remove(key);
+    }
+    return checkpoint;
+}
+
 bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 {
     if (!savesReadingState()
@@ -965,13 +980,7 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
         return false;
     if (background && (checkpoint == savedCheckpoint || checkpoint == pendingCheckpoint))
         return true;
-    auto persisted = checkpoint;
-    if (!session_->experimentalBackend()) {
-        for (const auto *key : appearance::layoutKeys)
-            persisted.remove(key);
-        for (const auto *key : appearance::marginKeys)
-            persisted.remove(key);
-    }
+    const auto persisted = bookRecord(checkpoint);
     // A background checkpoint runs while a tap can turn the page, so all of
     // its storage work runs on the writer thread: the first write of an
     // opening can import legacy files. Appearance changes save separately.
@@ -1010,7 +1019,7 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
     // writes the file on the main thread.
     bool layoutSaved = true;
     if (history && activeReading.isValid())
-        history->update(readingMilliseconds(), state.value("position").toString());
+        history->update(readingMilliseconds(), session_->navigationPosition());
     const auto historySnapshot = history ? history->snapshot() : ReadingHistory::Snapshot();
     const auto speedState = speed && speed->dirty() ? speed->state() : QJsonObject();
     const bool saved = writer->writeNow(
@@ -1078,18 +1087,12 @@ void ReadingBook::checkpointForClose(std::function<void(bool)> done)
     closeCheckpointPending = true;
     const auto state = checkpointState();
     const auto checkpoint = persistedCheckpoint(state);
-    auto persisted = checkpoint;
-    if (!session_->experimentalBackend()) {
-        for (const auto *key : appearance::layoutKeys)
-            persisted.remove(key);
-        for (const auto *key : appearance::marginKeys)
-            persisted.remove(key);
-    }
+    const auto persisted = bookRecord(checkpoint);
     const bool rememberAppearance = savesReadingState() && !session_->temporaryTypography();
     const bool writeSpeed = speed && speed->dirty();
     const auto speedState = writeSpeed ? speed->state() : QJsonObject();
     if (history && activeReading.isValid())
-        history->update(readingMilliseconds(), state.value("position").toString());
+        history->update(readingMilliseconds(), session_->navigationPosition());
     const auto historySnapshot = history ? history->snapshot() : ReadingHistory::Snapshot();
     pendingCheckpoint = {};
     if (!writer)

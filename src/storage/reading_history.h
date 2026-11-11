@@ -4,6 +4,7 @@
 #include <QVector>
 #include <functional>
 #include <memory>
+#include "annotation_database.h"
 #include "record_writer.h"
 
 class QSqlDatabase;
@@ -16,7 +17,8 @@ class ReadingHistory
 public:
     using UtcClock = std::function<qint64()>;
     ReadingHistory(QString directory, QString identity, QByteArray fingerprint, QString sourceKey,
-                   QString title, QString author, UtcClock utc = {});
+                   QString title, QString author, UtcClock utc = {},
+                   AnnotationPositionFormat = AnnotationPositionFormat::XPointer);
     ~ReadingHistory();
     void start(qint64 activeMilliseconds, const QString &position);
     void update(qint64 activeMilliseconds, const QString &position);
@@ -58,6 +60,7 @@ private:
 
     QString directory, identity, book, sourceKey, title, author;
     QByteArray fingerprint;
+    AnnotationPositionFormat format;
     UtcClock utc;
     QVector<Interval> pending;
     qint64 baseline = 0;

@@ -6,6 +6,7 @@
 #include "storage/reader_storage.h"
 #include "storage/bookmark_store.h"
 #include "storage/highlight_store.h"
+#include "reading/source_position.h"
 #include "library/library_index.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -685,6 +686,44 @@ void intervals()
     require(sql(root.path(), "SELECT COUNT(DISTINCT book) FROM reading_sessions").toInt() == 2,
             "Different editions were merged");
 }
+
+void sourceIntervals()
+{
+    QTemporaryDir root;
+    require(root.isValid(), "Create source history profile");
+    const QString identity = "file:///history.epub";
+    const QByteArray fingerprint(64, 'a');
+    const auto format = AnnotationPositionFormat::SourceV1;
+    const QJsonObject locator{ { "version", 1 },
+                               { "href", "chapter.xhtml" },
+                               { "cfi", "epubcfi(/6/2!/4/2/1:0)" },
+                               { "offset", 0 },
+                               { "before", "" },
+                               { "after", "Words" } };
+    auto longLocator = locator;
+    longLocator["href"] = QString(1000, 'a') + ".xhtml";
+    longLocator["cfi"] = "epubcfi(/6/2!" + QString("/123456789").repeated(200) + "/1:0)";
+    const auto token = sourceposition::token(locator);
+    const auto longToken = sourceposition::token(longLocator);
+    require(!token.isEmpty() && longToken.size() > 4096, "Source position fixtures");
+    ReadingHistory source(root.path(), identity, fingerprint, {}, "WebKit", {}, {}, format);
+    ReadingHistory legacy(root.path(), identity, fingerprint, {}, "CREngine", {});
+    legacy.start(0, "/body/p");
+    legacy.stop(100, "/body/p[2]");
+    source.start(0, token);
+    source.stop(500, longToken);
+    require(legacy.save() && source.save(), "Save both formats for one publication");
+    const auto where = " FROM reading_sessions WHERE book='"
+            + BookmarkStore::bookKey(identity, fingerprint, format) + "'";
+    require(sql(root.path(), "SELECT start_position" + where).toString() == token
+                    && sql(root.path(), "SELECT end_position" + where).toString().isEmpty()
+                    && sql(root.path(), "SELECT active_ms" + where).toLongLong() == 500
+                    && sql(root.path(),
+                           "SELECT end_position FROM reading_sessions WHERE title='CREngine'")
+                                    .toString()
+                            == "/body/p[2]",
+            "Source history preserves duration, avoids truncated anchors and keeps legacy history");
+}
 } // namespace
 
 // Checks reading history: the version-2 upgrade, profile ownership and crash recovery, failed commits and retries, clock changes and editions.
@@ -745,6 +784,7 @@ int main(int argc, char **argv)
     rejectsVersionTwoWithoutBookIdentityUniqueness();
     migrationRejectsOrphanedAnnotations();
     intervals();
+    sourceIntervals();
     sleepingObservations();
     coalescedFailureRetainsEveryInterval();
     destructionDrainsLatestSnapshot();

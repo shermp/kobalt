@@ -1,0 +1,45 @@
+{
+  "milestone": "M4 reading history",
+  "base": "b56fbfc",
+  "branch": "feature/webkit-wpe-m4",
+  "source_tree": "0939b8f51ad43c536816cb3638a3a9c6eb73cf095b6d3b221a2d8fd99f7f5e54",
+  "checks": {
+    "native": {
+      "status": "passed",
+      "log": "build/m4-history-native.log",
+      "scope": ["reading history", "reading book", "WebKit proxy", "lifecycle", "main thread"]
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both pinned Kobo SDK checks passed",
+      "log": "build/m4-history-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-history-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-history-qt6-check.log",
+      "package_log": "build/m4-history-package.log",
+      "diagnostic_package_sha256": "03a39a1287d0dbbc03cf4ae182cadcd05fbb45d7cd1af60e132aa2686415c699"
+    },
+    "arm_session": {
+      "status": "passed",
+      "log": "build/m4-history-arm-session.log",
+      "result": "build/webkit/firmware-5d7541b870/session-results/session.json",
+      "scope": ["short sleep", "source anchors", "completed interval", "saved-data preservation"]
+    },
+    "installed": {
+      "status": "passed",
+      "device": "Libra Colour",
+      "firmware": "6.0.274403",
+      "log": "build/m4-history-installed.log",
+      "result": "build/webkit/firmware-5da8e03059/installed-results/installed.json",
+      "scope": ["sleep and wake", "close", "source position restore", "CREngine fallback"],
+      "storage_errors": [],
+      "main_thread_blocked": [],
+      "peak_mib": 681,
+      "memory_limit_mib": 768
+    }
+  }
+}

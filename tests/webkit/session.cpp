@@ -5,6 +5,7 @@
 #include "reading/source_position.h"
 #include "reading/bookmark_session.h"
 #include "reading/highlight_session.h"
+#include "storage/profile_database.h"
 #include "support/main_thread.h"
 #include <QGuiApplication>
 #include <QCryptographicHash>
@@ -12,6 +13,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QJsonDocument>
+#include <QSqlQuery>
 #include <QTimer>
 #include <QTemporaryDir>
 
@@ -378,15 +380,41 @@ int main(int argc, char **argv)
                                     { "future_field", "preserved" } };
         require(storage::writeBookState(paths, identity, original),
                 "Prepare existing saved record");
+        require(session->goTo(contents.first().position), "Open the start of the reading interval");
+        completion.exec();
+        const auto intervalStart = session->navigationPosition();
+        const auto intervalEnd = sourceposition::token(anchor);
+        require(!intervalStart.isEmpty() && intervalStart != intervalEnd,
+                "History fixture has two distinct source anchors");
         session->updated = {};
+        qint64 activeMilliseconds = 0;
         {
             ReadingBook book(std::move(session), paths.bookState(identity), paths, identity,
                              fingerprint, nullptr, {}, {});
-            mainthread::Interaction reading([] { return true; });
+            bool awake = true;
+            mainthread::Interaction reading([&] { return awake; });
             book.observeReading();
-            require(book.readingActive() && !book.tracksReadingHistory(),
-                    "WebKit starts the active session clock without recording history");
+            require(book.readingActive() && book.tracksReadingHistory(),
+                    "WebKit starts an active source reading interval");
+            book.session()->updated = [&] { completion.quit(); };
+            require(book.session()->goTo(intervalEnd), "Navigate during the recorded interval");
+            completion.exec();
+            book.session()->updated = {};
+            require(book.session()->navigationPosition() == intervalEnd,
+                    "The final anchor is displayed");
+            awake = false;
+            book.sleepReading({});
+            const auto pausedAt = book.readingMilliseconds();
+            ReaderSession::drain([&] { completion.quit(); });
+            completion.exec();
+            require(!book.readingActive() && book.readingMilliseconds() == pausedAt,
+                    "Sleep freezes the WebKit history interval");
+            awake = true;
+            book.observeReading();
+            require(book.readingActive(), "A short sleep resumes the WebKit history interval");
+            book.saveReadingActivity();
             book.stopReading(true);
+            activeMilliseconds = book.readingMilliseconds();
             require(!book.readingActive(), "Hiding WebKit stops the session clock");
             book.checkpointForClose([&](bool saved) {
                 require(saved, "Background source checkpoint saved");
@@ -394,6 +422,23 @@ int main(int argc, char **argv)
             });
             completion.exec();
         }
+        const auto historyBook =
+                BookmarkStore::bookKey(identity, fingerprint, AnnotationPositionFormat::SourceV1);
+        require(activeMilliseconds > 0
+                        && storage::profileTransaction(
+                                profile.path(),
+                                [&](QSqlDatabase &db) {
+                                    QSqlQuery row(db);
+                                    return row.exec(
+                                                   "SELECT book, start_position, end_position, active_ms, status FROM reading_sessions")
+                                            && row.next() && row.value(0).toString() == historyBook
+                                            && row.value(1).toString() == intervalStart
+                                            && row.value(2).toString() == intervalEnd
+                                            && row.value(3).toLongLong() == activeMilliseconds
+                                            && row.value(4).toString() == "completed"
+                                            && !row.next();
+                                }),
+                "Close persists a completed interval with source anchors and active duration");
         auto saved = storage::readBookState(paths, identity).object;
         auto preserved = saved;
         preserved.remove("backend_positions");
@@ -425,6 +470,7 @@ int main(int argc, char **argv)
                                                 { "total_words", double(totalWords) },
                                                 { "chapter_words", double(chapterWords) },
                                                 { "session_clock", true },
+                                                { "source_history", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },

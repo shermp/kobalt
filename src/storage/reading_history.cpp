@@ -32,6 +32,14 @@ QString bounded(QString text)
     return text;
 }
 
+QString historyPosition(const QString &position, AnnotationPositionFormat format)
+{
+    if (format == AnnotationPositionFormat::XPointer)
+        return bounded(position);
+    // Truncating a source token would leave an undecodable anchor.
+    return annotationPositionValid(position, format) ? position : QString();
+}
+
 QByteArray utf8(const QString &text)
 {
     return text.isEmpty() ? QByteArray("") : text.toUtf8();
@@ -47,14 +55,16 @@ struct ReadingHistory::Saved
 };
 
 ReadingHistory::ReadingHistory(QString directory, QString identity, QByteArray fingerprint,
-                               QString sourceKey, QString title, QString author, UtcClock utc)
+                               QString sourceKey, QString title, QString author, UtcClock utc,
+                               AnnotationPositionFormat format)
     : directory(std::move(directory)),
       identity(std::move(identity)),
-      book(BookmarkStore::bookKey(this->identity, fingerprint)),
+      book(BookmarkStore::bookKey(this->identity, fingerprint, format)),
       sourceKey(sourceKey.isEmpty() ? this->identity : std::move(sourceKey)),
       title(bounded(std::move(title))),
       author(bounded(std::move(author))),
       fingerprint(std::move(fingerprint)),
+      format(format),
       utc(utc ? std::move(utc) : UtcClock([] { return QDateTime::currentMSecsSinceEpoch(); })),
       saved(std::make_shared<Saved>())
 {
@@ -69,8 +79,8 @@ void ReadingHistory::start(qint64 activeMilliseconds, const QString &position)
         return;
     baseline = activeMilliseconds;
     const auto now = qMax<qint64>(0, utc());
-    pending.append({ QUuid::createUuid().toString(), bounded(position), bounded(position), "active",
-                     now, now, 0 });
+    const auto anchor = historyPosition(position, format);
+    pending.append({ QUuid::createUuid().toString(), anchor, anchor, "active", now, now, 0 });
     dirty = true;
     ++generation;
 }
@@ -84,7 +94,7 @@ void ReadingHistory::update(qint64 activeMilliseconds, const QString &position)
             qMax(interval.milliseconds,
                  activeMilliseconds >= baseline ? activeMilliseconds - baseline : 0);
     interval.observed = qMax(interval.observed, utc());
-    interval.endPosition = bounded(position);
+    interval.endPosition = historyPosition(position, format);
     dirty = true;
     ++generation;
 }

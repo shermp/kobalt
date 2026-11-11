@@ -194,6 +194,7 @@ private:
     quint64 nativeFinishGeneration = 0;
     QVector<std::function<void(bool)>> nativeFinishCallbacks;
     QJsonObject persistedCheckpoint(const QJsonObject &state) const;
+    QJsonObject bookRecord(QJsonObject checkpoint) const;
     void finishCloseCheckpoint(const QJsonObject &checkpoint, bool saved,
                                std::function<void(bool)> done);
     bool closeCheckpointPending = false;
