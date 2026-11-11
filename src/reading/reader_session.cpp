@@ -737,6 +737,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                                            publishCover);
                         }
                         if (opened) {
+                            if (QString::fromLatin1(engine->backend()) == "webkit"
+                                && engine->state().contains("page_progression_rtl"))
+                                formattingWarning = false;
                             if (restart && QString::fromLatin1(engine->backend()) == "crengine")
                                 engine->go(0);
                             else if (!initial.isEmpty()

@@ -950,6 +950,9 @@ QJsonObject WebKitDocument::state() const
     result.remove("dom_version");
     result["backend"] = QStringLiteral("webkit");
     result["source_position"] = position_;
+    const auto publication = frame_.value("document").toObject();
+    if (publication.contains("page_progression_rtl"))
+        result["page_progression_rtl"] = publication.value("page_progression_rtl").toBool();
     return result;
 }
 
@@ -1380,12 +1383,15 @@ SelectionEndpoint WebKitDocument::queryEndpoint(const QJsonObject &value) const
     };
     const auto outward = value.value("outward").toObject();
     const double x = outward.value("x").toDouble(2), y = outward.value("y").toDouble(2);
-    // The current helper supports horizontal pages. Reject malformed normals
-    // and spans instead of manufacturing a handle from clipped rectangles.
-    if (!point("first", &edge.first) || !point("last", &edge.last) || (x != -1 && x != 1) || y != 0
-        || edge.first.x() != edge.last.x() || edge.first.y() >= edge.last.y())
+    if (!point("first", &edge.first) || !point("last", &edge.last))
         return {};
-    edge.outward = QPoint(int(x), 0);
+    const bool horizontal = (x == -1 || x == 1) && y == 0 && edge.first.x() == edge.last.x()
+            && edge.first.y() < edge.last.y();
+    const bool vertical = (y == -1 || y == 1) && x == 0 && edge.first.y() == edge.last.y()
+            && edge.first.x() < edge.last.x();
+    if (!horizontal && !vertical)
+        return {};
+    edge.outward = QPoint(int(x), int(y));
     edge.visible = true;
     return edge;
 }

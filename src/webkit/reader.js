@@ -8,8 +8,6 @@ if (options.restore && (!sourcePosition || typeof sourcePosition !== 'object' ||
   return { source: document.URL, error: 'invalid-source-position' };
 const body = document.body;
 if (!body) throw new Error('missing-body');
-if (getComputedStyle(body).writingMode !== 'horizontal-tb' ||
-    getComputedStyle(body).direction !== 'ltr') throw new Error('unsupported-writing-direction');
 const state = globalThis.kobaltReaderState ||= { page: 0, start: 0 };
 const margin = options.margin;
 const topMargin = options.topMargin, bottomMargin = options.bottomMargin;
@@ -27,6 +25,23 @@ for (const override of state.breakOverrides || []) {
 state.breakOverrides = [];
 state.style?.remove();
 body.style.removeProperty('transform');
+const writingMode = getComputedStyle(body).writingMode;
+const vertical = writingMode !== 'horizontal-tb';
+const reverse = getComputedStyle(body).direction === 'rtl';
+const inlineSize = vertical ? content.height : content.width;
+const blockSize = vertical ? content.width : content.height;
+const gap = vertical ? topMargin + bottomMargin : 2 * margin;
+const stride = inlineSize + gap;
+const nearEdge = vertical ? 'top' : 'left';
+const farEdge = vertical ? 'bottom' : 'right';
+const origin = vertical ? (reverse ? bottomEdge : topMargin) : (reverse ? rightEdge : margin);
+function columnOf(rect) {
+  return Math.floor(((reverse ? origin - rect[farEdge] : rect[nearEdge] - origin) + 0.5) / stride);
+}
+function elementColumn(element) {
+  const first = Array.from(element.getClientRects()).find(rect => rect.width > 0 && rect.height > 0);
+  return first ? columnOf(first) : 0;
+}
 const style = document.createElementNS('http://www.w3.org/1999/xhtml', 'style');
 state.style = style;
 style.textContent = `
@@ -38,8 +53,8 @@ body { position: relative !important; box-sizing: border-box !important;
   height: ${content.height}px !important;
   min-height: 0 !important; max-height: none !important;
   margin: ${topMargin}px ${margin}px ${bottomMargin}px !important; padding: 0 !important;
-  column-width: ${content.width}px !important;
-  column-gap: ${2 * margin}px !important; column-fill: auto !important;
+  column-width: ${inlineSize}px !important;
+  column-gap: ${gap}px !important; column-fill: auto !important;
   column-count: auto !important; overflow: visible !important;
   transform: none !important; font-size: ${options.fontSize}px !important;
   line-height: ${options.lineHeight / 100} !important;
@@ -117,13 +132,13 @@ function keepGroup(group) {
   const rects = group.map(element => Array.from(element.getClientRects()));
   if (rects.some(rects => rects.length !== 1)) return;
   const boxes = rects.map(rects => rects[0]);
-  const firstPage = Math.floor((boxes[0].left - margin + 0.5) / options.width);
-  if (boxes.every(box => Math.floor((box.left - margin + 0.5) / options.width) === firstPage)) return;
-  let extent = boxes.reduce((sum, box) => sum + box.height, 0);
+  const firstPage = columnOf(boxes[0]);
+  if (boxes.every(box => columnOf(box) === firstPage)) return;
+  let extent = boxes.reduce((sum, box) => sum + (vertical ? box.width : box.height), 0);
   for (let index = 1; index < group.length; ++index)
-    extent += Math.max(0, parseFloat(getComputedStyle(group[index - 1]).marginBottom) || 0,
-      parseFloat(getComputedStyle(group[index]).marginTop) || 0);
-  if (extent > content.height) return;
+    extent += Math.max(0, parseFloat(getComputedStyle(group[index - 1]).marginBlockEnd) || 0,
+      parseFloat(getComputedStyle(group[index]).marginBlockStart) || 0);
+  if (extent > blockSize) return;
   const first = group[0];
   if (!breakElements.has(first)) breakElements.set(first, first.getAttribute('style'));
   first.style.setProperty('break-before', 'column', 'important');
@@ -154,7 +169,15 @@ for (const parent of [body, ...elements]) {
 }
 state.breakOverrides = Array.from(breakElements, ([element, style]) => ({ element, style }));
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-const pages = Math.max(1, Math.ceil((body.scrollWidth + 2 * margin - 1) / options.width));
+let overflow = vertical ? body.scrollHeight : body.scrollWidth;
+if (vertical && reverse) {
+  // WebKit's scrollHeight omits the columns overflowing above a reverse
+  // vertical flow. Measure the extent of the chapter's source fragments.
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  overflow = Math.max(overflow, origin - range.getBoundingClientRect().top);
+}
+const pages = Math.max(1, Math.ceil((overflow + gap - 1) / stride));
 if (pages > 100000) throw new Error('chapter-too-large');
 const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION, {
   acceptNode(node) {
@@ -183,7 +206,7 @@ function rectAt(node, offset) {
   return range.getBoundingClientRect();
 }
 function pageAt(node, offset) {
-  return Math.max(0, Math.floor((rectAt(node, offset).left - margin + 0.5) / options.width));
+  return columnOf(rectAt(node, offset));
 }
 function pageForOffset(offset) {
   const entry = nodes.find(entry => entry.offset + entry.node.length > offset);
@@ -310,7 +333,7 @@ if (sourcePosition && !restored)
 let page = options.page, fragmentPoint = null;
 if (options.anchor !== null) {
   const object = options.element ? elementAt(options.element) : null;
-  page = object ? Math.floor((object.getBoundingClientRect().left - margin + 0.5) / options.width)
+  page = object ? elementColumn(object)
     : pageForOffset(options.anchor);
 }
 if (options.fragment) {
@@ -319,11 +342,11 @@ if (options.fragment) {
   if (!target) return { source: document.URL, error: 'missing-link-target' };
   const first = nodes.find(entry => target.contains(entry.node));
   fragmentPoint = first ? textPoint(first.offset) : objectPoint(target);
-  page = Math.floor((target.getBoundingClientRect().left - margin + 0.5) / options.width);
+  page = elementColumn(target);
 }
 if (restored) {
   page = restored.local === null
-    ? Math.floor((restored.node.getBoundingClientRect().left - margin + 0.5) / options.width)
+    ? elementColumn(restored.node)
     : pageAt(restored.node, restored.local);
 }
 if (page < 0) page = pages - 1;
@@ -337,7 +360,7 @@ for (const entry of nodes) {
   const rects = Array.from(range.getClientRects());
   if (!rects.some(r => r.width > 0 && r.height > 0)) continue;
   // Text can span columns. Find the first character of this page and the next
-  // using the monotone horizontal column position, including split text nodes.
+  // using the monotone column position, including split text nodes.
   function lowerBound(target) {
     let low = 0, high = node.length;
     while (low < high) {
@@ -353,7 +376,8 @@ for (const entry of nodes) {
     end = end === length ? offset + next : Math.max(end, offset + next);
   }
 }
-body.style.setProperty('transform', `translateX(${-page * options.width}px)`, 'important');
+const shift = (reverse ? page : -page) * stride;
+body.style.setProperty('transform', `translate${vertical ? 'Y' : 'X'}(${shift}px)`, 'important');
 window.scrollTo(0, 0);
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 function clipRect(rect) {
@@ -529,26 +553,51 @@ function endpoint(offset, ending) {
   const range = document.createRange();
   range.setStart(entry.node, begin - entry.offset);
   range.setEnd(entry.node, finish - entry.offset);
+  const upright = getComputedStyle(entry.node.parentElement).writingMode !== 'horizontal-tb';
+  const near = upright ? 'top' : 'left', far = upright ? 'bottom' : 'right';
+  const across = upright ? 'left' : 'top', acrossSize = upright ? 'width' : 'height';
   const boxes = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
   const opposite = range.cloneRange();
   range.collapse(!ending);
   opposite.collapse(ending);
   const carets = Array.from(range.getClientRects()), alternatives = Array.from(opposite.getClientRects());
   for (const box of boxes) {
-    const atEdge = r => r.height > 0 && Math.abs(r.top - box.top) < 1 &&
-      Math.min(Math.abs(r.left - box.left), Math.abs(r.left - box.right)) <= 1.5;
+    const atEdge = r => r[acrossSize] > 0 && Math.abs(r[across] - box[across]) < 1 &&
+      Math.min(Math.abs(r[near] - box[near]), Math.abs(r[near] - box[far])) <= 1.5;
     let caret = carets.find(atEdge), inverted = false;
     // At a bidi-run boundary WebKit can give the adjacent run's caret affinity.
     // The other boundary of this same terminal glyph identifies its direction.
     if (!caret) { caret = alternatives.find(atEdge); inverted = true; }
-    if (!caret) continue;
-    const right = (Math.abs(caret.left - box.right) < Math.abs(caret.left - box.left)) !== inverted;
-    const x = right ? box.right : box.left;
+    let trailing;
+    if (caret)
+      trailing = (Math.abs(caret[near] - box[far]) < Math.abs(caret[near] - box[near])) !== inverted;
+    else if (upright && clipRect(box)) {
+      // WebKit can return a horizontal collapsed-range box for vertical text.
+      // Query the actual caret affinity near both ends of the visible glyph.
+      const x = (box.left + box.right) / 2;
+      const at = fraction => {
+        const hit = document.caretRangeFromPoint(x, box.top + box.height * fraction);
+        return hit?.startContainer === entry.node ? entry.offset + hit.startOffset : -1;
+      };
+      const top = at(0.15), bottom = at(0.85);
+      const startAtTop = top === begin || bottom === finish;
+      const endAtTop = top === finish || bottom === begin;
+      if (startAtTop === endAtTop) continue;
+      trailing = startAtTop === ending;
+    } else continue;
+    const boundary = box[trailing ? far : near], sign = trailing ? 1 : -1;
     // Report only the actual terminal edge. A clipped range rectangle must
     // never create a handle at the viewport boundary for a remote endpoint.
-    if (x < margin || x > rightEdge || box.top < topMargin || box.bottom > bottomEdge) continue;
-    return { visible: true, first: { x, y: box.top }, last: { x, y: box.bottom },
-      outward: { x: right ? 1 : -1, y: 0 } };
+    if (upright) {
+      if (boundary < topMargin || boundary > bottomEdge || box.left < margin || box.right > rightEdge)
+        continue;
+      return { visible: true, first: { x: box.left, y: boundary }, last: { x: box.right, y: boundary },
+        outward: { x: 0, y: sign } };
+    }
+    if (boundary < margin || boundary > rightEdge || box.top < topMargin || box.bottom > bottomEdge)
+      continue;
+    return { visible: true, first: { x: boundary, y: box.top }, last: { x: boundary, y: box.bottom },
+      outward: { x: sign, y: 0 } };
   }
   return absent;
 }
@@ -614,7 +663,8 @@ function pointToken(query) {
   const onPaper = x >= margin && x < rightEdge && y >= topMargin && y < bottomEdge;
   if (!onPaper && !dragging) return null;
   const hitX = Math.max(margin, Math.min(rightEdge - 1, x));
-  const caret = document.caretRangeFromPoint(hitX, y);
+  const hitY = vertical ? Math.max(topMargin, Math.min(bottomEdge - 1, y)) : y;
+  const caret = document.caretRangeFromPoint(hitX, hitY);
   const entry = caret && nodes.find(entry => entry.node === caret.startContainer);
   if (!entry) return null;
   const boundary = dragging ? resolvePosition(query.boundary) : null;
@@ -629,8 +679,10 @@ function pointToken(query) {
   const crossedEdge = result => {
     if (!result?.rectangles.length) return false;
     const edge = endpoint(query.start ? result.start.offset : result.end.offset, !query.start);
-    return edge.visible && y >= edge.first.y && y < edge.last.y &&
-      (x - edge.first.x) * edge.outward.x >= 0;
+    if (!edge.visible) return false;
+    return edge.outward.x ? y >= edge.first.y && y < edge.last.y &&
+      (x - edge.first.x) * edge.outward.x >= 0 : x >= edge.first.x && x < edge.last.x &&
+      (y - edge.first.y) * edge.outward.y >= 0;
   };
   let hit = null, selected = null;
   for (const at of candidates) {
@@ -813,7 +865,7 @@ function pageEdges() {
       const from = textPoint(stream.starts[inner]), to = textPoint(stream.starts[outer]);
       const section = point => point.node.parentElement.closest('section,article');
       const rect = rectAt(to.node, to.local);
-      const adjacent = Math.floor((rect.left - margin + 0.5) / options.width) + page;
+      const adjacent = columnOf(rect) + page;
       return adjacent === page + step && section(from) === section(to)
         ? [locatorAt(from), locatorAt(to)] : null;
     }
@@ -906,7 +958,7 @@ globalThis.kobaltQuery = function(query) {
         if (at >= 0) located = textPoint(stream.starts[at]);
       }
       const selected = located.local === null
-        ? Math.floor((located.node.getBoundingClientRect().left - margin + 0.5) / options.width) + page
+        ? elementColumn(located.node) + page
         : pageAt(located.node, located.local) + page;
       result = { page: Math.max(0, Math.min(pages - 1, selected)), locator: locatorAt(resolved) };
     }

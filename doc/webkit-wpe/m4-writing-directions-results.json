@@ -1,0 +1,14 @@
+{
+  "milestone": "M4 writing directions",
+  "base": "5493ae9",
+  "source_tree": "cfeac306f3d124e09ee98a166c671fb9ceff701adedad24cca18cb37754c0c6a",
+  "helper_archive_sha256": "eca08286ba2e7e418d971c86155044b0ee8fcdd06cf64aa1394597598bbc8005",
+  "native_layout": "build/m4-directions-layout.log",
+  "native_proxy": "build/m4-directions-proxy.log",
+  "kobo_qt5": "build/m4-directions-qt5.log",
+  "kobo_qt6": "build/m4-directions-qt6.log",
+  "host_syntax": "clang++ unavailable",
+  "firmware": "6.0.274403",
+  "epub_log": "build/webkit/firmware-d4c3a3aa5f/epub-client.log",
+  "direction_checks": "build/webkit/firmware-d4c3a3aa5f/epub-results/writing-directions.json"
+}

@@ -213,6 +213,12 @@ int helper()
                             ? locatorAt(lengths[spine])
                             : range.toObject().value("end");
                     const auto edge = [&](int x, int normal) {
+                        if (mode == "vertical-rtl")
+                            return QJsonObject{ { "visible", true },
+                                                { "first", QJsonObject{ { "x", 20 }, { "y", x } } },
+                                                { "last", QJsonObject{ { "x", 40 }, { "y", x } } },
+                                                { "outward",
+                                                  QJsonObject{ { "x", 0 }, { "y", normal } } } };
                         return QJsonObject{ { "visible", true },
                                             { "first", QJsonObject{ { "x", x }, { "y", 20 } } },
                                             { "last", QJsonObject{ { "x", x }, { "y", 40 } } },
@@ -342,6 +348,11 @@ int helper()
             frame["width"] = 999999;
         if (mode == "bad-path")
             frame["pixels"] = "/etc/passwd";
+        if (mode == "vertical-rtl") {
+            auto document = frame.value("document").toObject();
+            document["page_progression_rtl"] = true;
+            frame["document"] = document;
+        }
         if (mode == "out-of-order-toc") {
             auto document = frame.value("document").toObject();
             const auto entries = document.value("navigation").toArray();
@@ -672,6 +683,18 @@ int main(int argc, char **argv)
         const auto geometry = document.annotationGeometry(word.start, word.end);
         require(!geometry.start.visible && geometry.end.visible && !geometry.rectangles.isEmpty(),
                 "An invalid endpoint normal cannot become a visible handle");
+    }
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "vertical-rtl");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr)
+                        && document.state().value("page_progression_rtl").toBool(),
+                "The shared reader receives the publication's RTL progression");
+        const auto word = document.wordAt({ 30, 30 });
+        const auto geometry = document.annotationGeometry(word.start, word.end);
+        require(geometry.start.visible && geometry.start.outward == QPoint(0, -1)
+                        && geometry.end.visible && geometry.end.outward == QPoint(0, 1),
+                "Vertical glyph handles retain their horizontal spans and outward directions");
     }
     for (const auto *mode : { "bad-query-source", "bad-query-token", "bad-query-rect" }) {
         qputenv("KOBALT_TEST_WEBKIT_MODE", mode);

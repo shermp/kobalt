@@ -69,6 +69,25 @@ body {font-family: Test} .box {height:80px} p {margin:0}
             book.writestr(name, data)
 
 
+def direction_fixture(path, writing_mode, direction):
+    fixture(path)
+    with zipfile.ZipFile(path) as source:
+        members = {name: source.read(name) for name in source.namelist()}
+    members['EPUB/book.opf'] = members['EPUB/book.opf'].replace(
+        b'<spine>', b'<spine page-progression-direction="rtl">')
+    phrase = 'العربية نص القراءة' if writing_mode == 'horizontal-tb' else '日本語の本を読む。'
+    paragraphs = ''.join(
+        f'<p id="passage-{i}">{phrase} {i:02} {phrase} {phrase}</p>' for i in range(96))
+    members['EPUB/one.xhtml'] = f'''<html xmlns="http://www.w3.org/1999/xhtml"
+        dir="{direction}" style="writing-mode:{writing_mode}"><head><title>Directions</title>
+        <style>p {{margin:0}} #passage-48 {{break-before:page}}</style></head>
+        <body>{paragraphs}</body></html>'''.encode()
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as book:
+        for name, data in members.items():
+            book.writestr(name, data)
+    return phrase.split()[0] if writing_mode == 'horizontal-tb' else '日本語'
+
+
 def obfuscated_fixture(path, adobe):
     fixture(path)
     with zipfile.ZipFile(path) as source:
@@ -171,6 +190,47 @@ try:
         assert envelope['page'] == (view_page if fragment is None else envelope['data']['result']['page']), envelope
         assert 'error' not in envelope['data'], envelope
         return envelope['data']['result']
+
+    direction_checks = []
+    for writing_mode, direction in (('horizontal-tb', 'rtl'), ('vertical-rl', 'ltr'),
+                                    ('vertical-lr', 'ltr'), ('vertical-rl', 'rtl')):
+        book = destination / f'{writing_mode}-{direction}.epub'
+        word = direction_fixture(book, writing_mode, direction)
+        opened = call(f'OPEN {encoded(book)} 600 800')
+        layout = opened['layout']
+        assert opened['document']['page_progression_rtl'] is True, opened['document']
+        assert layout['pages'] > 2 and layout['location']['start'] < layout['location']['end'], layout
+        assert not opened['uniform_pixels'], opened
+        second = call('NEXT')
+        assert second['layout']['page'] == 1 and second['sha256'] != opened['sha256'], second
+        assert second['layout']['location']['start'] >= layout['location']['end'], (layout, second)
+        assert call('PREVIOUS')['sha256'] == opened['sha256']
+        matches = query(0, 0, kind='search', text=word, page=0)['hits']
+        assert matches, layout
+        span = {'start': matches[0]['start'], 'end': matches[0]['end']}
+        selected = query(0, 0, kind='ranges', ranges=[span])['ranges'][0]
+        assert selected['rectangles'] and selected['startEdge']['visible'] and selected['endEdge']['visible'], selected
+        axis = 'x' if writing_mode == 'horizontal-tb' else 'y'
+        # The glyph run has its own direction even in a reverse-flow column.
+        expected = 1 if writing_mode == 'horizontal-tb' else -1
+        assert selected['startEdge']['outward'][axis] == expected, selected
+        assert selected['endEdge']['outward'][axis] == -expected, selected
+        rect = selected['rectangles'][0]
+        hit = query(0, 0, kind='word', x=rect['x'] + rect['width'] / 2,
+                    y=rect['y'] + rect['height'] / 2)
+        assert hit and word in hit['text'], (selected, hit)
+        target = call('LINK ' + encoded('#passage-48'))
+        assert target['layout']['page'] > 0 and not target['uniform_pixels'], target
+        locator = target['layout']['locator']
+        call('RESIZE 800 600')
+        restored = call('LOCATE 0 ' + encoded(json.dumps(locator)))
+        assert restored['layout']['locator'] == locator and not restored['uniform_pixels'], restored
+        assert query(0, 0, kind='position', position=locator)['page'] == restored['layout']['page']
+        last = call(f'GOTO 0 {restored["layout"]["pages"] - 1}')
+        assert last['layout']['location']['end'] > locator['offset'] and not last['uniform_pixels'], last
+        assert call('NEXT')['spine'] == 1
+        direction_checks.append(dict(writing_mode=writing_mode, direction=direction, pages=layout['pages']))
+    (destination / 'writing-directions.json').write_text(json.dumps(direction_checks, indent=2))
 
     first = call(f'OPEN {encoded(synthetic)} 600 800')
     assert first['spine'] == 0 and first['layout']['pages'] > 1

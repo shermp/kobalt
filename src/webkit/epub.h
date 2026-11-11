@@ -57,6 +57,7 @@ private:
     std::vector<Resource> spine_;
     std::vector<Navigation> navigation_;
     std::vector<std::string> spineCfi_;
+    bool rightToLeft_ = false;
 
     struct ObfuscatedFont
     {

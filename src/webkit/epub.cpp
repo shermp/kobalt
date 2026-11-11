@@ -403,6 +403,9 @@ bool Epub::package()
             ncx = path;
     });
     walk(xmlDocGetRootElement(doc.get()), [&](xmlNode *n) {
+        if (element(n, "spine") && namespaceIs(n, "http://www.idpf.org/2007/opf")
+            && n->parent == xmlDocGetRootElement(doc.get()))
+            rightToLeft_ = attribute(n, "page-progression-direction") == "rtl";
         if (!element(n, "itemref") || !namespaceIs(n, "http://www.idpf.org/2007/opf") || !n->parent
             || !element(n->parent, "spine") || n->parent->parent != xmlDocGetRootElement(doc.get()))
             return;
@@ -619,6 +622,6 @@ std::string Epub::description() const
         result += std::string(result.back() == '[' ? "" : ",")
                 + "{\"title\":" + jsonString(item.title) + ",\"href\":" + jsonString(item.href)
                 + ",\"depth\":" + std::to_string(item.depth) + "}";
-    return result + "]}";
+    return result + "],\"page_progression_rtl\":" + (rightToLeft_ ? "true" : "false") + "}";
 }
 } // namespace kobalt::webkit
