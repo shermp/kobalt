@@ -28,6 +28,17 @@ QString child(const QString &directory, const QString &name)
 {
     return directory.isEmpty() ? QString() : directory + '/' + name;
 }
+
+QString speedRecordName(ReadingSpeedRecord record)
+{
+    return record == ReadingSpeedRecord::WebKit ? QStringLiteral("reading-speed-webkit")
+                                                : QStringLiteral("reading-speed");
+}
+
+QString legacySpeedPath(const Paths &paths, ReadingSpeedRecord record)
+{
+    return record == ReadingSpeedRecord::Standalone ? paths.readingSpeed() : QString();
+}
 } // namespace
 
 QString Paths::preferences() const
@@ -378,9 +389,21 @@ bool writeBookState(const Paths &paths, const QString &identity, const QJsonObje
                            legacy.isEmpty() ? paths.bookState(identity) : legacy, value);
 }
 
+JsonRead readReadingSpeed(const Paths &paths, ReadingSpeedRecord record)
+{
+    return readRecord(paths.directory, speedRecordName(record), legacySpeedPath(paths, record));
+}
+
+bool writeReadingSpeed(const Paths &paths, ReadingSpeedRecord record, const QJsonObject &value)
+{
+    return writeRecord(paths.directory, speedRecordName(record), legacySpeedPath(paths, record),
+                       value);
+}
+
 bool writeReadingActivity(const Paths &paths, const QString &identity, const QJsonObject &book,
                           const QJsonObject &speed,
-                          const std::function<bool(QSqlDatabase &)> &history, const QString &legacy)
+                          const std::function<bool(QSqlDatabase &)> &history, const QString &legacy,
+                          ReadingSpeedRecord speedRecord)
 {
     if ((book.contains("schema") && book.value("schema").toDouble(-1) != 1)
         || (speed.contains("schema") && speed.value("schema").toDouble(-1) != 1)
@@ -395,8 +418,9 @@ bool writeReadingActivity(const Paths &paths, const QString &identity, const QJs
                                &result, &book, &db))
             return false;
         if (!speed.isEmpty()
-            && !recordTransaction(paths.directory, "reading-speed", paths.readingSpeed(),
-                                  maxJsonBytes, &result, &speed, &db))
+            && !recordTransaction(paths.directory, speedRecordName(speedRecord),
+                                  legacySpeedPath(paths, speedRecord), maxJsonBytes, &result,
+                                  &speed, &db))
             return false;
         return !history || history(db);
     });

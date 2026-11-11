@@ -10,7 +10,7 @@ Routine activity and close commit the interval snapshot and WebKit source
 position together. The background writer uses the shared retry and durability
 rules. Sleep pauses the existing active clock. A short sleep retains the
 interval UUID, and the session timeout can complete an interval before a new
-one starts on wake. WebKit uses a session pace estimate in memory.
+one starts on wake. [Reading pace](m4-pace.md) learns from individual turns.
 
 See [Reading sessions](../storage.md#reading-sessions) for profile ownership,
 backup and crash recovery.

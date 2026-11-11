@@ -16,6 +16,7 @@ struct ReadingActivity
     ChapterSelection chapter;
     // Native mapping captured with the displayed frame; empty when unsupported.
     QString nativePosition = {};
+    quint64 layoutRevision = 0;
 };
 
 struct ReadingEstimates

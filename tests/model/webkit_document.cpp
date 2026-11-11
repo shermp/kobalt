@@ -342,6 +342,13 @@ int helper()
             frame["width"] = 999999;
         if (mode == "bad-path")
             frame["pixels"] = "/etc/passwd";
+        if (mode == "out-of-order-toc") {
+            auto document = frame.value("document").toObject();
+            const auto entries = document.value("navigation").toArray();
+            document["navigation"] =
+                    QJsonArray{ entries.at(1), entries.at(0), entries.at(2), entries.at(3) };
+            frame["document"] = document;
+        }
         QFile metadata(stem + ".json");
         require(metadata.open(QIODevice::WriteOnly), "helper metadata");
         metadata.write(QJsonDocument(frame).toJson(QJsonDocument::Compact));
@@ -593,6 +600,19 @@ int main(int argc, char **argv)
     }
     qunsetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
     qunsetenv("KOBALT_TEST_WEBKIT_QUERY_LOG");
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "out-of-order-toc");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr)
+                        && document.chapters().first().title == "Middle"
+                        && document.chapterGraph().first().title == "Opening"
+                        && document.chapterGraph().first().words == 10,
+                "Word estimates follow source order while the Contents retains publisher order");
+        require(document.applyAppearance({}, { 800, 600 })
+                        && document.chapterGraph().first().title == "Opening"
+                        && document.chapterGraph().at(1).words == 20,
+                "Reflow preserves source-ordered estimates and word intervals");
+    }
     qputenv("KOBALT_TEST_WEBKIT_MODE", "bad-word-counts");
     {
         WebKitDocument document({}, "/unused.epub");

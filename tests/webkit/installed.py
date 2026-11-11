@@ -5,6 +5,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 import zipfile
 
 
@@ -532,11 +533,12 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'previews', 'backend': backend, 'origin': origin,
                            'accepted': arrived['page'], 'returned': returned['page']})
 
-    def stats(backend):
+    def stats(backend, *, learned=False, close=True):
+        name = backend + ('-learned' if learned else '')
         paper = device.wait_widget(name='rrPage')
         call('tap', x=paper['x'] + paper['width'] // 2, y=paper['y'] + paper['height'] // 2)
         device.wait_widget(name='rrNavStats')
-        capture(backend + '-stats-entry')
+        capture(name + '-stats-entry')
         device.tap_widget(name='rrNavStats')
         device.wait_widget(name='rrChapterGraph')
         device.wait_widget(name='rrGraphChapterTitle', text='Title Page')
@@ -546,17 +548,45 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         detail = device.wait_widget(name='rrGraphBookDetail')
         book_detail = detail.get('text', '')
         words = re.fullmatch(r'([0-9,]+) words', book_detail)
-        if backend == 'webkit':
+        if learned:
+            assert book_detail.startswith('≈ ') and book_detail.endswith(' left'), detail
+        elif backend == 'webkit':
             assert words and int(words[1].replace(',', '')) > 0, detail
         else:
             # Nickel can supply a pace immediately, which takes the place
             # of the total on the existing Stats panel.
             assert words or book_detail.endswith(' left'), detail
         device.wait_widget(name='rrGraphSessionFigure')
-        capture(backend + '-stats')
-        transcript.append({'action': 'stats', 'backend': backend, 'book_detail': book_detail,
+        capture(name + '-stats')
+        transcript.append({'action': 'stats', 'backend': backend, 'learned': learned,
+                           'book_detail': book_detail,
                            'session_ms': value['session_reading_ms']})
-        close_book(menu_open=True)
+        if close:
+            close_book(menu_open=True)
+
+    def learn_pace():
+        paper = device.wait_widget(name='rrPage')
+        graph = device.wait_widget(name='rrChapterGraph')
+        call('tap', x=paper['x'] + paper['width'] // 2, y=(paper['y'] + graph['y']) // 2)
+        visible_since = None
+
+        def ready():
+            nonlocal visible_since
+            widgets = {w['name'] for w in device.ui()['widgets']}
+            if 'rrPage' not in widgets or widgets.intersection(('rrChapterGraph', 'rrNavStats')):
+                visible_since = None
+                return False
+            now = time.monotonic()
+            if visible_since is None:
+                visible_since = now
+            # Measure an uncovered title page long enough for an eligible
+            # word/time sample, including on fast firmware hosts.
+            return now - visible_since >= 3.5
+
+        device.wait_until(ready, timeout=15, description='eligible title-page reading sample')
+        title_page = current_page
+        assert turn()['page'] == title_page + 1
+        assert turn(-1)['page'] == title_page
 
     try:
         device.wait_log('reader: native controller ready', timeout=120)
@@ -565,7 +595,11 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         capture('webkit-open')
         assert first['chapters'] > 0, first
         if stats_only:
-            stats('webkit')
+            stats('webkit', close=False)
+            learn_pace()
+            close_book()
+            open_book('webkit', expected_page=first['page'])
+            stats('webkit', learned=True)
             launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
             hidden = launcher.with_suffix('.held')
             launcher.rename(hidden)
@@ -578,6 +612,7 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
             blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
             assert not blocked, blocked
             report = {'status': 'passed', 'installed_mod': True, 'stats': True,
+                      'pace_after_reopen': True,
                       'main_thread_blocked': blocked, 'transcript': transcript}
             (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
             print('WEBKIT_INSTALLED_STATS_VERIFIED', flush=True)

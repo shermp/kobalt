@@ -206,6 +206,7 @@ private:
     storage::Paths paths_;
     QByteArray digest;
     std::unique_ptr<ReadingBridge> bridge;
+    const storage::ReadingSpeedRecord speedRecord_;
     const bool nativeCloudSync, koboCloudBook;
     bool released = false, openingStatusAttempted = false, discardSaves = false;
     ReadingProgress baseline;

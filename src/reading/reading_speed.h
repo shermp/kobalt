@@ -16,10 +16,10 @@ public:
     static constexpr qint64 historyMilliseconds = 30 * 60 * 1000;
     static constexpr double initialWordsPerMinute = 250;
 
-    void restore(const QJsonObject &state)
+    bool restore(const QJsonObject &state)
     {
         if (state.value("schema").toDouble(-1) != 1) {
-            return;
+            return false;
         }
         const auto time = state.value("milliseconds");
         const auto count = state.value("words");
@@ -31,16 +31,18 @@ public:
             || !std::isfinite(words) || !std::isfinite(samples) || ms < 2000
             || ms > historyMilliseconds || samples < 1 || samples > 3
             || samples != std::floor(samples) || !std::isfinite(rate) || rate < 40 || rate > 1200) {
-            return;
+            return false;
         }
         milliseconds_ = ms;
         words_ = words;
         samples_ = int(samples);
+        preserved_ = state;
+        return true;
     }
 
     QJsonObject state() const
     {
-        QJsonObject result;
+        auto result = preserved_;
         result["schema"] = 1;
         result["milliseconds"] = milliseconds_;
         result["words"] = words_;
@@ -49,6 +51,8 @@ public:
     }
 
     bool dirty() const { return dirty_; }
+
+    bool hasSamples() const { return samples_ > 0; }
 
     void saved() { dirty_ = false; }
 
@@ -68,6 +72,7 @@ public:
         }
         if (observedAt >= 0 && activity.position == previous.position
             && activity.pages == previous.pages && activity.totalWords == previous.totalWords
+            && activity.layoutRevision == previous.layoutRevision
             && activeMilliseconds >= observedAt) {
             return;
         }
@@ -75,6 +80,7 @@ public:
         const int words = wordEstimates::pageWords(previous);
         const bool forward = activity.turnDirection > 0
                 && qint64(activity.page) == qint64(previous.page) + 1
+                && activity.layoutRevision == previous.layoutRevision
                 && activity.pages == previous.pages && activity.totalWords == previous.totalWords;
         previous = activity;
         observedAt = activeMilliseconds;
@@ -111,6 +117,7 @@ private:
     double milliseconds_ = 0, words_ = 0;
     int samples_ = 0;
     bool dirty_ = false;
+    QJsonObject preserved_;
     ReadingActivity previous;
     qint64 observedAt = -1;
 };

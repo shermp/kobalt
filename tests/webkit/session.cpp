@@ -380,6 +380,22 @@ int main(int argc, char **argv)
                                     { "future_field", "preserved" } };
         require(storage::writeBookState(paths, identity, original),
                 "Prepare existing saved record");
+        const QJsonObject standalonePace{
+            { "schema", 1 }, { "words", 40 }, { "milliseconds", 60000 }, { "samples", 1 }
+        };
+        require(storage::writeReadingSpeed(paths, storage::ReadingSpeedRecord::Standalone,
+                                           standalonePace),
+                "Prepare the separate standalone pace record");
+        const auto paceFrame = [](const ReaderSession &reader) -> ReadingActivity {
+            return { reader.navigationPosition(),
+                     0,
+                     reader.page(),
+                     reader.pages(),
+                     reader.turnDirection(),
+                     reader.totalWords(),
+                     reader.chapterGraph(),
+                     reader.graphSelection() };
+        };
         require(session->goTo(contents.first().position), "Open the start of the reading interval");
         completion.exec();
         const auto intervalStart = session->navigationPosition();
@@ -396,12 +412,8 @@ int main(int argc, char **argv)
             book.observeReading();
             require(book.readingActive() && book.tracksReadingHistory(),
                     "WebKit starts an active source reading interval");
-            book.session()->updated = [&] { completion.quit(); };
-            require(book.session()->goTo(intervalEnd), "Navigate during the recorded interval");
-            completion.exec();
-            book.session()->updated = {};
-            require(book.session()->navigationPosition() == intervalEnd,
-                    "The final anchor is displayed");
+            require(book.estimates().bookMilliseconds < 0,
+                    "A fresh WebKit profile does not use the standalone pace");
             awake = false;
             book.sleepReading({});
             const auto pausedAt = book.readingMilliseconds();
@@ -412,6 +424,29 @@ int main(int argc, char **argv)
             awake = true;
             book.observeReading();
             require(book.readingActive(), "A short sleep resumes the WebKit history interval");
+            const int words = wordEstimates::pageWords(paceFrame(*book.session()));
+            require(words >= 2 && words < 800, "The first chapter supports a bounded pace sample");
+            const auto target = pausedAt + qMax<qint64>(2100, words * 100);
+            QTimer sampleTimer;
+            QObject::connect(&sampleTimer, &QTimer::timeout, &completion, [&] {
+                if (book.readingMilliseconds() >= target)
+                    completion.quit();
+            });
+            sampleTimer.start(10);
+            completion.exec();
+            sampleTimer.stop();
+            book.session()->updated = [&] { completion.quit(); };
+            require(book.session()->turn(1), "Turn to finish a timed WebKit page");
+            completion.exec();
+            book.observeReading();
+            require(book.estimates().bookMilliseconds > 0 && book.estimates().learningPace,
+                    "A timed WebKit page enables an estimate");
+            require(book.session()->goTo(intervalEnd), "Navigate during the recorded interval");
+            completion.exec();
+            book.observeReading();
+            book.session()->updated = {};
+            require(book.session()->navigationPosition() == intervalEnd,
+                    "The final anchor is displayed");
             book.saveReadingActivity();
             book.stopReading(true);
             activeMilliseconds = book.readingMilliseconds();
@@ -443,6 +478,13 @@ int main(int argc, char **argv)
         auto preserved = saved;
         preserved.remove("backend_positions");
         require(preserved == original, "CREngine and unknown record fields preserved");
+        const auto webkitPace =
+                storage::readReadingSpeed(paths, storage::ReadingSpeedRecord::WebKit).object;
+        require(webkitPace.value("samples").toInt() == 1
+                        && storage::readReadingSpeed(paths, storage::ReadingSpeedRecord::Standalone)
+                                        .object
+                                == standalonePace,
+                "Only the timed WebKit turn changed its separate pace record");
         session = std::make_unique<ReaderSession>(EngineFontInputs{}, "serif");
         lease = std::make_shared<SourceLease>();
         request.lease = lease;
@@ -455,11 +497,24 @@ int main(int argc, char **argv)
             completion.quit();
         });
         completion.exec();
+        ReadingSpeed restoredPace;
+        require(restoredPace.restore(webkitPace), "Restore the WebKit speed sample");
+        const auto expected = restoredPace.estimates(paceFrame(*session));
+        const int reopenedPages = session->pages();
+        {
+            ReadingBook reopened(std::move(session), paths.bookState(identity), paths, identity,
+                                 fingerprint, nullptr, {}, {});
+            const auto restored = reopened.estimates();
+            require(expected.bookMilliseconds > 0
+                            && restored.bookMilliseconds == expected.bookMilliseconds
+                            && restored.learningPace,
+                    "A cold WebKit reader reuses its own saved pace");
+        }
         QFile report(output + "/session.json");
         require(report.open(QIODevice::WriteOnly), "Open firmware report");
         report.write(QJsonDocument(QJsonObject{ { "backend", "webkit" },
                                                 { "gui_heartbeats", beats },
-                                                { "pages", session->pages() },
+                                                { "pages", reopenedPages },
                                                 { "first_sha256", QString::fromLatin1(first) },
                                                 { "navigation", true },
                                                 { "resize", true },
@@ -471,6 +526,7 @@ int main(int argc, char **argv)
                                                 { "chapter_words", double(chapterWords) },
                                                 { "session_clock", true },
                                                 { "source_history", true },
+                                                { "source_pace_restored", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },
@@ -487,7 +543,6 @@ int main(int argc, char **argv)
                                                 { "saved_data_preserved", true } })
                              .toJson());
         lease->cancel();
-        session.reset();
         ReaderSession::drain([&] { app.quit(); });
     });
     return app.exec();

@@ -68,6 +68,8 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
       paths_(std::move(paths)),
       digest(std::move(digest)),
       bridge(std::move(bridge)),
+      speedRecord_(session_->experimentalBackend() ? storage::ReadingSpeedRecord::WebKit
+                                                   : storage::ReadingSpeedRecord::Standalone),
       nativeCloudSync(this->bridge && (koboCloud || !identity_.startsWith("file:///"))),
       koboCloudBook(this->bridge && koboCloud),
       baseline(std::move(baseline)),
@@ -114,10 +116,12 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
                                                        std::move(sourceKey), session_->title(),
                                                        session_->author(), this->utc, format);
     }
-    if (!this->bridge && savesReadingState()) {
-        speed = std::make_unique<ReadingSpeed>();
-        speed->restore(storage::readRecord(paths_.directory, "reading-speed", paths_.readingSpeed())
-                               .object);
+    if (!this->bridge || !savesReadingState()) {
+        const auto stored = storage::readReadingSpeed(paths_, speedRecord_);
+        auto pace = std::make_unique<ReadingSpeed>();
+        const bool restored = pace->restore(stored.object);
+        if (savesReadingState() || restored || stored.status == storage::ReadStatus::Missing)
+            speed = std::move(pace);
     }
 }
 
@@ -265,20 +269,23 @@ void ReadingBook::observeReading(bool learnPace)
 ReadingActivity ReadingBook::readingActivity() const
 {
     QString error;
-    const auto nativePosition = session_->savedNativePosition(&error);
-    return { session_->state().value("position").toString(),
+    const auto nativePosition =
+            savesReadingState() ? session_->savedNativePosition(&error) : QString();
+    return { session_->navigationPosition(),
              // Kobalt's page progress, kept below 100 like every native write of
              // an unfinished book, so the last page never reports a finished read.
              qMin(99.0, double(pageProgressPercent(session_->page(), session_->pages()))),
              session_->page(), session_->pages(), session_->turnDirection(), session_->totalWords(),
              session_->chapterGraph(), session_->graphSelection(),
-             error.isEmpty() ? nativePosition : QString() };
+             error.isEmpty() ? nativePosition : QString(), session_->layoutRevision() };
 }
 
 ReadingEstimates ReadingBook::estimates() const
 {
-    if (speed) {
-        return speed->estimates(readingActivity());
+    if (speed && (savesReadingState() || speed->hasSamples())) {
+        const auto result = speed->estimates(readingActivity());
+        if (savesReadingState() || result.bookMilliseconds >= 0)
+            return result;
     }
     if (bridge && !released && savesReadingState() && bridge->writable()) {
         ReadingEstimates result;
@@ -366,7 +373,7 @@ void ReadingBook::saveReadingActivity(bool durable)
     if (!savesReadingState()) {
         if (!sourceposition::valid(session_->state().value("source_position").toObject()))
             return;
-        if (!history) {
+        if (!history && !speed) {
             QJsonObject snapshot;
             if (checkpoint(&snapshot, true))
                 activitySaved.restart();
@@ -400,12 +407,14 @@ void ReadingBook::writeActivity(std::shared_ptr<ActivitySave> save, int attempt)
 {
     const std::weak_ptr<ReadingBook *> guard = alive;
     activityWriter->post(
-            [paths = paths_, identity = identity_, path = statePath, save] {
+            [paths = paths_, identity = identity_, path = statePath, speedRecord = speedRecord_,
+             save] {
                 bool ok;
                 {
                     storage::RoutineWrites routine;
                     ok = storage::writeReadingActivity(paths, identity, save->persisted,
-                                                       save->speed, save->history.write, path);
+                                                       save->speed, save->history.write, path,
+                                                       speedRecord);
                 }
                 if (ok && save->durable) {
                     storage::checkpointProfile();
@@ -598,10 +607,10 @@ void ReadingBook::saveSpeed(bool force, bool background)
     if (!speedWriter)
         speedWriter = std::make_unique<storage::RecordWriter>();
     const auto state = speed->state();
-    const auto write = [directory = paths_.directory, path = paths_.readingSpeed(), state] {
+    const auto write = [paths = paths_, record = speedRecord_, state] {
         // Rewritten every minute while reading; a checkpoint syncs it.
         storage::RoutineWrites routine;
-        return storage::writeRecord(directory, "reading-speed", path, state);
+        return storage::writeReadingSpeed(paths, record, state);
     };
     const auto finished = [this, state](bool saved) {
         // Reading can change the pace while the write runs. Only the written
@@ -1025,9 +1034,10 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
     const bool saved = writer->writeNow(
             [paths = paths_, identity = identity_, persisted, path = statePath, state,
              rememberAppearance = savesReadingState() && !session_->temporaryTypography(),
-             historySnapshot, speedState, &layoutSaved] {
-                const bool ok = storage::writeReadingActivity(
-                        paths, identity, persisted, speedState, historySnapshot.write, path);
+             historySnapshot, speedState, speedRecord = speedRecord_, &layoutSaved] {
+                const bool ok =
+                        storage::writeReadingActivity(paths, identity, persisted, speedState,
+                                                      historySnapshot.write, path, speedRecord);
                 if (historySnapshot.complete)
                     historySnapshot.complete(ok);
                 if (!ok)
@@ -1100,9 +1110,9 @@ void ReadingBook::checkpointForClose(std::function<void(bool)> done)
     const std::weak_ptr<ReadingBook *> guard = alive;
     writer->post(
             [paths = paths_, identity = identity_, persisted, path = statePath, state,
-             rememberAppearance, historySnapshot, speedState] {
+             rememberAppearance, historySnapshot, speedState, speedRecord = speedRecord_] {
                 bool ok = storage::writeReadingActivity(paths, identity, persisted, speedState,
-                                                        historySnapshot.write, path);
+                                                        historySnapshot.write, path, speedRecord);
                 if (historySnapshot.complete)
                     historySnapshot.complete(ok);
                 if (rememberAppearance) {

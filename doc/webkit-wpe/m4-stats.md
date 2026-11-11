@@ -17,9 +17,9 @@ entry. An unavailable count leaves the page-length chart available.
 
 The shared session clock measures active reading time and supplies the existing
 session pace estimate from forward page turns. The clock pauses when the
-reader is hidden or suspended. The Stats data and pace live in memory. Source
-position checkpoints continue to use the existing background writer and the
-independent WebKit book-state slot.
+reader is hidden or suspended. The word counts live in memory while the
+book is open. See [Reading pace](m4-pace.md) for estimates that reuse
+samples across books.
 
 ## Verification
 

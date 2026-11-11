@@ -53,12 +53,16 @@ bool writeRecord(const QString &directory, const QString &name, const QString &l
 JsonRead readBookState(const Paths &, const QString &identity, const QString &legacy = {});
 bool writeBookState(const Paths &, const QString &identity, const QJsonObject &,
                     const QString &legacy = {});
+enum class ReadingSpeedRecord { Standalone, WebKit };
+JsonRead readReadingSpeed(const Paths &, ReadingSpeedRecord);
+bool writeReadingSpeed(const Paths &, ReadingSpeedRecord, const QJsonObject &);
 // Commit one immutable reading snapshot. Roll back all members and legacy
 // imports together if any member fails.
 bool writeReadingActivity(const Paths &, const QString &identity, const QJsonObject &book,
                           const QJsonObject &speed,
                           const std::function<bool(QSqlDatabase &)> &history,
-                          const QString &legacy = {});
+                          const QString &legacy = {},
+                          ReadingSpeedRecord = ReadingSpeedRecord::Standalone);
 JsonRead readPreferences(const QString &path);
 bool writePreferences(const QString &path, const QJsonObject &);
 

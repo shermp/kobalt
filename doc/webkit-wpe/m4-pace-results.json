@@ -1,0 +1,53 @@
+{
+  "milestone": "M4 reading pace",
+  "base": "0f52f8d",
+  "branch": "feature/webkit-wpe-m4",
+  "source_tree": "3277d064ed61f440dda0dab97203289b7509b7bcf259266d18e433b6951a7310",
+  "checks": {
+    "native_progress": {
+      "status": "passed",
+      "log": "build/m4-pace-native-progress.log"
+    },
+    "native_focused": {
+      "status": "passed",
+      "log": "build/m4-pace-native-storage.log",
+      "scope": ["profile rollback", "reading book", "WebKit proxy", "main thread"]
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both pinned Kobo SDK checks passed",
+      "log": "build/m4-pace-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-pace-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-pace-qt6-check.log",
+      "package_log": "build/m4-pace-package.log",
+      "diagnostic_package_sha256": "d271bab5eedaefaf7b92db6d3d4c30f92a1e3be2530907922ac4bcec61bfdd08"
+    },
+    "arm_session": {
+      "status": "passed",
+      "log": "build/m4-pace-arm-session.log",
+      "result": "build/webkit/firmware-51310dbd82/session-results/session.json",
+      "scope": ["timed forward turn", "isolated pace record", "cold restore"]
+    },
+    "installed": {
+      "status": "passed",
+      "device": "Libra Colour",
+      "firmware": "6.0.274403",
+      "log": "build/m4-pace-installed.log",
+      "result": "build/webkit/firmware-6d0d699856/installed-results/installed.json",
+      "storage_errors": [],
+      "main_thread_blocked": [],
+      "peak_mib": 671,
+      "memory_limit_mib": 768
+    },
+    "screen_review": {
+      "status": "commit authorized in chat; two screens unseen and no requested changes",
+      "data": "build/review/webkit-m4-pace",
+      "manifest": "build/screenshots/webkit-m4-pace/manifest.json"
+    }
+  }
+}

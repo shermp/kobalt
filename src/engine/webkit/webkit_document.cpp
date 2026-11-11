@@ -334,6 +334,7 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     offsets_.clear();
     linear_.clear();
     chapters_.clear();
+    chapterGraphOrder_.clear();
     counts_ = {};
     chapterStartsAtPage_.clear();
     position_ = {};
@@ -437,6 +438,7 @@ bool WebKitDocument::runOperation(const std::function<bool()> &operation, bool c
     const auto offsets = offsets_;
     const auto linear = linear_;
     const auto chapters = chapters_;
+    const auto chapterGraphOrder = chapterGraphOrder_;
     const auto boundaries = chapterStartsAtPage_;
     const auto run = [&] {
         restartableFailure_ = false;
@@ -466,6 +468,7 @@ bool WebKitDocument::runOperation(const std::function<bool()> &operation, bool c
         offsets_ = offsets;
         linear_ = linear;
         chapters_ = chapters;
+        chapterGraphOrder_ = chapterGraphOrder;
         chapterStartsAtPage_ = boundaries;
         helperMoved_ = opened_;
     };
@@ -537,6 +540,7 @@ bool WebKitDocument::scanBook(bool countWords)
     QVector<bool> flags;
     QVector<ChapterLink> links(navigation.size());
     QMap<QString, bool> boundaries;
+    QVector<int> orderedTargets;
     QVector<QPair<int, qint64>> prefixes;
     qint64 total = 0;
     for (int index = 0; index < paths.size(); ++index) {
@@ -565,13 +569,15 @@ bool WebKitDocument::scanBook(bool countWords)
                     offset <= target.value("location").toObject().value("start").toInt();
             links[i] = { item.value("title").toString().simplified().left(512), position,
                          offsets.last() + selected, qBound(0, item.value("depth").toInt(), 256) };
-            if (countWords)
-                anchors.append({ offset, i });
+            anchors.append({ offset, i });
         }
+        // Order by the source offset, retaining TOC order at one destination.
+        std::sort(anchors.begin(), anchors.end());
+        for (const auto &anchor : anchors)
+            orderedTargets.append(anchor.second);
         // The helper still has this spine loaded, so counting needs no extra
         // document load, layout or frame. An older helper can omit the counts.
-        if (countWords
-            && !countSpineWords(index, loadedPage, std::move(anchors), prefixes, total)) {
+        if (countWords && !countSpineWords(index, loadedPage, anchors, prefixes, total)) {
             if (restartableFailure_)
                 return false;
             countWords = false;
@@ -581,6 +587,7 @@ bool WebKitDocument::scanBook(bool countWords)
         flags.append(linear.size() == paths.size() ? linear.at(index).toBool() : true);
     }
     QVector<ChapterLink> contents;
+    QVector<int> contentsIndex(links.size(), -1);
     DocumentWordCounts counts;
     QVector<qint64> chapterWords(navigation.size(), -1);
     if (countWords) {
@@ -596,6 +603,7 @@ bool WebKitDocument::scanBook(bool countWords)
             continue;
         if (countWords)
             counts.chapters.append({ links.at(i).position, chapterWords.at(i) });
+        contentsIndex[i] = contents.size();
         contents.append(links.at(i));
     }
     if (countWords)
@@ -603,15 +611,16 @@ bool WebKitDocument::scanBook(bool countWords)
     offsets_ = std::move(offsets);
     linear_ = std::move(flags);
     chapters_ = std::move(contents);
+    chapterGraphOrder_.clear();
+    for (const int target : orderedTargets)
+        chapterGraphOrder_.append(contentsIndex.at(target));
     chapterStartsAtPage_ = std::move(boundaries);
     return true;
 }
 
-bool WebKitDocument::countSpineWords(int index, int page, QVector<QPair<int, int>> anchors,
+bool WebKitDocument::countSpineWords(int index, int page, const QVector<QPair<int, int>> &anchors,
                                      QVector<QPair<int, qint64>> &prefixes, qint64 &total)
 {
-    // Sort by source offset, with TOC order breaking ties at one destination.
-    std::sort(anchors.begin(), anchors.end());
     int spineTotal = -1, previousPrefix = 0, first = 0;
     do {
         const int end = qMin(first + maximumWordCountOffsets, int(anchors.size()));
@@ -932,13 +941,15 @@ QVector<ChapterLink> WebKitDocument::chapterGraph() const
 {
     if (counts_.total < 0)
         return chapterPageLengths(chapters_, pages());
-    auto graph = chapters_;
-    for (int i = 0; i < graph.size(); ++i) {
-        auto &chapter = graph[i];
+    QVector<ChapterLink> graph;
+    graph.reserve(chapters_.size());
+    for (const int i : chapterGraphOrder_) {
+        auto chapter = chapters_.at(i);
         chapter.words =
                 i < counts_.chapters.size() && counts_.chapters.at(i).position == chapter.position
                 ? counts_.chapters.at(i).words
                 : -1;
+        graph.append(std::move(chapter));
     }
     return graph;
 }

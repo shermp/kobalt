@@ -83,6 +83,18 @@ int main()
     duplicates.observe(page(0), 50000);
     duplicates.observe(page(1), 100000);
     unchanged(duplicates, partial, "Repeated frames reset the page's reading time");
+    ReadingSpeed reflow;
+    reflow.observe(page(0), 0);
+    auto samePage = page(0), nextPage = page(1);
+    samePage.layoutRevision = nextPage.layoutRevision = 1;
+    reflow.observe(samePage, 100000);
+    reflow.observe(nextPage, 101000);
+    require(!reflow.hasSamples(), "Same-page reflow reused time from an earlier layout");
+    auto extended = partial;
+    extended["future_field"] = "preserved";
+    require(reflow.restore(extended) && reflow.hasSamples()
+                    && reflow.state().value("future_field") == extended.value("future_field"),
+            "Restoring speed must preserve supported optional fields");
     for (const auto &invalid :
          { QJsonObject(), QJsonObject{ { "schema", 2 } }, QJsonObject{ { "schema", 1.5 } } }) {
         ReadingSpeed fresh;

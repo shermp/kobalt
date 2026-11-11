@@ -99,6 +99,7 @@ private:
     QVector<int> offsets_;
     QVector<bool> linear_;
     QVector<ChapterLink> chapters_;
+    QVector<int> chapterGraphOrder_;
     DocumentWordCounts counts_;
     QMap<QString, bool> chapterStartsAtPage_;
     QMap<int, QJsonObject> summaries_;
@@ -151,7 +152,7 @@ private:
     bool readFrame(const QString &, unsigned, RenderedFrame &);
     bool style();
     bool scanBook(bool countWords);
-    bool countSpineWords(int index, int page, QVector<QPair<int, int>> anchors,
+    bool countSpineWords(int index, int page, const QVector<QPair<int, int>> &anchors,
                          QVector<QPair<int, qint64>> &prefixes, qint64 &total);
     bool locate(const QJsonObject &);
     ChapterSelection selectContents(const QVector<ChapterLink> &, const QJsonObject &) const;

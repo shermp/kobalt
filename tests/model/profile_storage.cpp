@@ -87,7 +87,8 @@ int main(int argc, char **argv)
     using storage::ReadStatus;
     QTemporaryDir root;
     require(root.isValid(), "Temporary profile");
-    {
+    for (const auto pace :
+         { storage::ReadingSpeedRecord::Standalone, storage::ReadingSpeedRecord::WebKit }) {
         QTemporaryDir batchRoot;
         const storage::Paths batch{ batchRoot.path() };
         const QJsonObject oldBook{ { "schema", 1 },
@@ -98,9 +99,12 @@ int main(int argc, char **argv)
                                    { "position", "new" } };
         const QJsonObject oldSpeed{ { "schema", 1 }, { "samples", 1 } };
         const QJsonObject newSpeed{ { "schema", 1 }, { "samples", 2 } };
+        const auto otherPace = pace == storage::ReadingSpeedRecord::WebKit
+                ? storage::ReadingSpeedRecord::Standalone
+                : storage::ReadingSpeedRecord::WebKit;
         require(storage::writeBookState(batch, "batch-book", oldBook)
-                        && storage::writeRecord(batch.directory, "reading-speed",
-                                                batch.readingSpeed(), oldSpeed),
+                        && storage::writeReadingSpeed(batch, pace, oldSpeed)
+                        && storage::writeReadingSpeed(batch, otherPace, oldSpeed),
                 "Batch baseline");
         ReadingHistory history(batch.directory, "batch-book", {}, {}, "Batch", "Author",
                                [] { return 1000; });
@@ -112,23 +116,22 @@ int main(int argc, char **argv)
             storage::runOnWriterThread([&] {
                 storage::RoutineWrites routine;
                 saved = storage::writeReadingActivity(
-                        batch, "batch-book", newBook, newSpeed, [&](QSqlDatabase &db) {
+                        batch, "batch-book", newBook, newSpeed,
+                        [&](QSqlDatabase &db) {
                             QSqlQuery query(db);
                             require(query.exec("PRAGMA synchronous") && query.next()
                                             && query.value(0).toInt() == 1,
                                     "Reading batch must use WAL NORMAL");
                             return snapshot.write(db) && !fail;
-                        });
+                        },
+                        {}, pace);
                 snapshot.complete(saved);
             });
         };
         writeBatch(true);
         require(!saved && !history.savesSucceeded(), "Failed activity must retain its history");
         require(storage::readBookState(batch, "batch-book").object == oldBook
-                        && storage::readRecord(batch.directory, "reading-speed",
-                                               batch.readingSpeed())
-                                        .object
-                                == oldSpeed,
+                        && storage::readReadingSpeed(batch, pace).object == oldSpeed,
                 "History failure must roll back position and speed");
         require(storage::profileTransaction(
                         batch.directory,
@@ -142,10 +145,8 @@ int main(int argc, char **argv)
         require(saved && history.savesSucceeded() && storage::profileHasUnsyncedWrites(),
                 "Retry commits the complete unsynced batch");
         require(storage::readBookState(batch, "batch-book").object == newBook
-                        && storage::readRecord(batch.directory, "reading-speed",
-                                               batch.readingSpeed())
-                                        .object
-                                == newSpeed,
+                        && storage::readReadingSpeed(batch, pace).object == newSpeed
+                        && storage::readReadingSpeed(batch, otherPace).object == oldSpeed,
                 "Successful activity commits both records");
         storage::checkpointProfile();
         require(!storage::profileHasUnsyncedWrites(),
@@ -410,7 +411,8 @@ int main(int argc, char **argv)
         const auto defaults = storage::readJsonFile(recover.preferences());
         require(defaults.status == ReadStatus::Ok
                         && defaults.object
-                                == QJsonObject{ { "schema", 1 }, { "sleep_defaults_migrated", true } }
+                                == QJsonObject{ { "schema", 1 },
+                                                { "sleep_defaults_migrated", true } }
                         && sleep::mode(defaults.object) == sleep::Mode::Cover
                         && sleep::tile(defaults.object) == sleep::Tile::Bookmark
                         && !QFile::exists(recover.syncAccount()),
