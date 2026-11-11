@@ -201,8 +201,8 @@ try:
     assert len(search('CAFÉ')) == 3
     assert not search('hiddenneedle') and not search('BlockAlphaBlockBeta')
     assert len(search('page. Typography')) == 80
-    for text in ('rainbow', 'A𐐀word', '日本語'):
-        hit = search(text)[0]
+    for text in ('rainbow', 'A𐐀word', '日本語', 'العربية', 'Cafe\u0301'):
+        hit = next(hit for hit in search(text) if hit['text'] == text)
         # Geometry and hit tests inspect the actual displayed column, including
         # words split across inline nodes and surrogate pairs.
         result = query(0, hit['page'], kind='range', start=hit['start'], end=hit['end'])
@@ -214,6 +214,28 @@ try:
         assert word['start']['offset'] == hit['start']['offset'] and word['end']['offset'] == hit['end']['offset']
         reverse = query(0, hit['page'], kind='range', start=hit['end'], end=hit['start'])
         assert reverse == result
+        geometry = query(0, hit['page'], kind='ranges', ranges=[
+            dict(start=hit['start'], end=hit['end']), dict(start=hit['end'], end=hit['start'])])['ranges']
+        assert geometry[0] == geometry[1] and geometry[0]['rectangles'] == result['rectangles'], geometry
+        edges = geometry[0]
+        for name in ('startEdge', 'endEdge'):
+            edge = edges[name]
+            assert edge['visible'] and edge['first']['x'] == edge['last']['x'] and edge['first']['y'] < edge['last']['y'], edges
+        direction = -1 if text == 'العربية' else 1
+        assert edges['startEdge']['outward'] == dict(x=-direction, y=0), edges
+        assert edges['endEdge']['outward'] == dict(x=direction, y=0), edges
+        assert (edges['endEdge']['first']['x'] - edges['startEdge']['first']['x']) * direction > 0, edges
+        resolved = query(0, 0, kind='resolve', positions=[hit['start'], hit['end'], dict(hit['start'], version=99)])['positions']
+        assert resolved[:2] == [dict(locator=hit['start'], selectable=True), dict(locator=hit['end'], selectable=True)], resolved
+        assert resolved[2] is None
+    early, late = search('Paragraph 000')[0], search('Paragraph 079')[0]
+    long_range = dict(start=early['start'], end=late['end'])
+    for page, start_visible, end_visible in ((early['page'], True, False),
+                                           (late['page'], False, True),
+                                           ((early['page'] + late['page']) // 2, False, False)):
+        geometry = query(0, page, kind='ranges', ranges=[long_range])['ranges'][0]
+        assert geometry['rectangles'], geometry
+        assert geometry['startEdge']['visible'] == start_visible and geometry['endEdge']['visible'] == end_visible, geometry
     assert query(0, 0, kind='word', x=575, y=25) is None
     call('QUERY 0 0 ' + encoded('{bad JSON'), error='query-failed')
     call('QUERY 999 0 ' + encoded('{}'), error='invalid-query')
@@ -396,6 +418,7 @@ try:
     assert not hits, hits
     (destination / 'epub-results.json').write_text(json.dumps(dict(network_attempts=hits, pages=transcript,
         text_queries=query_checks, source_range_geometry=True, word_hit_testing=True,
+        annotation_terminal_edges=True, annotation_remote_edges=True, source_resolution=True,
         queries_preserve_frames=True, general_book_search=True,
         metadata_without_frames=True, cleanup=True), indent=2))
     print('WEBKIT_EPUB_VERIFIED', flush=True)

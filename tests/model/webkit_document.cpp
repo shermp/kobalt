@@ -98,6 +98,11 @@ int helper()
                                        QByteArray::fromBase64(QByteArray::fromStdString(encoded)))
                                        .object();
             const auto kind = query.value("kind").toString();
+            if (!qgetenv("KOBALT_TEST_WEBKIT_QUERY_LOG").isEmpty()) {
+                QFile log(QString::fromLocal8Bit(qgetenv("KOBALT_TEST_WEBKIT_QUERY_LOG")));
+                require(log.open(QIODevice::WriteOnly | QIODevice::Append), "Query budget log");
+                log.write(kind.toUtf8() + '\n');
+            }
             if (mode == "hang-query" && kind == "search") {
                 QFile marker(QString::fromLocal8Bit(pidPath) + ".query");
                 require(marker.open(QIODevice::WriteOnly), "Query arrival marker");
@@ -144,11 +149,42 @@ int helper()
                                                  : (lengths[spine] + (width == 800 ? 49 : 99))
                                       / (width == 800 ? 50 : 100) },
                     { "locator", mode == "bad-layout-locator" ? QJsonObject() : locatorAt(offset) },
-                    { "location", QJsonObject{ { "start", page * (width == 800 ? 50 : 100) } } },
+                    { "location",
+                      QJsonObject{ { "start", page * (width == 800 ? 50 : 100) },
+                                   { "end", (page + 1) * (width == 800 ? 50 : 100) } } },
                     { "viewport",
                       QJsonObject{ { "width", mode == "bad-layout-viewport" ? width + 1 : width },
                                    { "height", height } } }
                 };
+            } else if (kind == "resolve") {
+                QJsonArray points;
+                for (const auto &position : query.value("positions").toArray())
+                    points.append(QJsonObject{ { "locator", position }, { "selectable", true } });
+                result = { { "positions", points } };
+                if (mode == "bad-resolve")
+                    result = {};
+            } else if (kind == "ranges") {
+                QJsonArray ranges;
+                for (const auto &range : query.value("ranges").toArray()) {
+                    auto row = result;
+                    row["start"] = range.toObject().value("start").isNull()
+                            ? locatorAt(0)
+                            : range.toObject().value("start");
+                    row["end"] = range.toObject().value("end").isNull()
+                            ? locatorAt(lengths[spine])
+                            : range.toObject().value("end");
+                    const auto edge = [&](int x, int normal) {
+                        return QJsonObject{ { "visible", true },
+                                            { "first", QJsonObject{ { "x", x }, { "y", 20 } } },
+                                            { "last", QJsonObject{ { "x", x }, { "y", 40 } } },
+                                            { "outward",
+                                              QJsonObject{ { "x", normal }, { "y", 0 } } } };
+                    };
+                    row["startEdge"] = edge(10, mode == "bad-query-edge" ? 2 : -1);
+                    row["endEdge"] = edge(70, 1);
+                    ranges.append(row);
+                }
+                result = { { "ranges", ranges } };
             } else if (kind == "summary") {
                 result = { { "start", locatorAt(offset) }, { "excerpt", "Source page excerpt" } };
             } else if (kind == "position") {
@@ -292,7 +328,9 @@ int main(int argc, char **argv)
     qunsetenv("KOBALT_WEBKIT_QEMU_PREFIX");
     QTemporaryDir frameBudget;
     const auto frameLog = frameBudget.filePath("frames.log");
+    const auto queryLog = frameBudget.filePath("queries.log");
     qputenv("KOBALT_TEST_WEBKIT_FRAME_LOG", QFile::encodeName(frameLog));
+    qputenv("KOBALT_TEST_WEBKIT_QUERY_LOG", QFile::encodeName(queryLog));
     {
         WebKitDocument document({}, "/unused.epub");
         require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "proxy opening");
@@ -351,6 +389,40 @@ int main(int argc, char **argv)
                 "Source ranges support reverse endpoints without treating them as XPointers");
         require(document.rangeRects(word.start, word.end) == word.rectangles,
                 "Selection geometry shares the source range");
+        const auto geometry = document.annotationGeometry(word.start, word.end);
+        require(geometry.start.visible && geometry.end.visible
+                        && geometry.start.first == QPoint(10, 20)
+                        && geometry.start.outward == QPoint(-1, 0)
+                        && geometry.end.outward == QPoint(1, 0),
+                "Annotation handles use validated terminal edges");
+        const auto tokenAt = [&](int selected, int chapter = 0) {
+            auto position = sourceposition::fromToken(word.start);
+            position["offset"] = selected;
+            position["cfi"] =
+                    QString("epubcfi(/6/%1!/4/2/1:%2)").arg((chapter + 1) * 2).arg(selected);
+            position["href"] = chapter == 2 ? "two" : "one";
+            return sourceposition::token(position);
+        };
+        const QVector<QPair<QString, QString>> ranges{ { word.start, word.end },
+                                                       { word.end, tokenAt(130) },
+                                                       { tokenAt(10), tokenAt(16) },
+                                                       { word.end, word.start },
+                                                       { word.start, tokenAt(16, 2) } };
+        require(document.intersectingRanges(word.start, word.end, ranges) == QVector<int>({ 0, 4 }),
+                "Overlap checks are half-open, forward and aware of spine order");
+        require(document.visibleRanges(ranges) == QVector<int>({ 0, 1, 3, 4 })
+                        && !document.rangeVisible(tokenAt(10), tokenAt(16)),
+                "Visibility resolves source spans against the displayed page");
+        const auto queried = QFileInfo(queryLog).size();
+        for (const auto &range : ranges)
+            document.rangeRects(range.first, range.second);
+        require(QFileInfo(queryLog).size() == queried,
+                "Painting a visibility batch reuses geometry without per-highlight IPC");
+        require(document.pageRangeRects(0, ranges).at(2) == word.rectangles
+                        && document.pageRangeRects(0, ranges).at(0).isEmpty(),
+                "Preview geometry uses its target page rather than the visible page");
+        require(!document.annotationGeometry(word.start, tokenAt(16, 2)).end.visible,
+                "Cross-spine passages never invent a handle at the page boundary");
         require(document.wordAt({ -1, 30 }).text.isEmpty()
                         && document.textRange("/legacy", word.end).text.isEmpty(),
                 "Invalid points and legacy anchors are not sent as source queries");
@@ -404,6 +476,14 @@ int main(int argc, char **argv)
                                 == 50,
                 "Bookmarks reflow from their source anchors and summary caches invalidate");
         require(document.image(document.page()).size() == QSize(800, 600), "resized image");
+        require(!document.rangeRects(word.start, word.end).isEmpty(), "Prime reflowed geometry");
+        require(document.applyAppearance({ { "font_pixels", 31 } }, { 800, 600 })
+                        && document.page() == 2,
+                "Typography can change while retaining the same page number");
+        const auto styled = QFileInfo(queryLog).size();
+        require(!document.rangeRects(word.start, word.end).isEmpty()
+                        && QFileInfo(queryLog).size() > styled,
+                "Typography invalidates cached source visibility and handle geometry");
         const auto position = document.page();
         document.close();
         require(!document.image(position).isNull() && document.page() == position,
@@ -429,6 +509,7 @@ int main(int argc, char **argv)
                 "Unsupported saved source positions cannot be silently replaced");
     }
     qunsetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
+    qunsetenv("KOBALT_TEST_WEBKIT_QUERY_LOG");
     qputenv("KOBALT_TEST_WEBKIT_MODE", "duplicate-spine");
     {
         WebKitDocument document({}, "/unused.epub");
@@ -449,6 +530,24 @@ int main(int argc, char **argv)
                 "Restoration distinguishes repeated spine entries with the same href");
     }
     qunsetenv("KOBALT_TEST_WEBKIT_MODE");
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "bad-resolve");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Overlap guard fixture");
+        const auto word = document.wordAt({ 30, 30 });
+        require(!document.intersectingRanges(word.start, word.end, { { word.start, word.end } })
+                         .isEmpty(),
+                "A failed source lookup cannot authorize an overlapping highlight save");
+    }
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "bad-query-edge");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Handle guard fixture");
+        const auto word = document.wordAt({ 30, 30 });
+        const auto geometry = document.annotationGeometry(word.start, word.end);
+        require(!geometry.start.visible && geometry.end.visible && !geometry.rectangles.isEmpty(),
+                "An invalid endpoint normal cannot become a visible handle");
+    }
     for (const auto *mode : { "bad-query-source", "bad-query-token", "bad-query-rect" }) {
         qputenv("KOBALT_TEST_WEBKIT_MODE", mode);
         WebKitDocument document({}, "/unused.epub");

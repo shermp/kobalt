@@ -1,0 +1,91 @@
+{
+  "milestone": "M4 annotation range services and highlight rendering",
+  "base": "0c7a585",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "0718125b502c72c6913d14eaed6e2df819b35cb75dd50fe09701fe7fcf73c0ec",
+  "milestone_status": "range foundation validated; pointer editing and complete M4 parity remain open",
+  "checks": {
+    "native_annotations": {
+      "status": "passed; retained for unchanged CREngine/UI behavior after final WebKit query/cache hardening",
+      "command": "ctest --preset linux -L annotations --output-on-failure",
+      "log": "build/m4-ranges-annotations.log"
+    },
+    "native_focused": {
+      "status": "passed on final application source",
+      "command": "ctest --preset linux -R '^(engine.webkit-document|model.main-thread|session.highlight-session)$' --output-on-failure",
+      "log": "build/m4-ranges-native.log",
+      "scope": [
+        "forward half-open overlaps, touching ranges and spine ordering",
+        "source visibility and other-page geometry",
+        "cross-spine ranges do not invent local terminal handles",
+        "malformed normals and failed resolution reject unsafe results",
+        "visibility and highlight painting reuse query geometry",
+        "displayed frame and source point survive queries"
+      ]
+    },
+    "native_proxy_final": {
+      "status": "passed with final same-page typography cache-invalidation assertion",
+      "log": "build/m4-ranges-final-proxy.log"
+    },
+    "syntax": {
+      "status": "host clang++ unavailable; both prepared Kobo SDK compiles passed",
+      "log": "build/m4-ranges-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile/link and adapter checks passed on final application source",
+      "command": "bash platforms/kobo/build.sh qt5 --check",
+      "log": "build/m4-ranges-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile/link and adapter checks passed on final application source",
+      "command": "bash platforms/kobo/build.sh qt6 --check",
+      "log": "build/m4-ranges-qt6.log"
+    },
+    "helper": {
+      "status": "passed",
+      "log": "build/m4-ranges-helper-build.log",
+      "bundle_key": "3788b877da654dd5c6c1ddd91b07fbcbe1c34b59a739cbfcdde20e2caeaa4a72",
+      "archive_sha256": "cc6b245d4f875c9517df03b5bf4a18cb6da30d2824e6e85eb167328b5160a71c"
+    },
+    "arm_protocol": {
+      "status": "passed with final helper",
+      "log": "build/m4-ranges-protocol.log",
+      "results": "build/webkit/firmware-c2e80585e7/epub-results/epub-results.json",
+      "scope": [
+        "Latin, split-inline, CJK, supplementary and combining-character endpoints",
+        "inline Arabic bidi affinity and outward normals",
+        "reversed range normalization and canonical source resolution",
+        "long passages retain visible rectangles with remote ends invisible",
+        "existing resources, Unicode search, CFI and frame-ownership regressions"
+      ]
+    },
+    "arm_session": {
+      "status": "passed on final application source and helper",
+      "log": "build/m4-ranges-session.log",
+      "results": "build/webkit/firmware-7246c171be/session-results/session.json",
+      "scope": [
+        "asynchronous source highlight save under the interaction guard",
+        "overlap rejection without list replacement",
+        "legacy highlight preservation",
+        "production saved-highlight markup and terminal edges",
+        "typography/viewport reflow and cold store reload",
+        "existing bookmark, search and saved-position regressions"
+      ]
+    },
+    "full_native_gallery_installed": {
+      "status": "not repeated; affected native checks and ARM protocol/session diagnostics used",
+      "all_variant_release_validation": false
+    }
+  },
+  "limits": [
+    "Pointer token hit testing, punctuation policy, dragging and page-edge continuation remain unavailable",
+    "Horizontal LTR pagination with inline bidi only; split-node grapheme edges need further work",
+    "New highlight extraction/saves require endpoints in one spine entry",
+    "Existing source token and bounded text-extraction limits remain",
+    "No schema changes or CFI/XPointer/native conversion",
+    "No physical sandbox, performance or power validation"
+  ],
+  "manual_device": "unchanged at the initial committed M4 installation",
+  "cleanup": "Disposable diagnostic devices removed; successful evidence retained; previous bookmark review server stopped"
+}

@@ -424,7 +424,7 @@ function visibleText() {
 function cleanText(value) {
   return value.replace(/[\u00ad\u200b\u2060\ufeff]/gu, '').replace(/\s+/gu, ' ');
 }
-function rangeResult(first, last) {
+function rangeResult(first, last, includeText = true) {
   if (!first || !last || first.local === null || last.local === null) return null;
   if (first.offset > last.offset) [first, last] = [last, first];
   if (first.offset === last.offset) return null;
@@ -446,13 +446,65 @@ function rangeResult(first, last) {
       }
     }
   }
+  const result = { start: locatorAt(first), end: locatorAt(last), rectangles };
+  if (!includeText) return result;
   const stream = visibleText();
   let begin = stream.ends.findIndex(end => end > first.offset);
   let finish = begin;
   while (finish >= 0 && finish < stream.text.length && stream.starts[finish] < last.offset) ++finish;
   const selected = begin < 0 ? '' : cleanText(stream.text.slice(begin, finish)).trim();
   if (selected.length > 8192) throw new Error('query-range-too-large');
-  return { start: locatorAt(first), end: locatorAt(last), text: selected, rectangles };
+  return { ...result, text: selected };
+}
+let graphemes = null;
+function endpoint(offset, ending) {
+  const absent = { visible: false };
+  const stream = visibleText();
+  let index = ending ? sourceIndex(stream.ends, offset) : sourceIndex(stream.starts, offset);
+  while (!ending && stream.starts[index] === offset && stream.ends[index] === offset) ++index;
+  if (index >= stream.text.length || (ending ? stream.ends[index] : stream.starts[index]) !== offset)
+    return absent;
+  graphemes ||= new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(stream.text);
+  const glyph = graphemes.containing(index);
+  if (!glyph || /^\s+$/u.test(glyph.segment)) return absent;
+  const begin = stream.starts[glyph.index], finish = stream.ends[glyph.index + glyph.segment.length - 1];
+  if ((ending ? finish : begin) !== offset) return absent;
+  // Keep the caret in the glyph's own text node. At an inline-node boundary,
+  // textPoint(end) belongs to the following node, possibly on another line.
+  const entry = nodes.find(entry => entry.offset <= begin && entry.offset + entry.node.length > begin);
+  if (!entry || finish > entry.offset + entry.node.length ||
+      getComputedStyle(entry.node.parentElement).visibility !== 'visible') return absent;
+  const range = document.createRange();
+  range.setStart(entry.node, begin - entry.offset);
+  range.setEnd(entry.node, finish - entry.offset);
+  const boxes = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
+  const opposite = range.cloneRange();
+  range.collapse(!ending);
+  opposite.collapse(ending);
+  const carets = Array.from(range.getClientRects()), alternatives = Array.from(opposite.getClientRects());
+  for (const box of boxes) {
+    const atEdge = r => r.height > 0 && Math.abs(r.top - box.top) < 1 &&
+      Math.min(Math.abs(r.left - box.left), Math.abs(r.left - box.right)) <= 1.5;
+    let caret = carets.find(atEdge), inverted = false;
+    // At a bidi-run boundary WebKit can give the adjacent run's caret affinity.
+    // The other boundary of this same terminal glyph identifies its direction.
+    if (!caret) { caret = alternatives.find(atEdge); inverted = true; }
+    if (!caret) continue;
+    const right = (Math.abs(caret.left - box.right) < Math.abs(caret.left - box.left)) !== inverted;
+    const x = right ? box.right : box.left;
+    // Report only the actual terminal edge. A clipped range rectangle must
+    // never create a handle at the viewport boundary for a remote endpoint.
+    if (x < margin || x > options.width - margin || box.top < margin ||
+        box.bottom > options.height - margin) continue;
+    return { visible: true, first: { x, y: box.top }, last: { x, y: box.bottom },
+      outward: { x: right ? 1 : -1, y: 0 } };
+  }
+  return absent;
+}
+function geometry(first, last) {
+  const result = rangeResult(first, last, false);
+  return result ? { ...result, startEdge: endpoint(result.start.offset, false),
+    endEdge: endpoint(result.end.offset, true) } : null;
 }
 function fold(value) {
   return value.normalize('NFKC').toLowerCase().replace(/[\u00df]/gu, 'ss')
@@ -543,7 +595,23 @@ globalThis.kobaltQuery = function(query) {
       result = { page: Math.max(0, Math.min(pages - 1, selected)), locator: locatorAt(resolved) };
     }
     else if (query.kind === 'search') result = search(query.text, query.page);
-    else if (query.kind === 'range')
+    else if (query.kind === 'resolve') {
+      if (!Array.isArray(query.positions) || query.positions.length > 64) throw new Error('invalid-query');
+      const stream = visibleText();
+      result = { positions: query.positions.map(saved => {
+        const point = resolvePosition(saved);
+        if (!point || point.local === null) return null;
+        const at = sourceIndex(stream.starts, point.offset);
+        const before = sourceIndex(stream.ends, point.offset);
+        return { locator: locatorAt(point), selectable: stream.starts[at] === point.offset ||
+          stream.ends[before] === point.offset };
+      }) };
+    } else if (query.kind === 'ranges') {
+      if (!Array.isArray(query.ranges) || query.ranges.length > 32) throw new Error('invalid-query');
+      result = { ranges: query.ranges.map(range => geometry(
+        range.start === null ? textPoint(0) : resolvePosition(range.start),
+        range.end === null ? textPoint(text.length) : resolvePosition(range.end))) };
+    } else if (query.kind === 'range')
       result = rangeResult(resolvePosition(query.start), resolvePosition(query.end));
     else if (query.kind === 'word') {
       const { x, y } = query;

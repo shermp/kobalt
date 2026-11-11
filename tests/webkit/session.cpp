@@ -4,6 +4,7 @@
 #include "reading/reading_book.h"
 #include "reading/source_position.h"
 #include "reading/bookmark_session.h"
+#include "reading/highlight_session.h"
 #include "support/main_thread.h"
 #include <QGuiApplication>
 #include <QCryptographicHash>
@@ -178,6 +179,72 @@ int main(int argc, char **argv)
             completion.quit();
         });
         completion.exec();
+        session->annotationGeometry(
+                hits.first().start, hits.first().end, [&](AnnotationGeometry geometry) {
+                    require(!geometry.rectangles.isEmpty() && geometry.start.visible
+                                    && geometry.end.visible,
+                            "Source highlight exposes actual terminal handles");
+                    completion.quit();
+                });
+        completion.exec();
+        HighlightStore legacyHighlights(annotationPaths.annotations(), request.identity,
+                                        fingerprint, "Book", annotationPaths.database());
+        require(legacyHighlights.load(), "Prepare legacy highlight fixture");
+        const Highlight oldHighlight{ "legacy-id", "/legacy/start", "/legacy/end", "Legacy excerpt",
+                                      {},          oldMark.created };
+        legacyHighlights.setHighlights({ oldHighlight });
+        require(legacyHighlights.save(), "Save legacy highlight fixture");
+        auto highlights = std::make_unique<HighlightSession>(
+                *session,
+                [&] {
+                    return bookmarkLayoutKey(session->pages(), session->state(),
+                                             session->image().size());
+                },
+                annotationPaths.annotations(), request.identity, fingerprint, "Book",
+                annotationPaths.database());
+        require(highlights->sync() && highlights->highlights().isEmpty(),
+                "Source highlights start independently of CREngine");
+        QTimer highlightReady;
+        QObject::connect(&highlightReady, &QTimer::timeout, &completion, [&] {
+            if (!highlights->saving() && highlights->sync() && highlights->resolved())
+                completion.quit();
+        });
+        {
+            mainthread::Interaction reading([] { return true; });
+            highlights->save(hits.first().start, hits.first().end, {}, [&](bool ok) {
+                require(ok, "Source highlight save queued");
+                completion.quit();
+            });
+            completion.exec();
+            if (highlights->saving() || !highlights->sync()) {
+                highlightReady.start(10);
+                completion.exec();
+                highlightReady.stop();
+            }
+            require(highlights->highlights().size() == 1 && highlights->error().isEmpty(),
+                    "Background source highlight save completed");
+            highlights->save(hits.first().start, hits.first().end, {}, [&](bool ok) {
+                require(!ok && highlights->error() == "overlap"
+                                && highlights->highlights().size() == 1,
+                        "Overlapping source highlights are rejected without replacing the list");
+                completion.quit();
+            });
+            completion.exec();
+        }
+        require(legacyHighlights.load() && legacyHighlights.highlights().size() == 1
+                        && highlightJson(legacyHighlights.highlights().first())
+                                == highlightJson(oldHighlight),
+                "Source highlight save preserves the original CREngine list");
+        ReaderMarkupRequest markup;
+        markup.saved.append({ hits.first().start, hits.first().end, "gray", "shaded" });
+        session->setMarkup(markup);
+        session->captureMarkup([&](bool ok) {
+            require(ok && session->markup().saved.size() == 1
+                            && !session->markup().saved.first().rectangles.isEmpty(),
+                    "Production markup captures saved source highlight geometry");
+            completion.quit();
+        });
+        completion.exec();
         require(session->goTo(sourceposition::token(anchor)), "Return from search result");
         completion.exec();
         auto appearance = session->persistentState();
@@ -199,6 +266,29 @@ int main(int argc, char **argv)
         require(session->error().isEmpty() && session->page() == bookmarks->page(0),
                 "Source bookmark navigation uses the reflowed page");
         require(session->goTo(sourceposition::token(anchor)), "Return after source bookmark");
+        completion.exec();
+        require(session->goTo(hits.first().start), "Open source highlight after reflow");
+        completion.exec();
+        require(session->markup().saved.size() == 1
+                        && !session->markup().saved.first().rectangles.isEmpty(),
+                "Source highlight is painted on its reflowed page");
+        if (!highlights->sync()) {
+            highlightReady.start(10);
+            completion.exec();
+            highlightReady.stop();
+        }
+        require(highlights->page(0) == session->page(), "Source highlight list follows reflow");
+        highlights.reset();
+        HighlightStore coldHighlights(annotationPaths.annotations(), request.identity, fingerprint,
+                                      "Book", annotationPaths.database(),
+                                      AnnotationPositionFormat::SourceV1);
+        require(coldHighlights.load() && coldHighlights.highlights().size() == 1
+                        && coldHighlights.highlights().first().start == hits.first().start
+                        && coldHighlights.highlights().first().text.compare("Trevelyan",
+                                                                            Qt::CaseInsensitive)
+                                == 0,
+                "Cold store restores source highlight text and anchors");
+        require(session->goTo(sourceposition::token(anchor)), "Return after source highlight");
         completion.exec();
         bookmarks.reset();
         BookmarkStore coldMarks(annotationPaths.annotations(), request.identity, fingerprint,
@@ -261,6 +351,10 @@ int main(int argc, char **argv)
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },
                                                 { "source_bookmarks", true },
+                                                { "source_highlights", true },
+                                                { "highlight_overlap_guard", true },
+                                                { "highlight_reflow_and_reopen", true },
+                                                { "annotation_terminal_edges", true },
                                                 { "legacy_bookmarks_preserved", true },
                                                 { "search_preserves_frame", true },
                                                 { "saved_data_preserved", true } })

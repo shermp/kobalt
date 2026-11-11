@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSysInfo>
 #include <QUrl>
 #include <QtMath>
@@ -21,6 +22,16 @@
 
 namespace kobalt {
 namespace {
+QJsonObject queryPosition(const QJsonObject &position)
+{
+    QJsonObject result;
+    // href is bound by the proxy's spine, and preserved optional fields are
+    // irrelevant to DOM resolution. Keep bounded queries inside KWRP's limit.
+    for (const auto *key : { "version", "cfi", "offset", "before", "after" })
+        result[key] = position.value(key);
+    return result;
+}
+
 constexpr int maximumReply = 1024 * 1024;
 constexpr int maximumChapterPages = 100001; // M2 bounds GOTO to 100000.
 
@@ -287,6 +298,8 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     chapterStartsAtPage_.clear();
     position_ = {};
     summaries_.clear();
+    sourcePoints_.clear();
+    geometryPage_ = -1;
     bool supported = true;
     const auto positions = saved.value("backend_positions");
     if (!positions.isUndefined() && !positions.isObject())
@@ -462,6 +475,8 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
     const bool resized = size.isValid() && size != size_;
     if (resized) {
         summaries_.clear();
+        sourcePoints_.clear();
+        geometryPage_ = -1;
         if (size.width() < 100 || size.height() < 100 || size.width() > 2048
             || size.height() > 2048)
             return fail("WebKit viewport must be between 100 and 2048 pixels");
@@ -480,6 +495,8 @@ bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, Op
     if (appearance::same(appearance_, settings) && !resized)
         return true;
     summaries_.clear();
+    sourcePoints_.clear();
+    geometryPage_ = -1;
     appearance_ = settings;
     return style() && paginateBook() && resolveContents() && locate(restore);
 }
@@ -790,7 +807,9 @@ QJsonObject WebKitDocument::queryRange(const QString &start, const QString &end)
     if (index < 0 || sourceSpine(last) != index)
         return {};
     return query(index, index == spine() ? chapterPage() : 0,
-                 qt::object({ { "kind", "range" }, { "start", first }, { "end", last } }));
+                 qt::object({ { "kind", "range" },
+                              { "start", queryPosition(first) },
+                              { "end", queryPosition(last) } }));
 }
 
 TextRange WebKitDocument::textRange(const QString &start, const QString &end)
@@ -807,14 +826,290 @@ TextRange WebKitDocument::textRange(const QString &start, const QString &end)
 
 QVector<QRect> WebKitDocument::rangeRects(const QString &start, const QString &end, bool)
 {
-    if (sourceSpine(sourceposition::fromToken(start)) != spine()
-        || sourceSpine(sourceposition::fromToken(end)) != spine())
+    return annotationGeometry(start, end).rectangles;
+}
+
+SelectionEndpoint WebKitDocument::queryEndpoint(const QJsonObject &value) const
+{
+    SelectionEndpoint edge;
+    if (!value.value("visible").toBool())
+        return edge;
+    const auto point = [&](const char *key, QPoint *out) {
+        const auto object = value.value(key).toObject();
+        const double x = object.value("x").toDouble(-1), y = object.value("y").toDouble(-1);
+        if (!std::isfinite(x) || !std::isfinite(y) || x < 0 || y < 0 || x > size_.width()
+            || y > size_.height())
+            return false;
+        *out = QPoint(qRound(x), qRound(y));
+        return true;
+    };
+    const auto outward = value.value("outward").toObject();
+    const double x = outward.value("x").toDouble(2), y = outward.value("y").toDouble(2);
+    // The current helper supports horizontal pages. Reject malformed normals
+    // and spans instead of manufacturing a handle from clipped rectangles.
+    if (!point("first", &edge.first) || !point("last", &edge.last) || (x != -1 && x != 1) || y != 0
+        || edge.first.x() != edge.last.x() || edge.first.y() >= edge.last.y())
         return {};
-    const auto result = queryRange(start, end);
-    if (sourceToken(result.value("start").toObject(), spine()).isEmpty()
-        || sourceToken(result.value("end").toObject(), spine()).isEmpty())
+    edge.outward = QPoint(int(x), 0);
+    edge.visible = true;
+    return edge;
+}
+
+QVector<WebKitDocument::SourcePoint> WebKitDocument::resolvePositions(const QStringList &tokens)
+{
+    if (tokens.size() > 4002)
         return {};
-    return queryRectangles(result);
+    QMap<int, QStringList> pending;
+    QSet<QString> scheduled;
+    for (const auto &token : tokens) {
+        if (sourcePoints_.contains(token) || scheduled.contains(token))
+            continue;
+        const int index = sourceSpine(sourceposition::fromToken(token));
+        if (index >= 0 && token.size() <= 4096) {
+            pending[index].append(token);
+            scheduled.insert(token);
+        }
+    }
+    QMap<QString, SourcePoint> resolved;
+    for (auto group = pending.cbegin(); group != pending.cend(); ++group) {
+        int next = 0;
+        while (next < group.value().size()) {
+            if (current_ && !current_())
+                return {};
+            QJsonArray positions;
+            QStringList keys;
+            // Keep every encoded KWRP request inside its existing line bound.
+            while (next < group.value().size() && keys.size() < 64) {
+                const auto &key = group.value().at(next);
+                auto candidate = positions;
+                candidate.append(queryPosition(sourceposition::fromToken(key)));
+                if (QJsonDocument(candidate).toJson(QJsonDocument::Compact).size() > 6000)
+                    break;
+                positions = std::move(candidate);
+                keys.append(key);
+                ++next;
+            }
+            if (keys.isEmpty())
+                return {};
+            const auto reply =
+                    query(group.key(), 0,
+                          qt::object({ { "kind", "resolve" }, { "positions", positions } }));
+            const auto values = reply.value("positions").toArray();
+            if (!reply.value("positions").isArray() || values.size() != keys.size())
+                return {};
+            for (int i = 0; i < keys.size(); ++i) {
+                SourcePoint point;
+                if (!values[i].isNull()) {
+                    const auto value = values[i].toObject();
+                    const auto locator = value.value("locator").toObject();
+                    if (!value.value("selectable").isBool()
+                        || sourceToken(locator, group.key()).isEmpty())
+                        return {};
+                    if (value.value("selectable").toBool())
+                        point = { group.key(), locator.value("offset").toInt(), locator };
+                }
+                resolved.insert(keys[i], point);
+            }
+        }
+    }
+    QVector<SourcePoint> result;
+    for (const auto &key : tokens)
+        result.append(resolved.contains(key) ? resolved.value(key) : sourcePoints_.value(key));
+    // Bounded, layout-owned cache: repeated highlight paints and overlap checks
+    // reuse verified points without another chapter scan.
+    for (auto point = resolved.cbegin(); point != resolved.cend() && sourcePoints_.size() < 4002;
+         ++point)
+        sourcePoints_.insert(point.key(), point.value());
+    return result;
+}
+
+QVector<int>
+WebKitDocument::intersectingRanges(const QString &start, const QString &end,
+                                   const QVector<QPair<QString, QString>> &ranges) const
+{
+    if (ranges.isEmpty() || ranges.size() > 2000)
+        return {};
+    QStringList tokens{ start, end };
+    for (const auto &range : ranges)
+        tokens << range.first << range.second;
+    auto *self = const_cast<WebKitDocument *>(this);
+    const auto points = self->resolvePositions(tokens);
+    // A failed helper query must not authorize an edit across a saved passage.
+    if (points.size() != tokens.size())
+        return { 0 };
+    QVector<int> hits;
+    const auto &first = points[0], &last = points[1];
+    if (first.spine < 0 || last.spine < 0 || first.order() >= last.order())
+        return hits;
+    for (int i = 0; i < ranges.size(); ++i) {
+        const auto &a = points[2 + i * 2], &b = points[3 + i * 2];
+        if (a.spine >= 0 && b.spine >= 0 && a.order() < b.order() && a.order() < last.order()
+            && first.order() < b.order())
+            hits.append(i);
+    }
+    return hits;
+}
+
+QList<AnnotationGeometry>
+WebKitDocument::rangeGeometry(int selected, const QVector<QPair<QString, QString>> &ranges)
+{
+    if (selected < 0 || selected >= pages() || ranges.size() > 2001)
+        return {};
+    QList<AnnotationGeometry> result;
+    for (int i = 0; i < ranges.size(); ++i)
+        result.append(AnnotationGeometry{});
+    const auto empty = result;
+    if (ranges.isEmpty())
+        return result;
+    if (geometryPage_ != selected) {
+        geometryPage_ = selected;
+        geometryRectangles_ = 0;
+        geometries_.clear();
+    }
+    QStringList tokens;
+    for (const auto &range : ranges)
+        tokens << range.first << range.second;
+    const auto points = resolvePositions(tokens);
+    if (points.size() != tokens.size())
+        return result;
+    const int index =
+            int(std::upper_bound(offsets_.begin(), offsets_.end(), selected) - offsets_.begin())
+            - 1;
+    const int localPage = selected - offsets_.at(index);
+    const auto layout = selected == page()
+            ? frame_.value("layout").toObject()
+            : query(index, localPage, qt::object({ { "kind", "layout" } }));
+    const auto location = layout.value("location").toObject();
+    const int begin = location.value("start").toInt(-1), finish = location.value("end").toInt(-1);
+    if (begin < 0 || finish < begin)
+        return result;
+    QJsonArray batch;
+    QVector<int> indices;
+    QSet<int> truncated;
+    QSet<int> completed;
+    int remaining = 65536;
+    const auto flush = [&] {
+        if (indices.isEmpty())
+            return true;
+        const auto reply =
+                query(index, localPage, qt::object({ { "kind", "ranges" }, { "ranges", batch } }));
+        const auto rows = reply.value("ranges").toArray();
+        if (!reply.value("ranges").isArray() || rows.size() != indices.size())
+            return false;
+        for (int j = 0; j < rows.size(); ++j) {
+            completed.insert(indices[j]);
+            if (rows[j].isNull())
+                continue;
+            const auto row = rows[j].toObject();
+            if (sourceToken(row.value("start").toObject(), index).isEmpty()
+                || sourceToken(row.value("end").toObject(), index).isEmpty())
+                return false;
+            const int i = indices[j];
+            auto &geometry = result[i];
+            geometry.rectangles = queryRectangles(row);
+            if (geometry.rectangles.size() > remaining) {
+                truncated.insert(i);
+                geometry.rectangles.resize(remaining);
+            }
+            remaining -= geometry.rectangles.size();
+            const auto &a = points[i * 2], &b = points[i * 2 + 1];
+            const auto first = a.order() <= b.order() ? a : b;
+            const auto last = a.order() <= b.order() ? b : a;
+            if (first.spine == index)
+                geometry.start = queryEndpoint(row.value("startEdge").toObject());
+            if (last.spine == index)
+                geometry.end = queryEndpoint(row.value("endEdge").toObject());
+        }
+        batch = {};
+        indices.clear();
+        return true;
+    };
+    for (int i = 0; i < ranges.size(); ++i) {
+        if (current_ && !current_())
+            return {};
+        const auto cached = geometries_.constFind(ranges[i]);
+        if (cached != geometries_.cend()) {
+            result[i] = cached.value();
+            if (result[i].rectangles.size() > remaining) {
+                truncated.insert(i);
+                result[i].rectangles.resize(remaining);
+            }
+            remaining -= result[i].rectangles.size();
+            continue;
+        }
+        const auto &a = points[i * 2], &b = points[i * 2 + 1];
+        if (a.spine < 0 || b.spine < 0 || a.order() == b.order()) {
+            completed.insert(i);
+            continue;
+        }
+        const auto first = a.order() <= b.order() ? a : b;
+        const auto last = a.order() <= b.order() ? b : a;
+        if (last.order() <= qMakePair(index, begin) || first.order() >= qMakePair(index, finish)) {
+            completed.insert(i);
+            continue;
+        }
+        const auto range = qt::object(
+                { { "start", first.spine == index ? QJsonValue(first.locator) : QJsonValue() },
+                  { "end", last.spine == index ? QJsonValue(last.locator) : QJsonValue() } });
+        auto candidate = batch;
+        candidate.append(range);
+        if (candidate.size() > 4
+            || QJsonDocument(candidate).toJson(QJsonDocument::Compact).size() > 6000) {
+            if (!flush())
+                return empty;
+            candidate = {};
+            candidate.append(range);
+        }
+        if (QJsonDocument(candidate).toJson(QJsonDocument::Compact).size() > 6000)
+            continue;
+        batch = std::move(candidate);
+        indices.append(i);
+        if (remaining <= 0)
+            break;
+    }
+    if (!flush())
+        return empty;
+    // Markup first asks for visibility, then paints individual passages. Reuse
+    // that batch's geometry rather than repeating IPC for every visible mark.
+    for (int i = 0; i < ranges.size(); ++i) {
+        if (!completed.contains(i) || geometries_.contains(ranges[i]) || truncated.contains(i)
+            || geometries_.size() >= 2001
+            || geometryRectangles_ + result[i].rectangles.size() > 65536)
+            continue;
+        geometryRectangles_ += result[i].rectangles.size();
+        geometries_.insert(ranges[i], result[i]);
+    }
+    return result;
+}
+
+AnnotationGeometry WebKitDocument::annotationGeometry(const QString &start, const QString &end)
+{
+    return rangeGeometry(page(), { { start, end } }).value(0);
+}
+
+QVector<int> WebKitDocument::visibleRanges(const QVector<QPair<QString, QString>> &ranges) const
+{
+    const auto geometry = const_cast<WebKitDocument *>(this)->rangeGeometry(page(), ranges);
+    QVector<int> indices;
+    for (int i = 0; i < geometry.size(); ++i)
+        if (!geometry[i].rectangles.isEmpty())
+            indices.append(i);
+    return indices;
+}
+
+bool WebKitDocument::rangeVisible(const QString &start, const QString &end) const
+{
+    return !visibleRanges({ { start, end } }).isEmpty();
+}
+
+QVector<QVector<QRect>>
+WebKitDocument::pageRangeRects(int selected, const QVector<QPair<QString, QString>> &ranges)
+{
+    const auto geometry = rangeGeometry(selected, ranges);
+    QVector<QVector<QRect>> result;
+    for (const auto &range : geometry)
+        result.append(range.rectangles);
+    return result;
 }
 
 SearchBatch WebKitDocument::searchPage(const QString &text, int selected)

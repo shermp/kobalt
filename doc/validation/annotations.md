@@ -16,6 +16,13 @@ source anchors or metadata. The WebKit proxy and ARM session diagnostics add
 source bookmark lookup, reflow and asynchronous saves; the installed bookmark
 action is documented in [M4 source bookmarks](../webkit-wpe/m4-bookmarks.md).
 
+The [M4 range checks](../webkit-wpe/m4-ranges.md) add source overlap boundaries,
+cross-spine visibility, target-page geometry, bounded query reuse and reflow
+invalidation. ARM checks verify actual LTR/inline RTL terminal edges and remote
+endpoints. The production session verifies asynchronous source-highlight saves,
+overlap rejection, legacy preservation and markup after reflow and cold reload.
+These foundations do not establish pointer-editor parity.
+
 ## Export
 
 `model.highlight-store` builds the export archives, and `desktop.annotations` exports through the reader with both the Kobo default folder and the save picker. Headless Qt uses its widget file picker for these checks. Native Mac save sheets, Android document-provider writes and Nickel's import scan still need platform validation.

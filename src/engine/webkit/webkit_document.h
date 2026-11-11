@@ -1,5 +1,6 @@
 #pragma once
 #include "reading/document.h"
+#include <QList>
 #include <QProcess>
 
 namespace kobalt {
@@ -63,6 +64,12 @@ public:
     WordSelection wordAt(QPoint) override;
     TextRange textRange(const QString &, const QString &) override;
     QVector<QRect> rangeRects(const QString &, const QString &, bool = false) override;
+    AnnotationGeometry annotationGeometry(const QString &, const QString &) override;
+    QVector<int> intersectingRanges(const QString &, const QString &,
+                                    const QVector<QPair<QString, QString>> &) const override;
+    QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &) const override;
+    bool rangeVisible(const QString &, const QString &) const override;
+    QVector<QVector<QRect>> pageRangeRects(int, const QVector<QPair<QString, QString>> &) override;
     SearchBatch searchPage(const QString &, int) override;
     QVector<int> pagesOf(const QStringList &, bool = false, QVector<int> * = nullptr,
                          std::function<bool()> = {}) const override;
@@ -84,6 +91,20 @@ private:
     QVector<ChapterLink> chapters_;
     QMap<QString, bool> chapterStartsAtPage_;
     QMap<int, QJsonObject> summaries_;
+
+    struct SourcePoint
+    {
+        int spine = -1;
+        int offset = 0;
+        QJsonObject locator;
+
+        QPair<int, int> order() const { return { spine, offset }; }
+    };
+
+    QMap<QString, SourcePoint> sourcePoints_;
+    int geometryPage_ = -1;
+    int geometryRectangles_ = 0;
+    QMap<QPair<QString, QString>, AnnotationGeometry> geometries_;
     bool opened_ = false;
     bool helperMoved_ = false;
     std::function<bool()> current_;
@@ -97,6 +118,9 @@ private:
     int sourceSpine(const QJsonObject &) const;
     QString sourceToken(QJsonObject, int) const;
     QVector<QRect> queryRectangles(const QJsonObject &) const;
+    SelectionEndpoint queryEndpoint(const QJsonObject &) const;
+    QVector<SourcePoint> resolvePositions(const QStringList &);
+    QList<AnnotationGeometry> rangeGeometry(int, const QVector<QPair<QString, QString>> &);
     bool readFrame(const QString &, unsigned);
     bool style();
     bool paginateBook();
