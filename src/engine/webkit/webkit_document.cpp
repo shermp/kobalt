@@ -3,6 +3,7 @@
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
 #include "reading/source_position.h"
+#include "publication/publication.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -72,7 +73,14 @@ bool WebKitDocument::processExited()
     diagnostic("webkit-helper-exited",
                qt::object({ { "exit_code", process_ ? process_->exitCode() : -1 },
                             { "stderr", QString::fromUtf8(processError_) } }));
-    return fail("WebKit helper exited");
+    return rendererFailed("WebKit helper exited");
+}
+
+bool WebKitDocument::rendererFailed(QString error)
+{
+    close();
+    restartableFailure_ = true;
+    return fail(std::move(error));
 }
 
 bool WebKitDocument::start()
@@ -140,13 +148,19 @@ void WebKitDocument::close()
 bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObject *json)
 {
     mainthread::blocking("WebKit IPC");
+    if (current_ && !current_()) {
+        close();
+        return fail("WebKit request cancelled");
+    }
     if (!process_ || process_->state() == QProcess::NotRunning)
         return processExited();
     const unsigned id = ++request_;
     const QByteArray prefix = "KWRP/1 " + QByteArray::number(id) + ' ';
     const auto message = prefix + body + '\n';
-    if (message.size() > 8192 || process_->write(message) != message.size())
-        return fail("Cannot send WebKit request");
+    if (message.size() > 8192)
+        return fail("Oversized WebKit request");
+    if (process_->write(message) != message.size())
+        return rendererFailed("Cannot send WebKit request");
     QElapsedTimer deadline;
     deadline.start();
     while (deadline.elapsed() < 60000) {
@@ -176,11 +190,15 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObjec
                 readySeen_ = true;
                 continue;
             }
+            if (readySeen_ && line == "KWRP/1 0 ERROR web-process-terminated")
+                return rendererFailed("WebKit: web-process-terminated");
             if (!readySeen_ || !line.startsWith(prefix)) {
                 close();
                 return fail("Invalid WebKit reply identity/version");
             }
             const auto reply = line.mid(prefix.size());
+            if (reply == "ERROR web-process-terminated" || reply == "ERROR render-timeout")
+                return rendererFailed("WebKit: " + QString::fromUtf8(reply.mid(6)));
             if (reply.startsWith("ERROR "))
                 return fail("WebKit: " + QString::fromUtf8(reply.mid(6)));
             if (json) {
@@ -201,8 +219,11 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObjec
                 const bool valid = readFrame(QString::fromUtf8(reply.mid(8)), id);
                 const auto error = error_;
                 const bool released = command("RELEASE " + QByteArray::number(id));
-                if (!valid)
+                if (!valid) {
+                    close();
+                    restartableFailure_ = false;
                     error_ = error;
+                }
                 return valid && released;
             }
             if (reply != "OK RELEASED" && reply != "OK CLOSED")
@@ -212,8 +233,7 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObjec
         if (process_->state() == QProcess::NotRunning)
             return processExited();
     }
-    close();
-    return fail("WebKit request timed out");
+    return rendererFailed("WebKit request timed out");
 }
 
 bool WebKitDocument::readFrame(const QString &path, unsigned id)
@@ -293,13 +313,17 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
 {
     close();
     frame_ = {};
+    image_ = {};
     offsets_.clear();
+    linear_.clear();
     chapters_.clear();
     chapterStartsAtPage_.clear();
     position_ = {};
     summaries_.clear();
     sourcePoints_.clear();
     geometryPage_ = -1;
+    queriesBlocked_ = false;
+    restartableFailure_ = false;
     bool supported = true;
     const auto positions = saved.value("backend_positions");
     if (!positions.isUndefined() && !positions.isObject())
@@ -329,6 +353,8 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     if (progress)
         progress(OpeningStage::Pages, 0);
     const bool opened = supported && ensureOpen();
+    if (!opened)
+        close();
     if (error)
         *error = error_;
     if (!opened && result)
@@ -342,22 +368,107 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
 bool WebKitDocument::ensureOpen()
 {
     if (opened_)
-        return true;
+        return process_ && process_->state() != QProcess::NotRunning ? true : processExited();
     const auto restore = position_;
+    const auto previousFrame = frame_;
+    const auto previousImage = image_;
+    const int previousPage = page(), previousCount = chapterPages();
+    if (!previousFrame.isEmpty() && !checkPublication())
+        return false;
     if (!start()
         || !command("OPEN " + encoded(QFileInfo(path_).absoluteFilePath()) + ' '
                             + QByteArray::number(size_.width()) + ' '
                             + QByteArray::number(size_.height()),
                     true))
         return false;
-    opened_ = true;
     if (!style())
         return false;
     if (offsets_.isEmpty() && !paginateBook())
         return false;
     if (chapters_.isEmpty() && !resolveContents())
         return false;
-    return restore.isEmpty() || locate(restore);
+    if (!restore.isEmpty() && !locate(restore))
+        return false;
+    if (!previousFrame.isEmpty()) {
+        // Cached whole-book pagination is valid only for the same layout.
+        if (position_ != restore || page() != previousPage || chapterPages() != previousCount
+            || (!previousImage.isNull() && image_ != previousImage))
+            return fail("WebKit could not restore the displayed page");
+        if (!previousImage.isNull())
+            image_ = previousImage;
+    }
+    opened_ = true;
+    return true;
+}
+
+bool WebKitDocument::checkPublication()
+{
+    if (fingerprint_.isEmpty())
+        return true;
+    QFile file(path_);
+    Publication publication;
+    if (!file.open(QIODevice::ReadOnly) || !publication.inspect(file, nullptr)
+        || publication.fingerprint() != fingerprint_)
+        return fail("WebKit publication changed while reading");
+    return true;
+}
+
+bool WebKitDocument::runOperation(const std::function<bool()> &operation, bool changesLayout)
+{
+    // Commands can render temporary frames during OPEN, STYLE, RESIZE or
+    // restoration. Keep the last complete display until the operation succeeds.
+    const auto frame = frame_, position = position_, appearance = appearance_;
+    const auto image = image_;
+    const auto size = size_;
+    const auto offsets = offsets_;
+    const auto linear = linear_;
+    const auto chapters = chapters_;
+    const auto boundaries = chapterStartsAtPage_;
+    const auto run = [&] {
+        restartableFailure_ = false;
+        if (current_ && !current_()) {
+            close();
+            return fail("WebKit request cancelled");
+        }
+        if (!ensureOpen() || !operation())
+            return false;
+        if (current_ && !current_()) {
+            close();
+            return fail("WebKit request cancelled");
+        }
+        queriesBlocked_ = false;
+        error_.clear();
+        return true;
+    };
+    const auto rollback = [&] {
+        if (changesLayout || restartableFailure_ || !opened_)
+            close();
+        queriesBlocked_ = !opened_;
+        frame_ = frame;
+        position_ = position;
+        appearance_ = appearance;
+        image_ = image;
+        size_ = size;
+        offsets_ = offsets;
+        linear_ = linear;
+        chapters_ = chapters;
+        chapterStartsAtPage_ = boundaries;
+        helperMoved_ = opened_;
+    };
+    if (run())
+        return true;
+    const bool retry = restartableFailure_ && !frame.isEmpty() && (!current_ || current_());
+    rollback();
+    if (!retry)
+        return false;
+    diagnostic("webkit-recovery-start", { { "error", error_ } });
+    const bool completed = run();
+    if (!completed)
+        rollback();
+    diagnostic("webkit-recovery-end",
+               qt::object({ { "completed", completed }, { "page", page() }, { "error", error_ } }),
+               completed ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
+    return completed;
 }
 
 bool WebKitDocument::paginateBook()
@@ -469,7 +580,12 @@ bool WebKitDocument::style()
 
 bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress)
 {
-    if (!ensureOpen() || (helperMoved_ && !locate(position_)))
+    return runOperation([&] { return applyLayout(settings, size); }, true);
+}
+
+bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
+{
+    if (helperMoved_ && !locate(position_))
         return false;
     const auto restore = position_;
     const bool resized = size.isValid() && size != size_;
@@ -552,42 +668,43 @@ int WebKitDocument::turnTarget(int from, int delta) const
 
 bool WebKitDocument::go(int target)
 {
-    if (!ensureOpen())
-        return false;
-    if (target < 0 || target >= pages())
-        return false;
-    const int index =
-            int(std::upper_bound(offsets_.begin(), offsets_.end(), target) - offsets_.begin()) - 1;
-    const auto action = "GOTO " + QByteArray::number(index) + ' '
-            + QByteArray::number(target - offsets_.at(index));
-    const bool moved = target == page() || command(action, true);
-    if (!moved && (error_.endsWith("end-of-book") || error_.endsWith("start-of-book"))) {
-        error_.clear();
-        return false;
-    }
-    return moved;
+    return runOperation([&] {
+        if (target < 0 || target >= pages())
+            return false;
+        if (target == page())
+            return true;
+        const int index =
+                int(std::upper_bound(offsets_.begin(), offsets_.end(), target) - offsets_.begin())
+                - 1;
+        const bool moved = command("GOTO " + QByteArray::number(index) + ' '
+                                           + QByteArray::number(target - offsets_.at(index)),
+                                   true);
+        if (!moved && (error_.endsWith("end-of-book") || error_.endsWith("start-of-book")))
+            error_.clear();
+        return moved;
+    });
 }
 
 bool WebKitDocument::goTo(const QString &href)
 {
-    if (!ensureOpen())
-        return false;
-    if (href.startsWith("kobalt-source:"))
-        return locate(sourceposition::fromToken(href));
-    // Relative publication links belong to the displayed spine, even when a
-    // metadata/search query most recently loaded another document in the helper.
-    if (helperMoved_ && !locate(position_))
-        return false;
-    return command("LINK " + encoded(href), true);
+    return runOperation([&] {
+        if (href.startsWith("kobalt-source:"))
+            return locate(sourceposition::fromToken(href));
+        // Relative links belong to the displayed spine, even after a query
+        // that loaded a different content document in the helper.
+        if (helperMoved_ && !locate(position_))
+            return false;
+        return command("LINK " + encoded(href), true);
+    });
 }
 
 QImage WebKitDocument::image(int selected)
 {
-    if (!ensureOpen() || selected != page())
+    if (selected != page())
         return {};
-    if (image_.isNull())
-        command("GOTO " + QByteArray::number(spine()) + ' ' + QByteArray::number(chapterPage()),
-                true);
+    // Frame capture after a failed turn must retain the last page and error.
+    if (image_.isNull() && !queriesBlocked_)
+        runOperation([&] { return !image_.isNull() || locate(position_); });
     return image_;
 }
 
@@ -698,10 +815,26 @@ QString WebKitDocument::chapterTitle(const QString &position) const
 QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request,
                                   const QString &fragment)
 {
-    if (!ensureOpen() || index < 0
-        || index >= frame_.value("document").toObject().value("spine").toArray().size()
-        || selected < 0 || selected >= maximumChapterPages)
+    if (queriesBlocked_)
         return {};
+    const auto previousError = error_;
+    QJsonObject result;
+    if (runOperation([&] { return queryPage(index, selected, request, fragment, result); }))
+        return result;
+    if (current_ && !current_()) {
+        // Abandon a superseded query without blocking later hits on this page.
+        queriesBlocked_ = false;
+        error_ = previousError;
+    }
+    return {};
+}
+
+bool WebKitDocument::queryPage(int index, int selected, const QJsonObject &request,
+                               const QString &fragment, QJsonObject &result)
+{
+    if (index < 0 || index >= frame_.value("document").toObject().value("spine").toArray().size()
+        || selected < 0 || selected >= maximumChapterPages)
+        return false;
     QJsonObject reply;
     // Queries can load another spine without publishing a frame. Absolute page
     // and source navigation still work; appearance changes first restore the
@@ -711,7 +844,7 @@ QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &re
                          + QJsonDocument(request).toJson(QJsonDocument::Compact).toBase64()
                          + (fragment.isEmpty() ? QByteArray() : ' ' + encoded(fragment)),
                  false, &reply))
-        return {};
+        return false;
     const auto data = reply.value("data").toObject();
     QUrl expected(frame_.value("layout").toObject().value("source").toString());
     expected.setPath(
@@ -722,20 +855,21 @@ QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &re
                                : reply.value("page").toDouble(-1)
                             != data.value("result").toObject().value("page").toDouble(-2))
         || QUrl(data.value("source").toString()) != expected) {
-        fail("Invalid WebKit query source");
-        return {};
+        return fail("Invalid WebKit query source");
     }
     if (data.contains("error")) {
-        fail("WebKit query: " + data.value("error").toString());
-        return {};
+        return fail("WebKit query: " + data.value("error").toString());
     }
     error_.clear();
-    return data.value("result").toObject();
+    result = data.value("result").toObject();
+    return true;
 }
 
 QJsonObject WebKitDocument::layout(int index, const QString &fragment)
 {
-    const auto result = query(index, 0, qt::object({ { "kind", "layout" } }), fragment);
+    QJsonObject result;
+    if (!queryPage(index, 0, qt::object({ { "kind", "layout" } }), fragment, result))
+        return {};
     const double count = result.value("pages").toDouble(-1),
                  page = result.value("page").toDouble(-1);
     const auto viewport = result.value("viewport").toObject();

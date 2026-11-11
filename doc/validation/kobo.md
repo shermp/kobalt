@@ -2,6 +2,11 @@
 
 The optional standalone WebKit helper has separate [M1 runtime checks](../webkit-wpe/m1.md#verification) and [M3 production-session and installed-mod firmware checks](../webkit-wpe/m3.md#verification). These do not replace the application adapter checks below.
 
+The [M4 recovery diagnostic](../webkit-wpe/m4-recovery.md) interrupts the WebKit
+content process in a disposable installed reader. It verifies that the next
+tap completes the requested turn in the same Nickel boot and that the return
+page matches the original bitmap.
+
 Label `kobo`. Build `mac-tests`, then run `ctest --preset mac -L kobo` from `platforms/desktop/`. `ctest --preset mac -N -L kobo` lists its tests.
 
 These checks cover startup recovery, the native startup wait, Nickel Screensaver discovery, native dialogs above the reader, the Nickel book menu, session and font-scale adapters and Qt5 compatibility helpers. Sleep, USB and shutdown adapters are in [Sleep, USB and power](sleep.md).

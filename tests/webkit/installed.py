@@ -2,6 +2,7 @@
 import json
 from pathlib import Path, PurePosixPath
 import shutil
+import struct
 import subprocess
 import zipfile
 
@@ -73,7 +74,7 @@ def prepare(root, device, package):
 
 
 def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False,
-          annotations_only=False):
+          annotations_only=False, recovery_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -420,12 +421,66 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         close_marks()
         transcript.append({'action': 'adjust', 'backend': 'webkit', 'excerpt': 'Type'})
 
+    def recover_renderer(original):
+        container = 'virtualnickel-' + device.name
+        boot = device.status().get('boot_id')
+        assert boot
+        def web_processes():
+            rows = subprocess.check_output(['podman', 'top', container, 'pid,comm'],
+                                           text=True).splitlines()[1:]
+            return [int(pid) for pid, name in (row.split(maxsplit=1) for row in rows)
+                    if name == 'WPEWebProcess']
+
+        processes = web_processes()
+        assert len(processes) == 1, processes
+        pid = processes[0]
+        before = cursor()
+        # Inject a failure only into the content process of this disposable
+        # reader. Leave Nickel and the supervisor to handle it normally.
+        subprocess.run(['podman', 'exec', container, 'sh', '-ec',
+                        'test "$(cat "/proc/$1/comm")" = WPEWebProcess && kill -TERM "$1"',
+                        'sh', str(pid)], check=True, timeout=15)
+        device.wait_until(lambda: pid not in web_processes(), timeout=15,
+                          description='owned WebKit content process exited')
+        forward = turn()
+        assert forward['page'] == original['next_page'], (forward, original['next_page'])
+        recovered = event('webkit-recovery-end', before)
+        assert recovered['completed'] and recovered['page'] == forward['page'], recovered
+        assert len([entry for entry in events() if entry.get('event') == 'webkit-recovery-start'
+                    and entry.get('monotonic_ms', 0) > before]) == 1
+        assert pid not in web_processes() and len(web_processes()) == 1
+        capture('webkit-recovered-turn')
+        returned = turn(-1)
+        assert returned['page'] == original['page'], (returned, original['page'])
+        capture('webkit-recovered-return')
+        def bitmap(name):
+            frame = (results / (name + '.bmp')).read_bytes()
+            size = struct.unpack_from('<I', frame, 2)[0]
+            assert frame[:2] == b'BM' and 54 <= size <= len(frame), name
+            # The observer appends capture metadata after the declared BMP.
+            return frame[:size]
+        assert bitmap('webkit-recovered-return') == bitmap('webkit-open')
+        assert device.status().get('boot_id') == boot
+        transcript.append({'action': 'renderer-recovery', 'failed_content_pid': pid,
+                           'result': recovered, 'return_frame_matches': True})
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if recovery_only:
+            recover_renderer(first)
+            close_book()
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'renderer_recovery': True,
+                      'same_nickel_boot': True, 'return_frame_matches': True, 'helper_cleanup': True,
+                      'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_RECOVERY_VERIFIED', flush=True)
+            return
         if annotations_only:
             annotate('webkit')
             adjust_source_annotation()

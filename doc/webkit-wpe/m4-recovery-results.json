@@ -1,0 +1,79 @@
+{
+  "milestone": "M4 renderer recovery",
+  "base": "7579e6d",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "062454fccf3519f007fff09892c37bb575c97ec9717feab3a72dd93c3815ab02",
+  "checks": {
+    "native_focused": {
+      "status": "passed on the final application source",
+      "command": "ctest --preset linux -R '^(engine.webkit-document|model.main-thread|session.reader-session|session.bookmark-session|session.highlight-session)$' --output-on-failure",
+      "log": "build/m4-recovery-native-final.log",
+      "scope": [
+        "retry after loss between a page reply and release acknowledgement",
+        "cross-spine query recovery with the same immutable frame and intra-page source anchor",
+        "complete reflow replay and previous-layout rollback on repeated failure",
+        "bounded retry and recovery on a later explicit navigation",
+        "invalid reply, cancelled access and changed publication rejection",
+        "same-page selection after background query cancellation"
+      ]
+    },
+    "native_lifecycle": {
+      "status": "passed. Reused after the final cancellation-only correction covered by the focused proxy test",
+      "command": "ctest --preset linux -L lifecycle --output-on-failure",
+      "log": "build/m4-recovery-lifecycle.log"
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both prepared Kobo SDK checks passed",
+      "log": "build/m4-recovery-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-recovery-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-recovery-qt6.log",
+      "package_log": "build/m4-recovery-package.log",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "ae04be49cba709e0d549bcb7e3b2b0b19222c8bd4a8a902e142c1edcf83dbd80"
+    },
+    "helper": {
+      "status": "reused the verified pointer selection bundle",
+      "bundle_key": "9cbac42c9bf895fe998d034cdf824f647fe30e18a2333e92717039b79ceab603",
+      "archive_sha256": "38480046cac945527922fecdf0e162f31cab525c43708930501cd0f82c2617ac"
+    },
+    "installed": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /path/to/VirtualNickel --installed-only --installed-recovery --allow-unsandboxed-experiment",
+      "log": "build/m4-recovery-installed.log",
+      "results": "build/webkit/firmware-43ee74730f/installed-results/installed.json",
+      "scope": [
+        "owned WPE content process termination while Nickel stays active",
+        "one automatic recovery and the intended page after the original tap",
+        "identical return bitmap and same Nickel boot",
+        "supervisor cleanup and no main-thread-blocked events"
+      ],
+      "observed_recovery_ms": 3099,
+      "peak_cgroup_mib": 662.1,
+      "memory_limit_mib": 768
+    },
+    "arm_session": {
+      "status": "passed on the final application source",
+      "log": "build/m4-recovery-session.log",
+      "results": "build/webkit/firmware-c56f5793ff/session-results/session.json",
+      "scope": [
+        "normal suspend and helper reopen",
+        "source navigation, reflow and checkpoints",
+        "search, bookmarks and highlight provenance"
+      ]
+    }
+  },
+  "limits": [
+    "The earlier full-emulator stop during same-boot opening remains unresolved",
+    "Recovery accepts the same inspected publication and the same displayed layout",
+    "Retries are limited to recoverable renderer and transport failures",
+    "Physical-device timing, power and sandbox behavior remain unvalidated",
+    "The complete M4 feature parity gate remains open"
+  ]
+}

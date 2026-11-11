@@ -20,6 +20,8 @@ public:
 
     void setCurrent(std::function<bool()> current) override { current_ = std::move(current); }
 
+    void setFingerprint(QByteArray fingerprint) { fingerprint_ = std::move(fingerprint); }
+
     void close() override;
     bool openResources(std::shared_ptr<ResourceCache>, const QMap<QString, qint64> &, QSize,
                        const QJsonObject &, QString *, OpeningProgress = {},
@@ -87,6 +89,7 @@ private:
     QString path_, error_, runtime_;
     std::unique_ptr<QProcess> process_;
     QByteArray input_, ready_, processError_;
+    QByteArray fingerprint_;
     bool readySeen_ = false;
     unsigned request_ = 0;
     QSize size_;
@@ -113,11 +116,17 @@ private:
     QMap<QPair<QString, QString>, AnnotationGeometry> geometries_;
     bool opened_ = false;
     bool helperMoved_ = false;
+    bool restartableFailure_ = false;
+    bool queriesBlocked_ = false;
     std::function<bool()> current_;
     bool start();
     bool ensureOpen();
+    bool runOperation(const std::function<bool()> &, bool changesLayout = false);
+    bool applyLayout(const QJsonObject &, QSize);
+    bool checkPublication();
     bool command(const QByteArray &, bool page = false, QJsonObject *json = nullptr);
     QJsonObject query(int, int, const QJsonObject &, const QString &fragment = {});
+    bool queryPage(int, int, const QJsonObject &, const QString &, QJsonObject &);
     QJsonObject layout(int, const QString &fragment = {});
     QJsonObject summary(int);
     QJsonObject queryRange(const QString &, const QString &);
@@ -135,6 +144,7 @@ private:
     bool resolveContents();
     ChapterSelection selectContents(const QVector<ChapterLink> &, const QJsonObject &) const;
     bool fail(QString);
+    bool rendererFailed(QString);
     void collectProcessError();
     bool processExited();
     int spine() const;

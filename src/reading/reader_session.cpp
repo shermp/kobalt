@@ -716,6 +716,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         const auto modelStart = timer.elapsed();
                         report(OpeningStage::Text, 0);
                         const bool attempted = outcome.ready();
+                        if (auto *webkit = dynamic_cast<WebKitDocument *>(engine.get()))
+                            webkit->setFingerprint(digest);
                         bool opened = attempted
                                 && engine->openResources(resources, publication.sizes(), size,
                                                          saved, nullptr, report, &outcome,

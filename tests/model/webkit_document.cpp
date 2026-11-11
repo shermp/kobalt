@@ -2,6 +2,7 @@
 #include "reader_inputs.h"
 #include "engine/webkit/webkit_document.h"
 #include "publication/local_resources.h"
+#include "publication/publication.h"
 #include "reading/reader_session.h"
 #include "reading/reading_book.h"
 #include "reading/source_position.h"
@@ -43,6 +44,7 @@ int helper()
               << '\n'
               << std::flush;
     const auto pidPath = qgetenv("KOBALT_TEST_WEBKIT_PID_FILE");
+    const auto faultPath = qgetenv("KOBALT_TEST_WEBKIT_FAULT_FILE");
     if (!pidPath.isEmpty()) {
         QFile pidFile(QString::fromLocal8Bit(pidPath));
         require(pidFile.open(QIODevice::WriteOnly), "helper PID file");
@@ -70,6 +72,22 @@ int helper()
         std::istringstream request(line);
         request >> version >> id >> action;
         const auto prefix = "KWRP/1 " + std::to_string(id) + " ";
+        if (!faultPath.isEmpty()) {
+            QFile fault(QString::fromLocal8Bit(faultPath));
+            if (fault.open(QIODevice::ReadOnly)) {
+                const auto parts = fault.readAll().simplified().split(' ');
+                fault.close();
+                if (parts.size() >= 2 && parts.first() == QByteArray::fromStdString(action)) {
+                    if (!parts.contains("repeat"))
+                        require(fault.remove(), "Consume a one-shot fault");
+                    if (parts[1] == "terminated")
+                        std::cout << prefix << "ERROR web-process-terminated\n" << std::flush;
+                    if (parts[1] == "invalid")
+                        std::cout << "KWRP/1 999999 OK PAGE invalid\n" << std::flush;
+                    return 23;
+                }
+            }
+        }
         if (action == "RELEASE") {
             unsigned frame;
             request >> frame;
@@ -626,6 +644,122 @@ int main(int argc, char **argv)
     QTemporaryDir helperState;
     const auto pidFilePath = helperState.filePath("helper.pid");
     qputenv("KOBALT_TEST_WEBKIT_PID_FILE", QFile::encodeName(pidFilePath));
+    const auto faultFilePath = helperState.filePath("fault");
+    qputenv("KOBALT_TEST_WEBKIT_FAULT_FILE", QFile::encodeName(faultFilePath));
+    const auto fault = [&](const QByteArray &request) {
+        QFile file(faultFilePath);
+        require(file.open(QIODevice::WriteOnly) && file.write(request) == request.size(),
+                "Arm renderer failure");
+    };
+    const auto helperPid = [&] {
+        QFile file(pidFilePath);
+        require(file.open(QIODevice::ReadOnly), "Read owned helper PID");
+        return file.readAll().toInt();
+    };
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Recovery fixture");
+        int retries = 0;
+        bool current = true, cancelRetry = false;
+        document.setCurrent([&] { return current; });
+        setDiagnosticObserver([&](const QJsonObject &entry) {
+            if (entry.value("event").toString() == "webkit-recovery-start") {
+                ++retries;
+                if (cancelRetry)
+                    current = false;
+            }
+        });
+        const int originalPid = helperPid();
+        fault("RELEASE exit");
+        require(document.go(1) && document.page() == 1 && document.resourceError().isEmpty()
+                        && retries == 1 && helperPid() != originalPid,
+                "Death after a page reply restarts once and retries the same turn");
+        const auto intraPage = document.wordAt({ 30, 30 }).start;
+        require(!intraPage.isEmpty() && document.goTo(intraPage) && document.page() == 1,
+                "Resume from a logical anchor inside the displayed page");
+        const auto displayed = document.image(1);
+        const auto state = document.state();
+        fault("QUERY terminated");
+        require(document.searchPage("source", 5).hits.size() == 1 && retries == 2
+                        && document.state() == state
+                        && document.image(1).cacheKey() == displayed.cacheKey(),
+                "A query interrupted in another spine recovers without replacing the frame");
+        fault("GOTO exit repeat");
+        require(!document.go(3) && retries == 3 && document.page() == 1 && document.state() == state
+                        && document.image(1).cacheKey() == displayed.cacheKey(),
+                "A second crash preserves the displayed page and stops the retry");
+        const auto failed = document.resourceError();
+        require(!failed.isEmpty() && document.wordAt({ 30, 30 }).text.isEmpty() && retries == 3
+                        && document.resourceError() == failed,
+                "Frame capture cannot start another recovery or hide the error");
+        require(QFile::remove(faultFilePath) && document.go(3) && document.resourceError().isEmpty()
+                        && retries == 3,
+                "A later navigation can restart after a bounded failure");
+        const auto beforeLayout = document.state();
+        const auto beforeImage = document.image(3);
+        const int beforePages = document.pages();
+        fault("STYLE exit repeat");
+        require(!document.applyAppearance({ { "font_pixels", 32 } }, { 800, 600 })
+                        && document.state() == beforeLayout
+                        && document.viewport() == QSize(600, 800) && document.pages() == beforePages
+                        && document.image(3).cacheKey() == beforeImage.cacheKey() && retries == 4,
+                "A failed reflow restores the prior viewport, pagination, pixels and anchor");
+        require(QFile::remove(faultFilePath) && document.go(3), "Restore after failed reflow");
+        fault("GOTO invalid");
+        require(!document.go(4) && retries == 4 && document.page() == 3,
+                "Invalid protocol replies are rejected without retry");
+        require(document.go(3), "Restore after protocol rejection");
+        const auto anchor = document.state().value("source_position");
+        fault("RESIZE exit");
+        require(document.applyAppearance({ { "font_pixels", 32 } }, { 800, 600 })
+                        && document.viewport() == QSize(800, 600) && document.page() == 6
+                        && document.state().value("source_position") == anchor && retries == 5,
+                "A recoverable resize replays the complete reflow at its source anchor");
+        const int beforeCancellation = helperPid();
+        fault("GOTO exit");
+        cancelRetry = true;
+        require(!document.go(7) && retries == 6 && document.page() == 6
+                        && helperPid() == beforeCancellation
+                        && document.resourceError().contains("cancelled"),
+                "Revocation before recovery prevents a new helper from opening");
+        setDiagnosticObserver({});
+        current = true;
+        require(document.go(6), "Open a fresh helper with active access");
+        const auto retained = document.image(6);
+        current = false;
+        require(document.searchPage("source", 0).hits.isEmpty()
+                        && document.resourceError().isEmpty(),
+                "An abandoned background query does not become a reader error");
+        current = true;
+        require(!document.wordAt({ 30, 30 }).text.isEmpty()
+                        && document.image(6).cacheKey() == retained.cacheKey(),
+                "A later selection can reopen the helper on the same page");
+    }
+    {
+        const auto path = helperState.filePath("replaced.epub");
+        require(QFile::copy(QStringLiteral(KOBALT_TEST_BOOK), path), "Own the reopen fixture");
+        QFile original(path);
+        Publication publication;
+        require(original.open(QIODevice::ReadOnly) && publication.inspect(original, nullptr),
+                "Inspect the verified publication");
+        original.close();
+        WebKitDocument document({}, path);
+        document.setFingerprint(publication.fingerprint());
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr),
+                "Open verified publication");
+        const auto anchor = document.state().value("source_position");
+        const int pid = helperPid();
+        document.close();
+        require(original.open(QIODevice::WriteOnly | QIODevice::Append)
+                        && original.write("changed") == 7,
+                "Replace publication content while the renderer is closed");
+        original.close();
+        require(!document.go(1) && document.state().value("source_position") == anchor
+                        && document.resourceError().contains("publication changed")
+                        && helperPid() == pid,
+                "A restart does not reopen changed content or publish a new anchor");
+    }
+    qunsetenv("KOBALT_TEST_WEBKIT_FAULT_FILE");
     std::unique_ptr<ReaderSession> shutdownOwner;
     // A real ReaderSession must keep processing GUI events, discard stale work
     // and fall back through the unchanged CREngine opening path.

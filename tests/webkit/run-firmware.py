@@ -28,11 +28,13 @@ installed_actions = parser.add_mutually_exclusive_group()
 installed_actions.add_argument('--installed-search', action='store_true')
 installed_actions.add_argument('--installed-bookmarks', action='store_true')
 installed_actions.add_argument('--installed-annotations', action='store_true')
+installed_actions.add_argument('--installed-recovery', action='store_true')
 parser.add_argument('--installed-search-rotation', action='store_true')
 args = parser.parse_args()
 if args.installed_search_rotation and not args.installed_search:
     parser.error('--installed-search-rotation requires --installed-search')
-if any((args.installed_search, args.installed_bookmarks, args.installed_annotations)) and not args.installed_only:
+if any((args.installed_search, args.installed_bookmarks, args.installed_annotations,
+        args.installed_recovery)) and not args.installed_only:
     parser.error('Installed reader actions require --installed-only')
 args.epub_tests |= args.epub_only or args.epub_corpus
 if args.epub_tests and (args.platform_probe_only or args.font_resources_only or args.session_only or args.installed_only):
@@ -121,7 +123,8 @@ try:
         installed.check(device, output, search_only=args.installed_search,
                         rotate_after_search=args.installed_search_rotation,
                         bookmarks_only=args.installed_bookmarks,
-                        annotations_only=args.installed_annotations)
+                        annotations_only=args.installed_annotations,
+                        recovery_only=args.installed_recovery)
         sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(
