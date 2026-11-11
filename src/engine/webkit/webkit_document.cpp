@@ -145,7 +145,7 @@ void WebKitDocument::close()
     input_.clear();
 }
 
-bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObject *json)
+bool WebKitDocument::command(const QByteArray &body, RenderedFrame *pageResult, QJsonObject *json)
 {
     mainthread::blocking("WebKit IPC");
     if (current_ && !current_()) {
@@ -216,15 +216,20 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObjec
             if (pageResult) {
                 if (!reply.startsWith("OK PAGE "))
                     return fail("Invalid WebKit page reply");
-                const bool valid = readFrame(QString::fromUtf8(reply.mid(8)), id);
+                RenderedFrame decoded;
+                const bool valid = readFrame(QString::fromUtf8(reply.mid(8)), id, decoded);
                 const auto error = error_;
                 const bool released = command("RELEASE " + QByteArray::number(id));
+                if (valid && released) {
+                    *pageResult = std::move(decoded);
+                    return true;
+                }
+                close();
                 if (!valid) {
-                    close();
                     restartableFailure_ = false;
                     error_ = error;
                 }
-                return valid && released;
+                return false;
             }
             if (reply != "OK RELEASED" && reply != "OK CLOSED")
                 return fail("Invalid WebKit acknowledgement");
@@ -236,7 +241,7 @@ bool WebKitDocument::command(const QByteArray &body, bool pageResult, QJsonObjec
     return rendererFailed("WebKit request timed out");
 }
 
-bool WebKitDocument::readFrame(const QString &path, unsigned id)
+bool WebKitDocument::readFrame(const QString &path, unsigned id, RenderedFrame &result)
 {
     // The supervisor creates a private tmpfs directory. Refuse arbitrary paths,
     // symlinks, devices and dimensions before mapping any helper-owned bytes.
@@ -298,9 +303,20 @@ bool WebKitDocument::readFrame(const QString &path, unsigned id)
                                                         + '!'))
         return fail("Invalid WebKit source position");
     runtime_ = directory;
-    frame_ = frame;
-    image_ = std::move(image);
-    position_ = std::move(position);
+    result.metadata = frame;
+    result.image = std::move(image);
+    result.position = std::move(position);
+    return true;
+}
+
+bool WebKitDocument::render(const QByteArray &request)
+{
+    RenderedFrame result;
+    if (!command(request, &result))
+        return false;
+    frame_ = std::move(result.metadata);
+    image_ = std::move(result.image);
+    position_ = std::move(result.position);
     helperMoved_ = false;
     error_.clear();
     return true;
@@ -376,10 +392,8 @@ bool WebKitDocument::ensureOpen()
     if (!previousFrame.isEmpty() && !checkPublication())
         return false;
     if (!start()
-        || !command("OPEN " + encoded(QFileInfo(path_).absoluteFilePath()) + ' '
-                            + QByteArray::number(size_.width()) + ' '
-                            + QByteArray::number(size_.height()),
-                    true))
+        || !render("OPEN " + encoded(QFileInfo(path_).absoluteFilePath()) + ' '
+                   + QByteArray::number(size_.width()) + ' ' + QByteArray::number(size_.height())))
         return false;
     if (!style())
         return false;
@@ -495,9 +509,8 @@ bool WebKitDocument::locate(const QJsonObject &position)
     const int index = sourceSpine(position);
     if (index < 0)
         return fail("Invalid source position");
-    return command("LOCATE " + QByteArray::number(index) + ' '
-                           + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64(),
-                   true);
+    return render("LOCATE " + QByteArray::number(index) + ' '
+                  + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64());
 }
 
 int WebKitDocument::sourceSpine(const QJsonObject &position) const
@@ -563,19 +576,16 @@ bool WebKitDocument::style()
     const QByteArray generic = family == "serif" || family == "sans-serif" || family == "monospace"
             ? family.toLatin1()
             : QByteArray("publisher");
-    return command(
+    return render(
             "STYLE "
-                    + QByteArray::number(qBound(
-                            8, appearance_.value("font_pixels").toInt(defaultFontPixels()), 96))
-                    + ' '
-                    + QByteArray::number(qBound(
-                            100, appearance_.value("line_spacing").toInt(defaultLineSpacing), 300))
-                    + ' ' + QByteArray::number(margin) + " 0 "
-                    + QByteArray::number(
-                            qBound(0, appearance_.value("word_spacing").toInt(100) - 100, 100))
-                    + ' ' + generic + ' '
-                    + (appearance_.value("dark_mode").toBool() ? "dark" : "light"),
-            true);
+            + QByteArray::number(
+                    qBound(8, appearance_.value("font_pixels").toInt(defaultFontPixels()), 96))
+            + ' '
+            + QByteArray::number(
+                    qBound(100, appearance_.value("line_spacing").toInt(defaultLineSpacing), 300))
+            + ' ' + QByteArray::number(margin) + " 0 "
+            + QByteArray::number(qBound(0, appearance_.value("word_spacing").toInt(100) - 100, 100))
+            + ' ' + generic + ' ' + (appearance_.value("dark_mode").toBool() ? "dark" : "light"));
 }
 
 bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress)
@@ -603,9 +613,8 @@ bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
                 return false;
         }
         size_ = size;
-        if (!command("RESIZE " + QByteArray::number(size.width()) + ' '
-                             + QByteArray::number(size.height()),
-                     true))
+        if (!render("RESIZE " + QByteArray::number(size.width()) + ' '
+                    + QByteArray::number(size.height())))
             return false;
     }
     if (appearance::same(appearance_, settings) && !resized)
@@ -666,6 +675,14 @@ int WebKitDocument::turnTarget(int from, int delta) const
     return target;
 }
 
+QByteArray WebKitDocument::pageCommand(int target) const
+{
+    const int index =
+            int(std::upper_bound(offsets_.begin(), offsets_.end(), target) - offsets_.begin()) - 1;
+    return "GOTO " + QByteArray::number(index) + ' '
+            + QByteArray::number(target - offsets_.at(index));
+}
+
 bool WebKitDocument::go(int target)
 {
     return runOperation([&] {
@@ -673,12 +690,7 @@ bool WebKitDocument::go(int target)
             return false;
         if (target == page())
             return true;
-        const int index =
-                int(std::upper_bound(offsets_.begin(), offsets_.end(), target) - offsets_.begin())
-                - 1;
-        const bool moved = command("GOTO " + QByteArray::number(index) + ' '
-                                           + QByteArray::number(target - offsets_.at(index)),
-                                   true);
+        const bool moved = render(pageCommand(target));
         if (!moved && (error_.endsWith("end-of-book") || error_.endsWith("start-of-book")))
             error_.clear();
         return moved;
@@ -694,18 +706,39 @@ bool WebKitDocument::goTo(const QString &href)
         // that loaded a different content document in the helper.
         if (helperMoved_ && !locate(position_))
             return false;
-        return command("LINK " + encoded(href), true);
+        return render("LINK " + encoded(href));
     });
 }
 
 QImage WebKitDocument::image(int selected)
 {
-    if (selected != page())
+    if (selected == page()) {
+        // Frame capture after a failed turn must retain the last page and error.
+        if (image_.isNull() && !queriesBlocked_)
+            runOperation([&] { return !image_.isNull() || locate(position_); });
+        return image_;
+    }
+    if (queriesBlocked_ || selected < 0 || selected >= pages() || offsets_.size() < 2)
         return {};
-    // Frame capture after a failed turn must retain the last page and error.
-    if (image_.isNull() && !queriesBlocked_)
-        runOperation([&] { return !image_.isNull() || locate(position_); });
-    return image_;
+    const auto previousError = error_;
+    RenderedFrame preview;
+    const bool ready = runOperation([&] {
+        helperMoved_ = true;
+        if (!command(pageCommand(selected), &preview))
+            return false;
+        const int index = preview.metadata.value("spine").toInt(-1);
+        const auto layout = preview.metadata.value("layout").toObject();
+        if (index < 0 || index + 1 >= offsets_.size() || selected < offsets_.at(index)
+            || selected >= offsets_.at(index + 1)
+            || layout.value("page").toInt(-1) != selected - offsets_.at(index)
+            || layout.value("pages").toInt() != offsets_.at(index + 1) - offsets_.at(index))
+            return fail("WebKit preview does not match the requested page");
+        return true;
+    });
+    // The scrubber owns the scaled thumbnails. A failed preview does not
+    // replace the reading frame or its error with a thumbnail result.
+    error_ = previousError;
+    return ready ? std::move(preview.image) : QImage();
 }
 
 void WebKitDocument::releaseImages()
@@ -843,7 +876,7 @@ bool WebKitDocument::queryPage(int index, int selected, const QJsonObject &reque
     if (!command("QUERY " + QByteArray::number(index) + ' ' + QByteArray::number(selected) + ' '
                          + QJsonDocument(request).toJson(QJsonDocument::Compact).toBase64()
                          + (fragment.isEmpty() ? QByteArray() : ' ' + encoded(fragment)),
-                 false, &reply))
+                 nullptr, &reply))
         return false;
     const auto data = reply.value("data").toObject();
     QUrl expected(frame_.value("layout").toObject().value("source").toString());

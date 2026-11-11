@@ -51,7 +51,7 @@ os.execv(EXECUTABLE, [EXECUTABLE, *arguments])
     return str(command)
 
 
-def prepare(root, device, package):
+def prepare(root, device, package, preview_menu=False):
     with zipfile.ZipFile(package) as archive:
         for member in archive.infolist():
             name = PurePosixPath(member.filename)
@@ -67,14 +67,16 @@ def prepare(root, device, package):
     profile.mkdir(parents=True, exist_ok=True)
     (profile / 'diagnostics').mkdir(exist_ok=True)
     (profile / 'config.json').write_text(json.dumps({'enabled': True}))
-    (profile / 'reader-settings.json').write_text(json.dumps({
-        'schema': 1, 'sleep_screen': 'page', 'sleep_tile': 'none', 'auto_rotate': True}))
+    settings = {'schema': 1, 'sleep_screen': 'page', 'sleep_tile': 'none', 'auto_rotate': True}
+    if preview_menu:
+        settings['default_menu_view'] = 'none'
+    (profile / 'reader-settings.json').write_text(json.dumps(settings))
     (profile / 'diagnostics-enabled').touch()
     (profile / 'live-state').touch()
 
 
 def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False,
-          annotations_only=False, recovery_only=False):
+          annotations_only=False, recovery_only=False, previews_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -179,8 +181,9 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         capture(backend + '-contents')
         before = cursor()
         device.tap_widget(name='rrChapter0')
-        event('frame-ready', before)
+        arrived = event('frame-ready', before)
         device.wait_widget(name='rrPage')
+        return arrived
 
     def search(backend):
         nonlocal current_page
@@ -464,12 +467,96 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'renderer-recovery', 'failed_content_pid': pid,
                            'result': recovered, 'return_frame_matches': True})
 
+    def previews(backend, original):
+        nonlocal current_page
+        origin = original['page']
+        assert origin == 1, 'The title page follows the cover in the pinned fixture'
+        paper = device.wait_widget(name='rrPage')
+        center = {'x': paper['x'] + paper['width'] // 2, 'y': paper['y'] + paper['height'] // 2}
+
+        def previews_since(since):
+            return [entry for entry in events() if entry.get('event') == 'page-preview-ready'
+                    and entry.get('monotonic_ms', 0) > since]
+
+        def wait_previews(since, pages):
+            device.wait_until(lambda: pages <= {entry['page'] for entry in previews_since(since)},
+                              timeout=60, description=backend + ' preview strip')
+
+        call('tap', **center)
+        device.wait_widget(name='rrNavSeek')
+        capture(backend + '-preview-entry')
+        before = cursor()
+        device.tap_widget(name='rrNavSeek')
+        device.wait_widget(name='rrBookPosition')
+        wait_previews(before, {origin - 1, origin, origin + 1})
+        capture(backend + '-preview-strip')
+        assert not any(entry.get('event') == 'frame-ready' and entry.get('monotonic_ms', 0) > before
+                       for entry in events()), 'Opening Navigate must not move the reading page'
+
+        before = cursor()
+        device.tap_widget(name='rrPreviewPreviousPage')
+        device.wait_until(lambda: any(w['name'] == 'rrPreviewChapterCaption'
+                          and w.get('text', '').startswith('PAGE 1 OF ') for w in device.ui()['widgets']),
+                          description='the cover becomes the middle thumbnail')
+        capture(backend + '-preview-cover')
+        assert not previews_since(before), 'The cover and its neighbor should already be prepared'
+        assert not any(entry.get('event') == 'frame-ready' and entry.get('monotonic_ms', 0) > before
+                       for entry in events()), 'Previewing the cover must not move the reading page'
+        device.tap_widget(name='rrPreviewNextPage')
+        wait_previews(before, {origin + 1})
+
+        before = cursor()
+        device.tap_widget(name='rrPreviewNextPage')
+        wait_previews(before, {origin + 2})
+        capture(backend + '-preview-next')
+        assert [entry['page'] for entry in previews_since(before)] == [origin + 2], previews_since(before)
+        assert not any(entry.get('event') == 'frame-ready' and entry.get('monotonic_ms', 0) > before
+                       for entry in events()), 'Thumbnail promotion must not turn the reading page'
+
+        before = cursor()
+        call('tap', **center)
+        arrived = event('frame-ready', before)
+        assert arrived['page'] == origin + 1, arrived
+        capture(backend + '-preview-accepted')
+        call('tap', **center)
+        returning = device.wait_until(lambda: next((w for w in device.ui()['widgets']
+                  if w['name'] in ('rrLinkReturn', 'rrScrubberReturn')), None),
+                  description='return from accepted preview')
+        before = cursor()
+        device.tap_widget(name=returning['name'])
+        returned = event('frame-ready', before)
+        assert returned['page'] == origin, returned
+        current_page = origin
+        transcript.append({'action': 'previews', 'backend': backend, 'origin': origin,
+                           'accepted': arrived['page'], 'returned': returned['page']})
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if previews_only:
+            previews('webkit', first)
+            close_book()
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                comparison = open_book('crengine')
+                comparison['page'] = contents('crengine')['page']
+                previews('crengine', comparison)
+                close_book()
+            finally:
+                hidden.rename(launcher)
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'page_previews': True,
+                      'overlap_reused': True, 'accept_and_return': True, 'helper_cleanup': True,
+                      'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_PREVIEWS_VERIFIED', flush=True)
+            return
         if recovery_only:
             recover_renderer(first)
             close_book()

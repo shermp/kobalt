@@ -4,6 +4,12 @@ Label `input`. Build `mac-tests`, then run `ctest --preset mac -L input` from `p
 
 These checks cover touch and pointer input, holds, swipes in paged lists, press feedback, the page-turn tap filter, hardware page buttons, navigation previews, the touch pointer and word selection in the reader. The `ui` checks deliver input through the production graphics canvas to the production widgets. CTest runs `desktop.wordSelection` once for each display density and theme, and `desktop.hardwarePageButtons` once for each open view, each in its own process. The page-turn tap filter is described in [Diagnostics](diagnostics.md#page-turn-diagnostics).
 
+The [M4 preview checks](../webkit-wpe/m4-previews.md) exercise WebKit
+thumbnails, stale preview cancellation, saved highlight geometry and the
+installed Navigate accept and return flow. The native Navigate check also
+refreshes its thumbnails when a layout changes at the same size and page
+count.
+
 ## Restored input and paint checks
 
 The UI and reader-window checks keep selected assertions from `tests/android/android_ui_test.cpp` and `tests/native-ui/reader_test.cpp` at `82b8935`. The toolbar invalidation check measures the reader window directly, because a graphics proxy renders widgets into its display cache and adds paint events that do not prove that the reader invalidated them. The annotation-frame checks use the original focused EPUB text and anchors. General reading checks and screenshots still use Type Tester.

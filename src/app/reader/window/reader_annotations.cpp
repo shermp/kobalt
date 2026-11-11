@@ -1181,8 +1181,13 @@ void Reader::syncMarkupRequest()
         request.draftStart = annotationStart;
         request.draftEnd = annotationEnd.isEmpty() ? annotationStartWord.end : annotationEnd;
     }
+    const bool savedChanged = request.saved != annotationRequest.saved;
     annotationRequest = std::move(request);
     session->setMarkup(annotationRequest);
+    if (savedChanged && pageScrubber && pageScrubber->selecting()) {
+        session->cancelPagePreview();
+        pageScrubber->invalidatePreviews();
+    }
     if (auto *preview = appearanceEdit.preview()) {
         preview->setMarkup(annotationRequest);
     }

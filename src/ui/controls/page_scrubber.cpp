@@ -326,15 +326,17 @@ PageScrubber::PageScrubber(QWidget *parent)
 }
 
 void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString>> &values,
-                           QSize size)
+                           QSize size, quint64 revision)
 {
     const int count = qMax(1, pages);
     const bool changed = count != totalPages || chapters != values;
-    const bool unchanged = !changed && current == qBound(0, page, count - 1)
-            && (!size.isValid() || pageSize == size) && !rangeLabel->text().isEmpty();
+    const bool layoutChanged = layoutRevision != revision || (size.isValid() && pageSize != size);
+    const bool unchanged = !changed && !layoutChanged && current == qBound(0, page, count - 1)
+            && !rangeLabel->text().isEmpty();
     if (unchanged) {
         return;
     }
+    layoutRevision = revision;
     if (changed) {
         cancel();
         totalPages = count;
@@ -349,6 +351,10 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
         pageSize = size;
     }
     if (selecting()) {
+        if (layoutChanged) {
+            arrange();
+            invalidatePreviews();
+        }
         return;
     }
     if (changed || current < rangeFirst || current > rangeLast) {
@@ -645,6 +651,15 @@ void PageScrubber::clearPreview()
     setProperty("preview_ready", false);
     preceding->update();
     following->update();
+}
+
+void PageScrubber::invalidatePreviews()
+{
+    if (!selecting())
+        return;
+    clearPreview();
+    update(previewBounds());
+    renderTimer.start();
 }
 
 void PageScrubber::showCurrentPage()

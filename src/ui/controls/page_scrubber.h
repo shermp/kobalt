@@ -21,10 +21,12 @@ public:
 
     SettingSlider *slider() const { return position; }
 
-    void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize);
+    void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize,
+                 quint64 revision = 0);
     void setChapterJumps(bool enabled);
     void setBookmarkedPages(const QVector<int> &pages);
     void setPreview(int page, QImage image);
+    void invalidatePreviews();
     void cancel();
     void showCurrentPage();
     void turnPreview(int direction);
@@ -76,6 +78,7 @@ private:
     QVector<QPair<int, QString>> chapters;
     QVector<int> bookmarkedPages;
     int current = 0, candidate = -1, totalPages = 1;
+    quint64 layoutRevision = 0;
     int zoomLevel = 0, rangeFirst = 0, rangeLast = 0;
     QImage preview;
     PageThumbnail *preceding, *following;

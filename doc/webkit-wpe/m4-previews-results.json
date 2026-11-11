@@ -1,0 +1,91 @@
+{
+  "milestone": "M4 page previews",
+  "base": "b6f88f7",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "5eecb4356e6c56e7866e55c5a75fb1c518482c7264673232068cc6433c82548b",
+  "checks": {
+    "native_input": {
+      "status": "passed. Shared UI input coverage reused after frame staging was tightened",
+      "command": "ctest --preset linux -L input --output-on-failure",
+      "log": "build/m4-previews-input.log",
+      "scope": ["Navigate gestures and selection", "same-size layout invalidation"]
+    },
+    "native_focused": {
+      "status": "passed on the final application source",
+      "log": "build/m4-previews-native-final.log",
+      "scope": [
+        "off-screen frame pixels and wrong-page rejection",
+        "preserved source locator, visible frame and relative link origin",
+        "preview dimensions after reflow",
+        "frame ownership, existing recovery and main-thread rules"
+      ]
+    },
+    "native_annotations": {
+      "status": "passed",
+      "log": "build/m4-previews-annotations.log",
+      "scope": ["production annotation UI and frame presentation", "highlight save session"]
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both prepared Kobo SDK checks passed",
+      "log": "build/m4-previews-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-previews-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-previews-qt6.log",
+      "package_log": "build/m4-previews-package.log",
+      "package_tree": "cff49ff99689c6d3e8410fad1b0528c93583a72b5e081da0f484da29ecceebfa",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "cc8d6a8ebfd61f0176bbc5747db5bb4937bc05b45e6d58732816f54a12238a04",
+      "reuse": "Only the installed diagnostic changed after the package build"
+    },
+    "helper": {
+      "status": "reused the verified pointer selection bundle",
+      "bundle_key": "9cbac42c9bf895fe998d034cdf824f647fe30e18a2333e92717039b79ceab603",
+      "archive_sha256": "38480046cac945527922fecdf0e162f31cab525c43708930501cd0f82c2617ac"
+    },
+    "arm_session": {
+      "status": "passed",
+      "log": "build/m4-previews-session.log",
+      "results": "build/webkit/firmware-ff22ab6347/session-results/session.json",
+      "scope": [
+        "saved highlight painted in a bounded off-screen thumbnail",
+        "plain thumbnail matches the reading page when markup is removed",
+        "stale preview cancellation and unchanged reading frame and locator",
+        "existing suspend, reflow and persistence checks"
+      ]
+    },
+    "installed": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /path/to/VirtualNickel --installed-only --installed-previews --allow-unsandboxed-experiment",
+      "log": "build/m4-previews-installed-final.log",
+      "results": "build/webkit/firmware-2b6efdb901/installed-results/installed.json",
+      "scope": [
+        "actual Navigate entry and three-card strip in both engines",
+        "prepared cover promotion and one new thumbnail per forward step",
+        "reading page advances only after accepting the center card",
+        "Return restores the page the reader left",
+        "helper cleanup and no main-thread-blocked events"
+      ],
+      "peak_cgroup_mib": 667.0,
+      "memory_limit_mib": 768
+    }
+  },
+  "review": {
+    "status": "user authorized the commit in chat. The review recorded four seen screens, one unseen and no requested changes",
+    "captures": "build/screenshots/webkit-m4-previews",
+    "data": "build/review/webkit-m4-previews",
+    "pairs": ["webkit=crengine"],
+    "comparison": "Matching menu and arrow pixels, caption and slider bounds, and side card geometry. Page counts and page content follow each engine's layout.",
+    "cover": "The WebKit cover is smaller and has wider margins. The centered card shows the full image."
+  },
+  "limits": [
+    "An obsolete preview can finish its current helper operation before yielding",
+    "Physical-device preview latency and e-ink behavior remain unmeasured",
+    "The complete M4 feature parity gate remains open"
+  ]
+}

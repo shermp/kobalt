@@ -255,6 +255,8 @@ int helper()
             request >> width >> height;
         else if (action == "GOTO") {
             request >> spine >> page;
+            if (mode == "wrong-preview-page")
+                page = 0;
             offset = page * (width == 800 ? 50 : 100);
         } else if (action == "LOCATE") {
             std::string encoded;
@@ -413,6 +415,17 @@ int main(int argc, char **argv)
                 "Source order compares CFI offsets numerically within one page");
         require(document.state().value("source_position").toObject() == anchor,
                 "Bookmark resolution preserves the displayed source point");
+        const auto displayedBeforePreview = document.image(document.page());
+        const auto distantPreview = document.image(5);
+        require(!distantPreview.isNull() && distantPreview.pixel(0, 0) == qRgb(12, 22, 30),
+                "Preview returns the requested off-screen page pixels");
+        require(document.page() == 1
+                        && document.state().value("source_position").toObject() == anchor
+                        && document.image(1).cacheKey() == displayedBeforePreview.cacheKey()
+                        && document.cachedPages() == 1 && document.cachedImageKey(5) == 0,
+                "Preview preserves the reading frame and retains no off-screen bitmap");
+        require(document.goTo("#middle") && document.page() == 1,
+                "A relative link still resolves from the displayed spine after a preview");
         const auto queryImage = document.image(document.page());
         const auto word = document.wordAt({ 30, 30 });
         require(word.text == "source" && !word.start.isEmpty() && !word.end.isEmpty()
@@ -524,6 +537,8 @@ int main(int argc, char **argv)
                                 == 50,
                 "Bookmarks reflow from their source anchors and summary caches invalidate");
         require(document.image(document.page()).size() == QSize(800, 600), "resized image");
+        require(document.image(5).size() == QSize(800, 600) && document.page() == 2,
+                "The same preview index uses the new viewport after reflow");
         require(document.annotationPageEdges().continuesAfter,
                 "An adjacent page without a chapter marker remains selectable");
         require(!document.rangeRects(word.start, word.end).isEmpty(), "Prime reflowed geometry");
@@ -560,6 +575,18 @@ int main(int argc, char **argv)
     }
     qunsetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
     qunsetenv("KOBALT_TEST_WEBKIT_QUERY_LOG");
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "wrong-preview-page");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr), "Preview guard fixture");
+        const auto anchor = document.state().value("source_position");
+        const auto visible = document.image(0);
+        require(document.image(1).isNull() && document.page() == 0
+                        && document.state().value("source_position") == anchor
+                        && document.image(0).cacheKey() == visible.cacheKey()
+                        && document.resourceError().isEmpty(),
+                "A frame for the wrong preview page cannot replace the displayed frame");
+    }
     qputenv("KOBALT_TEST_WEBKIT_MODE", "duplicate-spine");
     {
         WebKitDocument document({}, "/unused.epub");

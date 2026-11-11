@@ -114,6 +114,13 @@ private:
     int geometryPage_ = -1;
     int geometryRectangles_ = 0;
     QMap<QPair<QString, QString>, AnnotationGeometry> geometries_;
+
+    struct RenderedFrame
+    {
+        QJsonObject metadata, position;
+        QImage image;
+    };
+
     bool opened_ = false;
     bool helperMoved_ = false;
     bool restartableFailure_ = false;
@@ -124,7 +131,9 @@ private:
     bool runOperation(const std::function<bool()> &, bool changesLayout = false);
     bool applyLayout(const QJsonObject &, QSize);
     bool checkPublication();
-    bool command(const QByteArray &, bool page = false, QJsonObject *json = nullptr);
+    bool command(const QByteArray &, RenderedFrame *page = nullptr, QJsonObject *json = nullptr);
+    bool render(const QByteArray &);
+    QByteArray pageCommand(int) const;
     QJsonObject query(int, int, const QJsonObject &, const QString &fragment = {});
     bool queryPage(int, int, const QJsonObject &, const QString &, QJsonObject &);
     QJsonObject layout(int, const QString &fragment = {});
@@ -137,7 +146,7 @@ private:
     AnnotationToken queryAnnotationToken(const QJsonObject &, int) const;
     QVector<SourcePoint> resolvePositions(const QStringList &);
     QList<AnnotationGeometry> rangeGeometry(int, const QVector<QPair<QString, QString>> &);
-    bool readFrame(const QString &, unsigned);
+    bool readFrame(const QString &, unsigned, RenderedFrame &);
     bool style();
     bool paginateBook();
     bool locate(const QJsonObject &);

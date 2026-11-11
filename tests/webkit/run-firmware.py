@@ -29,12 +29,13 @@ installed_actions.add_argument('--installed-search', action='store_true')
 installed_actions.add_argument('--installed-bookmarks', action='store_true')
 installed_actions.add_argument('--installed-annotations', action='store_true')
 installed_actions.add_argument('--installed-recovery', action='store_true')
+installed_actions.add_argument('--installed-previews', action='store_true')
 parser.add_argument('--installed-search-rotation', action='store_true')
 args = parser.parse_args()
 if args.installed_search_rotation and not args.installed_search:
     parser.error('--installed-search-rotation requires --installed-search')
 if any((args.installed_search, args.installed_bookmarks, args.installed_annotations,
-        args.installed_recovery)) and not args.installed_only:
+        args.installed_recovery, args.installed_previews)) and not args.installed_only:
     parser.error('Installed reader actions require --installed-only')
 args.epub_tests |= args.epub_only or args.epub_corpus
 if args.epub_tests and (args.platform_probe_only or args.font_resources_only or args.session_only or args.installed_only):
@@ -94,7 +95,7 @@ try:
     with (output / 'prepare.log').open('w') as log, contextlib.redirect_stdout(log):
         device.prepare(device='libra-colour', firmware='6.0.274403')
         if args.installed_only:
-            installed.prepare(root, device, installed_package)
+            installed.prepare(root, device, installed_package, preview_menu=args.installed_previews)
         device.start(device='libra-colour', firmware='6.0.274403', wait=False, memory_mib=768,
                      display_time='09:00' if args.installed_only else None)
         device.wait_library_ready(timeout=120)
@@ -124,7 +125,8 @@ try:
                         rotate_after_search=args.installed_search_rotation,
                         bookmarks_only=args.installed_bookmarks,
                         annotations_only=args.installed_annotations,
-                        recovery_only=args.installed_recovery)
+                        recovery_only=args.installed_recovery,
+                        previews_only=args.installed_previews)
         sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(

@@ -261,6 +261,10 @@ int main(int argc, char **argv)
                 "Source highlight save preserves the original CREngine list");
         ReaderMarkupRequest markup;
         markup.saved.append({ selected.start, selected.end, "gray", "shaded" });
+        const int previewPage = session->page();
+        const QSize previewSize{ 180, 240 };
+        const auto plainPreview =
+                session->image().scaled(previewSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         session->setMarkup(markup);
         session->captureMarkup([&](bool ok) {
             require(ok && session->markup().saved.size() == 1
@@ -271,6 +275,33 @@ int main(int argc, char **argv)
         completion.exec();
         require(session->goTo(sourceposition::token(anchor)), "Return from search result");
         completion.exec();
+        require(session->page() != previewPage, "Use an off-screen preview target");
+        const auto beforePreview = digest(session->image());
+        const auto thumbnail = [&] {
+            QImage image;
+            session->previewPage(previewPage, previewSize, [&](QImage result) {
+                image = std::move(result);
+                completion.quit();
+            });
+            completion.exec();
+            return image;
+        };
+        const auto markedPreview = thumbnail();
+        require(markedPreview.size() == plainPreview.size() && markedPreview != plainPreview,
+                "The off-screen thumbnail includes its saved source highlight");
+        session->setMarkup({});
+        require(thumbnail() == plainPreview,
+                "Removing preview markup exposes the same page pixels");
+        require(session->state().value("source_position").toObject() == anchor
+                        && digest(session->image()) == beforePreview,
+                "Thumbnail preparation preserves the published frame and position");
+        bool obsoletePreview = false;
+        session->previewPage(previewPage, previewSize, [&](QImage) { obsoletePreview = true; });
+        session->cancelPagePreview();
+        ReaderSession::drain([&] { completion.quit(); });
+        completion.exec();
+        require(!obsoletePreview, "A cancelled preview is discarded");
+        session->setMarkup(markup);
         auto appearance = session->persistentState();
         appearance["font_pixels"] = 32;
         session->apply(appearance, { 800, 600 });
@@ -382,6 +413,8 @@ int main(int argc, char **argv)
                                                 { "highlight_overlap_guard", true },
                                                 { "highlight_reflow_and_reopen", true },
                                                 { "annotation_terminal_edges", true },
+                                                { "page_previews", true },
+                                                { "highlighted_thumbnail", true },
                                                 { "legacy_bookmarks_preserved", true },
                                                 { "search_preserves_frame", true },
                                                 { "saved_data_preserved", true } })

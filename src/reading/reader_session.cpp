@@ -1486,23 +1486,29 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
     const auto job = revision;
     const auto lease = lease_;
     const auto engine = engine_;
-    const auto markup = markupRequest_;
-    const auto markupGeneration = markupGeneration_;
+    const auto saved = markupRequest_.saved;
     const bool dark = frame.state.value("dark_mode").toBool(false);
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, page, bounds, finished, request, token, latest, job, lease, markup,
-             markupGeneration, dark] {
-                if (token->load() != request || latest->load() != job || lease->revoked())
+            [engine, guard, page, bounds, finished, request, token, latest, job, lease, saved,
+             dark] {
+                const auto current = [&] {
+                    return token->load() == request && latest->load() == job && !lease->revoked();
+                };
+                if (!current())
                     return;
                 EngineJob activity;
                 auto full = engine->image(page);
-                if (!full.isNull() && !markup.saved.isEmpty()) {
+                if (!current())
+                    return;
+                if (!full.isNull() && !saved.isEmpty()) {
                     QVector<QPair<QString, QString>> ranges;
-                    for (const auto &range : markup.saved)
+                    for (const auto &range : saved)
                         ranges.append(qMakePair(range.start, range.end));
                     const auto geometry = engine->pageRangeRects(page, ranges);
+                    if (!current())
+                        return;
                     bool marked = false;
                     for (const auto &rectangles : geometry)
                         marked = marked || !rectangles.isEmpty();
@@ -1513,26 +1519,30 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
                             QRegion region;
                             for (const auto &rect : geometry[index])
                                 region += rect;
-                            render::paintHighlightMark(
-                                    painter, geometry[index], region - covered,
-                                    render::highlightTint(markup.saved[index].color),
-                                    markup.saved[index].style, dark);
+                            render::paintHighlightMark(painter, geometry[index], region - covered,
+                                                       render::highlightTint(saved[index].color),
+                                                       saved[index].style, dark);
                             covered += region;
                         }
                     }
                 }
                 const auto image =
                         full.scaled(bounds, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                if (token->load() != request || latest->load() != job || lease->revoked())
+                if (!current())
                     return;
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, image, finished, token, latest, job, request, lease,
-                         markupGeneration] {
+                        [guard, page, image, finished, token, latest, job, request, lease, saved] {
                             if (guard && token->load() == request && latest->load() == job
-                                && !lease->revoked()
-                                && guard->markupGeneration_ == markupGeneration)
+                                && !lease->revoked() && guard->markupRequest_.saved == saved) {
+                                if (diagnosticsActive() && !image.isNull())
+                                    diagnostic("page-preview-ready",
+                                               { { "page", page },
+                                                 { "width", image.width() },
+                                                 { "height", image.height() } },
+                                               false);
                                 finished(image);
+                            }
                         },
                         Qt::QueuedConnection);
             },

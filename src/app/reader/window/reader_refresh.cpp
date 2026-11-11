@@ -476,7 +476,8 @@ void Reader::syncReadingControls()
         chapters.append({ chapter.page, chapter.title });
     pageScrubber->setChapterJumps(pageNavigation::barButtons(preferences)
                                   == pageNavigation::BarButtons::Chapters);
-    pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size(),
+                          session->layoutRevision());
     pageScrubber->setEnabled(!session->busy());
     const auto chapter = session->chapterTitle().isEmpty() ? strings::get("reader.contents")
                                                            : session->chapterTitle();

@@ -9101,7 +9101,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         touchPreview.setBook(1, 3, {}, { 600, 900 });
         touchPreview.show();
         QVERIFY(QTest::qWaitForWindowExposed(&touchPreview));
+        QVector<int> refreshed;
         touchPreview.previewRequested = [&](int page, QSize size) {
+            refreshed.append(page);
             QImage image(size, QImage::Format_RGB32);
             image.fill(Qt::white);
             touchPreview.setPreview(page, image);
@@ -9110,6 +9112,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         touchPreview.accepted = [&](int page) { committed = page; };
         touchPreview.showCurrentPage();
         QTRY_VERIFY(touchPreview.previewReady());
+        refreshed.clear();
+        touchPreview.setBook(1, 3, {}, { 600, 900 }, 1);
+        QCOMPARE(touchPreview.selectedPage(), 1);
+        QVERIFY(!touchPreview.previewReady());
+        QTRY_VERIFY(touchPreview.previewReady());
+        QCOMPARE(refreshed, QVector<int>({ 1, 0, 2 }));
         auto *device = QTest::createTouchDevice();
         auto touch = QTest::touchEvent(&touchPreview, device, false);
         const auto middle = touchPreview.previewBounds().center();
