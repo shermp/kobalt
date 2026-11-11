@@ -12,6 +12,10 @@ if (getComputedStyle(body).writingMode !== 'horizontal-tb' ||
     getComputedStyle(body).direction !== 'ltr') throw new Error('unsupported-writing-direction');
 const state = globalThis.kobaltReaderState ||= { page: 0, start: 0 };
 const margin = options.margin;
+const topMargin = options.topMargin, bottomMargin = options.bottomMargin;
+const content = { x: margin, y: topMargin, width: options.width - 2 * margin,
+  height: options.height - topMargin - bottomMargin };
+const rightEdge = content.x + content.width, bottomEdge = content.y + content.height;
 // Restore publisher declarations before resolving the cascade again. Keeping
 // only our previous computed override would freeze media-query break rules.
 for (const override of state.breakOverrides || []) {
@@ -30,11 +34,11 @@ html { width: ${options.width}px !important; height: ${options.height}px !import
   overflow: hidden !important; margin: 0 !important; padding: 0 !important;
   background: ${options.dark ? '#181818' : '#ffffff'} !important; }
 body { position: relative !important; box-sizing: border-box !important;
-  width: ${options.width - 2 * margin}px !important;
-  height: ${options.height - 2 * margin}px !important;
+  width: ${content.width}px !important;
+  height: ${content.height}px !important;
   min-height: 0 !important; max-height: none !important;
-  margin: ${margin}px !important; padding: 0 !important;
-  column-width: ${options.width - 2 * margin}px !important;
+  margin: ${topMargin}px ${margin}px ${bottomMargin}px !important; padding: 0 !important;
+  column-width: ${content.width}px !important;
   column-gap: ${2 * margin}px !important; column-fill: auto !important;
   column-count: auto !important; overflow: visible !important;
   transform: none !important; font-size: ${options.fontSize}px !important;
@@ -48,7 +52,7 @@ body * { animation: none !important; transition: none !important;
   letter-spacing: ${options.letterSpacing / 100}em !important;
   word-spacing: ${options.wordSpacing / 100}em !important; }
 img, svg, math { max-width: 100% !important;
-  max-height: ${options.height - 2 * margin}px !important; object-fit: contain; }
+  max-height: ${content.height}px !important; object-fit: contain; }
 pre { white-space: pre-wrap !important; overflow-wrap: anywhere; }
 `;
 document.head.appendChild(style);
@@ -119,7 +123,7 @@ function keepGroup(group) {
   for (let index = 1; index < group.length; ++index)
     extent += Math.max(0, parseFloat(getComputedStyle(group[index - 1]).marginBottom) || 0,
       parseFloat(getComputedStyle(group[index]).marginTop) || 0);
-  if (extent > options.height - 2 * margin) return;
+  if (extent > content.height) return;
   const first = group[0];
   if (!breakElements.has(first)) breakElements.set(first, first.getAttribute('style'));
   first.style.setProperty('break-before', 'column', 'important');
@@ -352,24 +356,25 @@ for (const entry of nodes) {
 body.style.setProperty('transform', `translateX(${-page * options.width}px)`, 'important');
 window.scrollTo(0, 0);
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+function clipRect(rect) {
+  const x = Math.max(content.x, rect.left), y = Math.max(content.y, rect.top);
+  const right = Math.min(rightEdge, rect.right), bottom = Math.min(bottomEdge, rect.bottom);
+  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+}
 const links = [];
 for (const anchor of body.querySelectorAll('a[href]')) {
   for (const rect of anchor.getClientRects()) {
-    const x = Math.max(margin, rect.left), y = Math.max(margin, rect.top);
-    const right = Math.min(options.width - margin, rect.right);
-    const bottom = Math.min(options.height - margin, rect.bottom);
-    if (right > x && bottom > y && links.length < 1024)
-      links.push({ href: anchor.getAttribute('href'), x, y, width: right - x, height: bottom - y });
+    const clipped = clipRect(rect);
+    if (clipped && links.length < 1024)
+      links.push({ href: anchor.getAttribute('href'), ...clipped });
   }
 }
 const objects = [];
 for (const element of body.querySelectorAll('img,svg,math')) {
   for (const rect of element.getClientRects()) {
-    const x = Math.max(margin, rect.left), y = Math.max(margin, rect.top);
-    const right = Math.min(options.width - margin, rect.right);
-    const bottom = Math.min(options.height - margin, rect.bottom);
-    if (right > x && bottom > y && objects.length < 1024)
-      objects.push({ path: elementPath(element), x, y, width: right - x, height: bottom - y });
+    const clipped = clipRect(rect);
+    if (clipped && objects.length < 1024)
+      objects.push({ path: elementPath(element), ...clipped });
   }
 }
 state.page = page;
@@ -487,12 +492,10 @@ function rangeResult(first, last, includeText = true) {
     range.setStart(entry.node, begin);
     range.setEnd(entry.node, finish);
     for (const rect of range.getClientRects()) {
-      const x = Math.max(margin, rect.left), y = Math.max(margin, rect.top);
-      const right = Math.min(options.width - margin, rect.right);
-      const bottom = Math.min(options.height - margin, rect.bottom);
-      if (right > x && bottom > y) {
+      const clipped = clipRect(rect);
+      if (clipped) {
         if (rectangles.length >= 512) throw new Error('query-range-too-large');
-        rectangles.push({ x, y, width: right - x, height: bottom - y });
+        rectangles.push(clipped);
       }
     }
   }
@@ -543,8 +546,7 @@ function endpoint(offset, ending) {
     const x = right ? box.right : box.left;
     // Report only the actual terminal edge. A clipped range rectangle must
     // never create a handle at the viewport boundary for a remote endpoint.
-    if (x < margin || x > options.width - margin || box.top < margin ||
-        box.bottom > options.height - margin) continue;
+    if (x < margin || x > rightEdge || box.top < topMargin || box.bottom > bottomEdge) continue;
     return { visible: true, first: { x, y: box.top }, last: { x, y: box.bottom },
       outward: { x: right ? 1 : -1, y: 0 } };
   }
@@ -609,10 +611,9 @@ function pointToken(query) {
   const wordOnly = query.kind === 'word', dragging = query.kind === 'drag-token';
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 ||
       x >= options.width || y >= options.height) return null;
-  const onPaper = x >= margin && x < options.width - margin &&
-    y >= margin && y < options.height - margin;
+  const onPaper = x >= margin && x < rightEdge && y >= topMargin && y < bottomEdge;
   if (!onPaper && !dragging) return null;
-  const hitX = Math.max(margin, Math.min(options.width - margin - 1, x));
+  const hitX = Math.max(margin, Math.min(rightEdge - 1, x));
   const caret = document.caretRangeFromPoint(hitX, y);
   const entry = caret && nodes.find(entry => entry.node === caret.startContainer);
   if (!entry) return null;
@@ -881,8 +882,7 @@ const layout = { source: document.URL, title: document.title, page, pages,
   locator,
   location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
   viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
-  content: { x: margin, y: margin, width: options.width - 2 * margin,
-    height: options.height - 2 * margin }, links, objects, excerpt };
+  content, links, objects, excerpt };
 globalThis.kobaltQuery = function(query) {
   try {
     let result;

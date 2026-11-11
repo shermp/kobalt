@@ -1,0 +1,22 @@
+{
+  "milestone": "M4 vertical margins",
+  "base": "ed73b67",
+  "source_tree": "a3fc3970057c4823c16876a5c009231552461bcb21d629df49ba9faf0efc9f7b",
+  "native_proxy": "build/m4-margins-native.log",
+  "kobo_qt5": "build/m4-margins-qt5.log",
+  "kobo_qt6": "build/m4-margins-qt6-check.log",
+  "host_syntax": "clang++ unavailable",
+  "diagnostic_package_sha256": "50ed5ec02eb3306912df695fe882721cdeb75433793c3fe24cc732fd8b899e5c",
+  "helper_archive_sha256": "5f818a2800e43513ead487c5f66ae3a0aff19cf4cb8f68e3da10046e6c1b2c9a",
+  "epub_log": "build/m4-margins-epub.log",
+  "arm_session": "build/webkit/firmware-318a4c877b/session-results/session.json",
+  "installed": {
+    "result": "build/webkit/firmware-2e5fea41bd/installed-results/installed.json",
+    "vertical_margin_preview_ms": 483,
+    "peak_mib": 689,
+    "memory_limit_mib": 768,
+    "main_thread_blocked": []
+  },
+  "concurrent_run": "build/webkit/firmware-3b20737337/installed-results/memory.json",
+  "review": "build/review/webkit-m4-margins"
+}

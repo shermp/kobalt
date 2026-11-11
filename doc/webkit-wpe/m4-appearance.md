@@ -13,9 +13,9 @@ restore the same source anchor. Switching between incompatible layouts
 reaps the previous helper before starting another. A book sleep or close
 can also reap the helper while the draft owns it.
 
-The appearance edits apply to the current opening. Independent vertical
-margins, alignment, hyphenation and the full font catalog remain part of
-the typography work.
+The appearance edits apply to the current opening. [Vertical margins](m4-margins.md)
+connects the existing Layout control. Alignment, hyphenation and the full
+font catalog remain part of the typography work.
 
 ## Verification
 

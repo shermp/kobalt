@@ -376,9 +376,11 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     appearance_["font_face"] =
             face == "serif" || face == "sans-serif" || face == "monospace" ? face : QString();
     appearance_["text_alignment"] = QStringLiteral("publisher");
-    appearance_["margin_pixels"] =
-            qBound(0, saved.value("margin_pixels").toInt(defaultMarginPixels()),
-                   (qMin(size.width(), size.height()) - 21) / 2);
+    appearance_["margin_pixels"] = qBound(
+            0, saved.value("margin_pixels").toInt(defaultMarginPixels()), maximumMarginPixels());
+    const int vertical = defaultVerticalMarginPixels(appearance_.value("margin_pixels").toInt());
+    for (const auto *key : { "top_margin_pixels", "bottom_margin_pixels" })
+        appearance_[key] = qBound(0, saved.value(key).toInt(vertical), maximumMarginPixels());
     size_ = size;
     if (progress)
         progress(OpeningStage::Pages, 0);
@@ -721,15 +723,20 @@ bool WebKitDocument::countSpineWords(int index, int page, const QVector<QPair<in
     return true;
 }
 
-bool WebKitDocument::style()
+bool WebKitDocument::style(QSize legacyMarginViewport)
 {
-    const int margin = qBound(0, appearance_.value("margin_pixels").toInt(defaultMarginPixels()),
-                              (qMin(size_.width(), size_.height()) - 21) / 2);
+    const bool independentMargins = frame_.value("vertical_margins").toBool();
+    const int side = qBound(0, appearance_.value("margin_pixels").toInt(defaultMarginPixels()),
+                            qMin(maximumMarginPixels(), 2048));
+    const auto viewport = legacyMarginViewport.isValid() ? legacyMarginViewport : size_;
+    const int margin = independentMargins
+            ? side
+            : qMin(side, (qMin(viewport.width(), viewport.height()) - 21) / 2);
     const auto family = appearance_.value("font_face").toString();
     const QByteArray generic = family == "serif" || family == "sans-serif" || family == "monospace"
             ? family.toLatin1()
             : QByteArray("publisher");
-    return render(
+    QByteArray command =
             "STYLE "
             + QByteArray::number(
                     qBound(8, appearance_.value("font_pixels").toInt(defaultFontPixels()), 96))
@@ -738,7 +745,16 @@ bool WebKitDocument::style()
                     qBound(100, appearance_.value("line_spacing").toInt(defaultLineSpacing), 300))
             + ' ' + QByteArray::number(margin) + " 0 "
             + QByteArray::number(qBound(0, appearance_.value("word_spacing").toInt(100) - 100, 100))
-            + ' ' + generic + ' ' + (appearance_.value("dark_mode").toBool() ? "dark" : "light"));
+            + ' ' + generic + ' ' + (appearance_.value("dark_mode").toBool() ? "dark" : "light");
+    if (independentMargins) {
+        const int vertical = defaultVerticalMarginPixels(side);
+        for (const auto *key : { "top_margin_pixels", "bottom_margin_pixels" }) {
+            const int inset = qBound(0, appearance_.value(key).toInt(vertical),
+                                     qMin(maximumMarginPixels(), 2048));
+            command += ' ' + QByteArray::number(inset);
+        }
+    }
+    return render(command);
 }
 
 bool WebKitDocument::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress)
@@ -761,12 +777,12 @@ bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
         if (size.width() < 100 || size.height() < 100 || size.width() > 2048
             || size.height() > 2048)
             return fail("WebKit viewport must be between 100 and 2048 pixels");
-        const int limit = (qMin(size.width(), size.height()) - 21) / 2;
-        if (appearance_.value("margin_pixels").toInt() > limit) {
-            appearance_["margin_pixels"] = limit;
-            if (!style())
-                return false;
-        }
+        const auto smaller = size_.boundedTo(size);
+        const int limit = (qMin(smaller.width(), smaller.height()) - 21) / 2;
+        if (!frame_.value("vertical_margins").toBool()
+            && appearance_.value("margin_pixels").toInt(defaultMarginPixels()) > limit
+            && !style(smaller))
+            return false;
         size_ = size;
         if (!render("RESIZE " + QByteArray::number(size.width()) + ' '
                     + QByteArray::number(size.height())))

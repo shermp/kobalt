@@ -364,9 +364,21 @@ try:
     page_summary = query(0, restored['layout']['page'], kind='summary')
     assert page_summary['start']['offset'] == restored['layout']['location']['start']
     assert query(0, 0, kind='position', position=source)['page'] == restored['layout']['page']
+    assert styled['vertical_margins'] and styled['layout']['content']['y'] == 40
+    independent = call('STYLE 32 180 40 2 10 serif dark 62 83')
+    assert independent['layout']['content'] == {'x': 40, 'y': 62, 'width': 720, 'height': 455}
+    assert independent['sha256'] != restored['sha256']
+    call('STYLE 32 180 40 2 10 serif dark 62 2049', error='invalid-style')
+    small = call('RESIZE 200 140')
+    assert small['layout']['content'] == {'x': 40, 'y': 50, 'width': 120, 'height': 21}
     call('RESIZE 600 900')
     restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
     assert restored['layout']['locator'] == source
+    assert restored['layout']['content'] == {'x': 40, 'y': 62, 'width': 520, 'height': 755}
+    for rect in restored['layout']['links'] + restored['layout']['objects']:
+        assert rect['y'] >= 62 and rect['y'] + rect['height'] <= 817, rect
+    assert query(0, restored['layout']['page'], kind='word', x=100, y=61) is None
+    call('STYLE 32 180 40 2 10 serif dark')
     call('CLOSE')
     call(f'OPEN {encoded(synthetic)} 600 800')
     restored = call('LOCATE 0 ' + encoded(json.dumps(source)))

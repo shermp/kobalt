@@ -162,7 +162,7 @@ private:
     QVector<SourcePoint> resolvePositions(const QStringList &);
     QList<AnnotationGeometry> rangeGeometry(int, const QVector<QPair<QString, QString>> &);
     bool readFrame(const QString &, unsigned, RenderedFrame &);
-    bool style();
+    bool style(QSize legacyMarginViewport = {});
     bool scanBook(bool countWords);
     bool countSpineWords(int index, int page, const QVector<QPair<int, int>> &anchors,
                          QVector<QPair<int, qint64>> &prefixes, qint64 &total);

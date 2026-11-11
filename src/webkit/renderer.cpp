@@ -41,6 +41,7 @@ struct Renderer
     bool pageScriptPending = false;
     unsigned linkSpine = 0, linkPage = 0;
     unsigned fontSize = 24, lineHeight = 150, margin = 24, letterSpacing = 0, wordSpacing = 0;
+    unsigned topMargin = 24, bottomMargin = 24;
     std::string family = "publisher", fragment, bridge, metadata;
     std::string elementAnchor = "null", pendingError, sourcePosition, query;
     bool dark = false;
@@ -184,8 +185,9 @@ static void snapshotReady(GObject *object, GAsyncResult *result, gpointer data)
                 + ",\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height)
                 + ",\"stride\":" + std::to_string(stride)
                 + ",\"format\":\"BGRA8-premultiplied\",\"pixels\":" + jsonString(stem + ".bgra")
-                + ",\"png\":" + jsonString(memory ? "" : path) + ",\"document\":"
-                + renderer.book.description() + ",\"layout\":" + renderer.metadata + "}\n";
+                + ",\"png\":" + jsonString(memory ? "" : path)
+                + ",\"document\":" + renderer.book.description()
+                + ",\"vertical_margins\":true,\"layout\":" + renderer.metadata + "}\n";
         if (written)
             written = g_file_set_contents((stem + ".json").c_str(), metadata.data(),
                                           metadata.size(), &error);
@@ -322,10 +324,18 @@ static void paginate(Renderer &renderer)
     if (renderer.pageScriptPending || renderer.stopping || !renderer.request)
         return;
     renderer.pageScriptPending = true;
+    const unsigned side = std::min(renderer.margin, unsigned((renderer.width - 21) / 2));
+    unsigned top = renderer.topMargin, bottom = renderer.bottomMargin;
+    const unsigned available = renderer.height - 21;
+    if (top + bottom > available) {
+        top = top * available / (top + bottom);
+        bottom = available - top;
+    }
     std::string options = "const options = {\"width\":" + std::to_string(renderer.width)
             + ",\"uri\":" + jsonString(expectedUri(renderer)) + ",\"height\":"
-            + std::to_string(renderer.height) + ",\"margin\":" + std::to_string(renderer.margin)
-            + ",\"fontSize\":" + std::to_string(renderer.fontSize)
+            + std::to_string(renderer.height) + ",\"margin\":" + std::to_string(side)
+            + ",\"topMargin\":" + std::to_string(top) + ",\"bottomMargin\":"
+            + std::to_string(bottom) + ",\"fontSize\":" + std::to_string(renderer.fontSize)
             + ",\"lineHeight\":" + std::to_string(renderer.lineHeight)
             + ",\"letterSpacing\":" + std::to_string(renderer.letterSpacing) + ",\"wordSpacing\":"
             + std::to_string(renderer.wordSpacing) + ",\"family\":" + jsonString(renderer.family)
@@ -619,7 +629,7 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
         size_t offset = action == "OPEN" ? 1 : 0;
         if (args.size() != offset + 2 || !number(args[offset], width)
             || !number(args[offset + 1], height) || width < 100 || width > 2048 || height < 100
-            || height > 2048 || renderer.margin * 2 + 20 >= std::min(width, height)) {
+            || height > 2048) {
             error("invalid-viewport");
             return true;
         }
@@ -665,11 +675,17 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
     bool reload = false, preserve = false;
     if (action == "STYLE") {
         unsigned values[5]{};
-        bool valid = args.size() == 7;
+        const bool independentMargins = args.size() == 9;
+        bool valid = args.size() == 7 || independentMargins;
         for (unsigned i = 0; valid && i < 5; ++i)
             valid &= number(args[i], values[i]);
+        unsigned top = values[2], bottom = values[2];
+        if (valid && independentMargins)
+            valid = number(args[7], top) && number(args[8], bottom);
         if (!valid || values[0] < 8 || values[0] > 96 || values[1] < 100 || values[1] > 300
-            || values[2] * uint64_t(2) + 20 >= unsigned(std::min(renderer.width, renderer.height))
+            || values[2] > 2048 || top > 2048 || bottom > 2048
+            || (!independentMargins
+                && values[2] * 2 + 20 >= unsigned(std::min(renderer.width, renderer.height)))
             || values[3] > 50 || values[4] > 100
             || (args[5] != "publisher" && args[5] != "serif" && args[5] != "sans-serif"
                 && args[5] != "monospace")
@@ -680,6 +696,8 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
         renderer.fontSize = values[0];
         renderer.lineHeight = values[1];
         renderer.margin = values[2];
+        renderer.topMargin = top;
+        renderer.bottomMargin = bottom;
         renderer.letterSpacing = values[3];
         renderer.wordSpacing = values[4];
         renderer.family = args[5];

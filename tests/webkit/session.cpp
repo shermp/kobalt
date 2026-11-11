@@ -386,9 +386,21 @@ int main(int argc, char **argv)
                             && session->margin() == originalMargin
                             && digest(session->image()) == original,
                     "Draft reflow changes the preview and preserves the original source frame");
+            const auto sideOnly = digest(draft.image());
+            const int verticalMargin = draft.topMargin() + 17;
+            require(draft.setVerticalMargins(verticalMargin), "Queue vertical margin preview");
+            completion.exec();
+            require(draft.error().isEmpty() && draft.margin() == changedMargin
+                            && draft.topMargin() == verticalMargin
+                            && draft.bottomMargin() == verticalMargin
+                            && draft.navigationPosition() == sourceposition::token(anchor)
+                            && digest(draft.image()) != sideOnly
+                            && digest(session->image()) == original,
+                    "Vertical margins reflow independently in the draft");
             session->apply(draft.requestedState(), size);
             completion.exec();
             require(session->error().isEmpty() && session->margin() == changedMargin
+                            && session->topMargin() == verticalMargin
                             && session->navigationPosition() == draft.navigationPosition()
                             && digest(session->image()) == digest(draft.image()),
                     "Applying the draft uses the same layout at the same source point");
@@ -559,6 +571,7 @@ int main(int argc, char **argv)
                                                 { "source_history", true },
                                                 { "source_pace_restored", true },
                                                 { "appearance_preview", true },
+                                                { "vertical_margin_preview", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },

@@ -616,6 +616,7 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         device.tap_widget(name='rrNavLayout')
         device.wait_widget(name='rrWider')
         margin = edit('rrWider', 'rrMarginsValue')
+        vertical_margin = edit('rrVerticalMarginsMore', 'rrVerticalMarginsValue')
         capture(backend + '-layout-draft')
         panel = device.wait_widget(name='rrMenu')
         before = cursor()
@@ -629,6 +630,7 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         capture(backend + '-appearance-applied')
         transcript.append({'action': 'appearance', 'backend': backend,
                            'text_size': text_size, 'side_margin': margin,
+                           'vertical_margin': vertical_margin,
                            'apply_ms': rendered['elapsed_ms']})
         close_book()
 
