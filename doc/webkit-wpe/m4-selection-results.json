@@ -1,0 +1,103 @@
+{
+  "milestone": "M4 pointer selection and annotation editing",
+  "base": "8b98458",
+  "branch": "feature/webkit-wpe-m4",
+  "committed": true,
+  "source_tree": "59036524fb72b1c4b1b9cb2153caefb0c7ce9862ebaf216282d48c45e9ea022e",
+  "checks": {
+    "native_annotations": {
+      "status": "passed",
+      "command": "ctest --preset linux -L annotations --output-on-failure",
+      "log": "build/m4-selection-annotations.log"
+    },
+    "native_focused": {
+      "status": "passed",
+      "command": "ctest --preset linux -R '^(engine.webkit-document|model.main-thread)$' --output-on-failure",
+      "log": "build/m4-selection-native.log"
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both prepared Kobo SDK checks passed",
+      "log": "build/m4-selection-syntax.log"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-selection-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and package checks passed",
+      "log": "build/m4-selection-qt6-final.log",
+      "package_log": "build/m4-selection-package.log",
+      "package_tree": "88df11cbbea774f7f7a2ad067ba0f6bc7c0234a75e08f6131c7a2191d77f87c6",
+      "package": "build/kobo-qt6/Kobalt-qt6-diagnostic.zip",
+      "package_sha256": "cac038a9eb83e98a237e958fa2493957447e49f450e34bc76361e74fbea969af"
+    },
+    "helper": {
+      "status": "passed",
+      "log": "build/m4-selection-helper.log",
+      "bundle_key": "9cbac42c9bf895fe998d034cdf824f647fe30e18a2333e92717039b79ceab603",
+      "archive_sha256": "38480046cac945527922fecdf0e162f31cab525c43708930501cd0f82c2617ac"
+    },
+    "arm_protocol": {
+      "status": "passed with the final helper",
+      "log": "build/m4-selection-protocol-final.log",
+      "results": "build/webkit/firmware-13dcb9b5ac/epub-results/epub-results.json",
+      "scope": [
+        "actual text, space and punctuation hits",
+        "reversed endpoints and punctuation policies",
+        "full sentences, fragments, balanced quotes and exact saved endpoints",
+        "abbreviations, decimals and ellipses",
+        "far-edge drags, neighboring complete words and page boundaries",
+        "existing source geometry, search and EPUB protocol regressions"
+      ]
+    },
+    "arm_session": {
+      "status": "passed on final proxy. Final helper edge and ambiguity changes are covered by the protocol and installed checks",
+      "log": "build/m4-selection-session.log",
+      "results": "build/webkit/firmware-c21515f2db/session-results/session.json",
+      "scope": [
+        "production pointer token and annotation range",
+        "background save with chosen punctuation boundaries",
+        "overlap rejection and legacy highlight preservation",
+        "markup, reflow and cold reload"
+      ]
+    },
+    "installed": {
+      "status": "passed",
+      "command": "python3 tests/webkit/run-firmware.py --virtualnickel /path/to/VirtualNickel --installed-only --installed-annotations --allow-unsandboxed-experiment",
+      "log": "build/m4-selection-installed.log",
+      "results": "build/webkit/firmware-c8fe810752/installed-results/installed.json",
+      "scope": [
+        "hold and drag to select Type Tester in WebKit and CREngine",
+        "Annotate entry, draft, mark choices and saved annotations",
+        "WebKit adjustment through the saved end handle",
+        "independent annotation lists",
+        "adjusted Type highlight after a full Nickel restart",
+        "helper cleanup and no main-thread-blocked events"
+      ],
+      "peak_cgroup_mib": 666.6,
+      "memory_limit_mib": 768
+    },
+    "full_native_gallery": {
+      "status": "affected native tests and targeted captures used",
+      "all_variant_release_validation": false
+    }
+  },
+  "review": {
+    "status": "user authorized commit in chat. The review recorded five seen screens, one unseen and no requested changes",
+    "captures": "build/screenshots/webkit-m4-selection",
+    "data": "build/review/webkit-m4-selection",
+    "pairs": ["webkit=crengine", "reopened=adjusted"],
+    "comparison": "Matching toolbar pixels and selection-choice pixels after aligning the cards. The annotation list shares the tabs, spacing and labels",
+    "known_gap": "WebKit excerpts use the interface font pending the reading-font bridge"
+  },
+  "open_evidence": {
+    "same_boot_reopen": "An earlier emulator stopped while opening WebKit after CREngine. The container exited before the final memory sample, so the cause remains unresolved.",
+    "results": "build/webkit/firmware-a7d8340342/installed-results"
+  },
+  "limits": [
+    "New ranges stay within one spine entry",
+    "Horizontal LTR pagination with inline bidi. Vertical and RTL publication layout and split-node graphemes need further work",
+    "Physical touch, sandbox behavior, performance and power remain unvalidated",
+    "Complete M4 parity and broader installed interaction coverage remain open"
+  ]
+}

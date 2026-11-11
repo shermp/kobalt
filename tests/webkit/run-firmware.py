@@ -24,16 +24,16 @@ actions.add_argument('--platform-probe-only', action='store_true')
 actions.add_argument('--font-resources-only', action='store_true')
 actions.add_argument('--session-only', action='store_true')
 actions.add_argument('--installed-only', action='store_true')
-parser.add_argument('--installed-search', action='store_true')
-parser.add_argument('--installed-bookmarks', action='store_true')
+installed_actions = parser.add_mutually_exclusive_group()
+installed_actions.add_argument('--installed-search', action='store_true')
+installed_actions.add_argument('--installed-bookmarks', action='store_true')
+installed_actions.add_argument('--installed-annotations', action='store_true')
 parser.add_argument('--installed-search-rotation', action='store_true')
 args = parser.parse_args()
 if args.installed_search_rotation and not args.installed_search:
     parser.error('--installed-search-rotation requires --installed-search')
-if args.installed_search and not args.installed_only:
-    parser.error('--installed-search requires --installed-only')
-if args.installed_bookmarks and (not args.installed_only or args.installed_search):
-    parser.error('--installed-bookmarks requires --installed-only without --installed-search')
+if any((args.installed_search, args.installed_bookmarks, args.installed_annotations)) and not args.installed_only:
+    parser.error('Installed reader actions require --installed-only')
 args.epub_tests |= args.epub_only or args.epub_corpus
 if args.epub_tests and (args.platform_probe_only or args.font_resources_only or args.session_only or args.installed_only):
     parser.error('Select EPUB rendering or a resource/platform diagnostic')
@@ -120,7 +120,8 @@ try:
     if args.installed_only:
         installed.check(device, output, search_only=args.installed_search,
                         rotate_after_search=args.installed_search_rotation,
-                        bookmarks_only=args.installed_bookmarks)
+                        bookmarks_only=args.installed_bookmarks,
+                        annotations_only=args.installed_annotations)
         sys.exit(0)
     with (output / 'platform-probe.stderr').open('w') as error:
         probe = subprocess.run(

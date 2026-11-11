@@ -199,8 +199,18 @@ function elementPath(element) {
   return path;
 }
 const text = nodes.map(entry => entry.node.data).join('');
+function textNodeIndex(offset) {
+  let low = 0, high = nodes.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    const entry = nodes[middle];
+    if (entry.offset + entry.node.length <= offset) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
 function textPoint(offset) {
-  const entry = nodes.find(entry => entry.offset + entry.node.length > offset) || nodes.at(-1);
+  const entry = nodes[textNodeIndex(offset)] || nodes.at(-1);
   if (!entry) return null;
   let local = Math.max(0, Math.min(entry.node.length, offset - entry.offset));
   // Positions are UTF-16 offsets between Unicode characters.
@@ -386,7 +396,7 @@ let visible = null, searchIndex = null;
 function visibleText() {
   if (visible) return visible;
   if (text.length > 2000000) throw new Error('query-text-too-large');
-  const parts = [], starts = [], ends = [];
+  const parts = [], starts = [], ends = [], breaks = [];
   let previousBlock = null, lineBreak = false;
   const sourceNodes = new Map(nodes.map(entry => [entry.node, entry]));
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT |
@@ -407,6 +417,7 @@ function visibleText() {
     while (block !== body && /^(inline|contents)$/u.test(getComputedStyle(block).display))
       block = block.parentElement;
     if (previousBlock && (previousBlock !== block || lineBreak)) {
+      breaks.push(starts.length);
       parts.push('\n');
       starts.push(entry.offset);
       ends.push(entry.offset);
@@ -419,7 +430,7 @@ function visibleText() {
       ends.push(entry.offset + i + 1);
     }
   }
-  return visible = { text: parts.join(''), starts, ends };
+  return visible = { text: parts.join(''), starts, ends, breaks };
 }
 function cleanText(value) {
   return value.replace(/[\u00ad\u200b\u2060\ufeff]/gu, '').replace(/\s+/gu, ' ');
@@ -429,7 +440,8 @@ function rangeResult(first, last, includeText = true) {
   if (first.offset > last.offset) [first, last] = [last, first];
   if (first.offset === last.offset) return null;
   const rectangles = [];
-  for (const entry of nodes) {
+  for (let i = textNodeIndex(first.offset); i < nodes.length && nodes[i].offset < last.offset; ++i) {
+    const entry = nodes[i];
     const begin = Math.max(0, first.offset - entry.offset);
     const finish = Math.min(entry.node.length, last.offset - entry.offset);
     if (finish <= begin || getComputedStyle(entry.node.parentElement).visibility !== 'visible') continue;
@@ -449,10 +461,9 @@ function rangeResult(first, last, includeText = true) {
   const result = { start: locatorAt(first), end: locatorAt(last), rectangles };
   if (!includeText) return result;
   const stream = visibleText();
-  let begin = stream.ends.findIndex(end => end > first.offset);
-  let finish = begin;
-  while (finish >= 0 && finish < stream.text.length && stream.starts[finish] < last.offset) ++finish;
-  const selected = begin < 0 ? '' : cleanText(stream.text.slice(begin, finish)).trim();
+  const begin = sourceIndex(stream.ends, first.offset + 1);
+  const finish = sourceIndex(stream.starts, last.offset);
+  const selected = cleanText(stream.text.slice(begin, finish)).trim();
   if (selected.length > 8192) throw new Error('query-range-too-large');
   return { ...result, text: selected };
 }
@@ -471,7 +482,7 @@ function endpoint(offset, ending) {
   if ((ending ? finish : begin) !== offset) return absent;
   // Keep the caret in the glyph's own text node. At an inline-node boundary,
   // textPoint(end) belongs to the following node, possibly on another line.
-  const entry = nodes.find(entry => entry.offset <= begin && entry.offset + entry.node.length > begin);
+  const entry = nodes[textNodeIndex(begin)];
   if (!entry || finish > entry.offset + entry.node.length ||
       getComputedStyle(entry.node.parentElement).visibility !== 'visible') return absent;
   const range = document.createRange();
@@ -505,6 +516,273 @@ function geometry(first, last) {
   const result = rangeResult(first, last, false);
   return result ? { ...result, startEdge: endpoint(result.start.offset, false),
     endEdge: endpoint(result.end.offset, true) } : null;
+}
+let words = null;
+const opening = /[\p{Ps}\p{Pi}"']/u;
+const closing = /[\p{Pe}\p{Pf}"']/u;
+const terminal = /^[.!?。！？؟۔।॥]+/u;
+const openerFor = new Map(Array.from([
+  ['(', ')'], ['[', ']'], ['{', '}'], ['“', '”'], ['‘', '’'], ['「', '」'],
+  ['『', '』'], ['（', '）'], ['«', '»'], ['‹', '›'], ['"', '"'], ["'", "'"]
+], ([a, b]) => [b, a]));
+const openers = new Set(openerFor.values());
+
+function tokenAt(index, punctuation = true) {
+  const stream = visibleText();
+  if (index < 0 || index >= stream.text.length) return null;
+  words ||= new Intl.Segmenter(undefined, { granularity: 'word' }).segment(stream.text);
+  const word = words.containing(index);
+  if (word?.isWordLike)
+    return { begin: word.index, end: word.index + word.segment.length, punctuation: false };
+  if (!punctuation) return null;
+  graphemes ||= new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(stream.text);
+  const glyph = graphemes.containing(index);
+  return glyph && /^\p{P}\p{M}*$/u.test(glyph.segment)
+    ? { begin: glyph.index, end: glyph.index + glyph.segment.length, punctuation: true } : null;
+}
+function tokenResult(token) {
+  if (!token) return null;
+  const stream = visibleText();
+  const result = rangeResult(textPoint(stream.starts[token.begin]), textPoint(stream.ends[token.end - 1]));
+  if (!result || !result.text) return null;
+  result.punctuation = token.punctuation;
+  if (!token.punctuation) {
+    let before = token.begin, after = token.end;
+    while (before > 0 && token.begin - before < 32 && opening.test(stream.text[before - 1])) --before;
+    while (after < stream.text.length && after - token.end < 32 &&
+           /\p{P}/u.test(stream.text[after]) && (!opening.test(stream.text[after]) ||
+             closing.test(stream.text[after]))) ++after;
+    if (before < token.begin) result.startBeforePunctuation = locatorAt(textPoint(stream.starts[before]));
+    if (after > token.end) result.endAfterPunctuation = locatorAt(textPoint(stream.ends[after - 1]));
+  }
+  return result;
+}
+function adjacentWord(index, step) {
+  const stream = visibleText();
+  for (let checked = 0; checked < 256; ++checked, index += step) {
+    if (index < 0 || index >= stream.text.length || stream.starts[index] === stream.ends[index]) break;
+    const word = tokenAt(index, false);
+    if (word) return word;
+  }
+  return null;
+}
+function pointToken(query) {
+  const { x, y } = query;
+  const wordOnly = query.kind === 'word', dragging = query.kind === 'drag-token';
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 ||
+      x >= options.width || y >= options.height) return null;
+  const onPaper = x >= margin && x < options.width - margin &&
+    y >= margin && y < options.height - margin;
+  if (!onPaper && !dragging) return null;
+  const hitX = Math.max(margin, Math.min(options.width - margin - 1, x));
+  const caret = document.caretRangeFromPoint(hitX, y);
+  const entry = caret && nodes.find(entry => entry.node === caret.startContainer);
+  if (!entry) return null;
+  const boundary = dragging ? resolvePosition(query.boundary) : null;
+  if (dragging && (!boundary || boundary.local === null || typeof query.start !== 'boolean')) return null;
+  const stream = visibleText();
+  const index = sourceIndex(stream.ends, entry.offset + caret.startOffset + 1);
+  const candidates = [index, index - 1];
+  const contains = result => result?.rectangles.some(r =>
+    x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
+  const extendsBoundary = result => query.start ? result.start.offset < boundary.offset
+    : result.end.offset > boundary.offset;
+  const crossedEdge = result => {
+    if (!result?.rectangles.length) return false;
+    const edge = endpoint(query.start ? result.start.offset : result.end.offset, !query.start);
+    return edge.visible && y >= edge.first.y && y < edge.last.y &&
+      (x - edge.first.x) * edge.outward.x >= 0;
+  };
+  let hit = null, selected = null;
+  for (const at of candidates) {
+    const token = tokenAt(at, !wordOnly);
+    const result = tokenResult(token);
+    if (contains(result)) {
+      hit = result;
+      selected = token;
+      break;
+    }
+  }
+  if (!hit && !wordOnly && onPaper) {
+    for (const at of candidates) {
+      if (!/\s/u.test(stream.text[at] || '') || stream.ends[at] <= stream.starts[at]) continue;
+      const cell = rangeResult(textPoint(stream.starts[at]), textPoint(stream.ends[at]), false);
+      if (!contains(cell)) continue;
+      selected = adjacentWord(at - 1, -1);
+      hit = tokenResult(selected);
+      break;
+    }
+  }
+  if (!dragging) return hit;
+  if (hit) {
+    if (!extendsBoundary(hit) || crossedEdge(hit)) return hit;
+    // A move can skip the space and land inside the next word. Retain the
+    // complete neighboring word without extending through the word under the pointer.
+    const adjacent = tokenResult(adjacentWord(query.start ? selected.end : selected.begin - 1,
+                                              query.start ? 1 : -1));
+    return adjacent?.rectangles.length && extendsBoundary(adjacent) ? adjacent : null;
+  }
+  // WebKit can place a caret on the end of the line when the pointer is in the
+  // margin. A drag may use it only after crossing the true edge on that line.
+  for (const at of candidates) {
+    const result = tokenResult(tokenAt(at));
+    if (crossedEdge(result)) return result;
+    const adjacent = tokenResult(adjacentWord(at, query.start ? 1 : -1));
+    if (crossedEdge(adjacent)) return adjacent;
+  }
+  return null;
+}
+
+const abbreviations = new Set('mr mrs ms dr prof st sr jr vs etc fig no inc e.g i.e'.split(' '));
+function ambiguousPeriod(value, at) {
+  if (value[at] !== '.') return false;
+  const word = value.slice(Math.max(0, at - 32), at).match(/[\p{L}\p{N}.]+$/u)?.[0] || '';
+  return word.length === 1 || word.includes('.') || /\p{N}$/u.test(word) ||
+    abbreviations.has(word.toLowerCase());
+}
+function sentenceAt(index) {
+  const stream = visibleText();
+  const part = sourceIndex(stream.breaks, index);
+  const begin = part ? stream.breaks[part - 1] + 1 : 0;
+  const end = stream.breaks[part] ?? stream.text.length;
+  if (index < begin || index >= end || end - begin > 16384) return null;
+  const value = stream.text.slice(begin, end);
+  const sentence = new Intl.Segmenter(undefined, { granularity: 'sentence' })
+    .segment(value).containing(index - begin);
+  if (!sentence) return null;
+  const preceding = value.slice(0, sentence.index).trimEnd();
+  let previous = preceding.length - 1;
+  while (previous >= 0 && (openerFor.has(preceding[previous]) || /\s/u.test(preceding[previous]))) --previous;
+  if (ambiguousPeriod(preceding, previous)) return null;
+  const from = begin + sentence.index, to = from + sentence.segment.trimEnd().length;
+  let first = from;
+  while (first < to && /[\s\p{P}]/u.test(stream.text[first])) ++first;
+  return { from, to, first, blockStart: begin };
+}
+function pairStep(value, index, stack) {
+  const mark = value[index];
+  if ((mark === "'" || mark === '’') && /[\p{L}\p{N}]/u.test(value[index - 1] || '') &&
+      /[\p{L}\p{N}]/u.test(value[index + 1] || '')) return;
+  if (stack.length && openerFor.get(mark) === value[stack.at(-1)]) stack.pop();
+  else if (openers.has(mark)) stack.push(index);
+}
+function sentenceEnding(begin, end) {
+  const value = visibleText().text;
+  const word = tokenAt(end - 1, false);
+  if (!word || word.end !== end) return end;
+  const sentence = sentenceAt(word.begin);
+  if (!sentence || begin > sentence.first || end < sentence.first || end > sentence.to) return end;
+  const suffix = value.slice(end, sentence.to);
+  const stops = suffix.match(terminal)?.[0];
+  if (!stops || suffix.includes('…') || suffix.includes('..') || ambiguousPeriod(value, end) ||
+      Array.from(suffix.slice(stops.length)).some(mark => !openerFor.has(mark))) return end;
+  const stack = [];
+  for (let at = Math.max(begin, sentence.blockStart); at < end; ++at) pairStep(value, at, stack);
+  let next = end + stops.length;
+  while (next < sentence.to && stack.length && openerFor.get(value[next]) === value[stack.at(-1)]) {
+    stack.pop();
+    ++next;
+  }
+  return next;
+}
+function sentenceOpening(begin, effectiveEnd) {
+  const value = visibleText().text;
+  const sentence = sentenceAt(begin);
+  if (!sentence || sentence.first !== begin || sentence.to > effectiveEnd) return begin;
+  let first = begin;
+  while (first > sentence.from && openers.has(value[first - 1])) --first;
+  if (first === begin) return begin;
+  let lastWordEnd = sentence.to;
+  while (lastWordEnd > begin && openerFor.has(value[lastWordEnd - 1])) --lastWordEnd;
+  while (lastWordEnd > begin && terminal.test(value[lastWordEnd - 1])) --lastWordEnd;
+  if (sentenceEnding(first, lastWordEnd) !== sentence.to || lastWordEnd === sentence.to) return begin;
+  const stack = [];
+  for (let at = first; at < sentence.to; ++at) pairStep(value, at, stack);
+  return stack.some(at => at < begin) ? begin : first;
+}
+function annotationRange(query) {
+  const stream = visibleText();
+  function readToken(values, ending, policy) {
+    if (!Array.isArray(values) || values.length !== 2) return null;
+    // The proxy uses offsets only after separately verifying long source
+    // locators that cannot fit together on one protocol line.
+    const resolve = value => Number.isInteger(value) && value >= 0 && value <= text.length
+      ? textPoint(value) : resolvePosition(value);
+    let first = resolve(values[0]), last = resolve(values[1]);
+    if (!first || !last || first.local === null || last.local === null || first.offset > last.offset)
+      return null;
+    let begin = sourceIndex(stream.ends, first.offset + 1);
+    let finish = sourceIndex(stream.starts, last.offset);
+    if (first.offset === last.offset && policy) {
+      const token = tokenAt(ending ? sourceIndex(stream.ends, last.offset) : begin, false);
+      if (!token) return null;
+      begin = token.begin;
+      finish = token.end;
+      first = textPoint(stream.starts[begin]);
+      last = textPoint(stream.ends[finish - 1]);
+    }
+    return { first, last, begin, finish, policy };
+  }
+  let first = readToken(query.first, false, query.startPolicy === true);
+  let last = readToken(query.last, true, query.endPolicy === true);
+  if (!first || !last) return null;
+  if (first.first.offset > last.first.offset) [first, last] = [last, first];
+  if (first.first.offset >= last.last.offset || last.finish < first.begin ||
+      last.finish - first.begin > 16384) return null;
+  // Try attached openers provisionally. Keep them only when the selection
+  // contains their matched closers and the complete first sentence.
+  let proposed = first.begin;
+  while (proposed > 0 && first.begin - proposed < 32 && openers.has(stream.text[proposed - 1])) --proposed;
+  if (!first.policy) proposed = first.begin;
+  let finish = last.policy ? sentenceEnding(proposed, last.finish) : last.finish;
+  const begin = first.policy ? sentenceOpening(first.begin, finish) : first.begin;
+  if (begin !== proposed && last.policy) finish = sentenceEnding(begin, last.finish);
+  const result = rangeResult(begin === first.begin ? first.first : textPoint(stream.starts[begin]),
+    finish === last.finish ? last.last : textPoint(stream.ends[finish - 1]));
+  return result ? { ...result, chosenStart: locatorAt(first.first), chosenEnd: locatorAt(last.last),
+    startPolicy: first.policy, endPolicy: last.policy } : null;
+}
+
+function pageEdges() {
+  const stream = visibleText();
+  const firstIndex = sourceIndex(stream.ends, start + 1);
+  const lastIndex = sourceIndex(stream.starts, end) - 1;
+  function edge(index, step) {
+    let physical = null, fallback = null;
+    for (let checked = 0; checked < 8192 && index >= firstIndex && index <= lastIndex;
+         ++checked, index += step) {
+      const token = tokenAt(index);
+      if (!token) continue;
+      const result = tokenResult(token);
+      if (!result?.rectangles.length) continue;
+      if (!physical) {
+        const at = step > 0 ? Math.max(token.begin, firstIndex) : Math.min(token.end - 1, lastIndex);
+        physical = { index: at, edge: endpoint(step > 0 ? stream.starts[at] : stream.ends[at], step < 0) };
+      }
+      if (step > 0 || !token.punctuation) return { token: result, ...physical };
+      fallback ||= result;
+    }
+    return fallback ? { token: fallback, ...physical } : null;
+  }
+  const first = edge(firstIndex, 1), last = edge(lastIndex, -1);
+  if (!first || !last) return null;
+  function continuation(inner, outer, step) {
+    if (page + step < 0 || page + step >= pages) return null;
+    for (let checked = 0; checked < 8192 && outer >= 0 && outer < stream.text.length;
+         ++checked, outer += step) {
+      if (/\s/u.test(stream.text[outer])) continue;
+      const from = textPoint(stream.starts[inner]), to = textPoint(stream.starts[outer]);
+      const section = point => point.node.parentElement.closest('section,article');
+      const rect = rectAt(to.node, to.local);
+      const adjacent = Math.floor((rect.left - margin + 0.5) / options.width) + page;
+      return adjacent === page + step && section(from) === section(to)
+        ? [locatorAt(from), locatorAt(to)] : null;
+    }
+    return null;
+  }
+  return { first: first.token, last: last.token, startEdge: first.edge, endEdge: last.edge,
+    before: continuation(first.index, firstIndex - 1, -1),
+    after: continuation(last.index, lastIndex + 1, 1) };
 }
 function fold(value) {
   return value.normalize('NFKC').toLowerCase().replace(/[\u00df]/gu, 'ss')
@@ -613,30 +891,11 @@ globalThis.kobaltQuery = function(query) {
         range.end === null ? textPoint(text.length) : resolvePosition(range.end))) };
     } else if (query.kind === 'range')
       result = rangeResult(resolvePosition(query.start), resolvePosition(query.end));
-    else if (query.kind === 'word') {
-      const { x, y } = query;
-      if (!Number.isFinite(x) || !Number.isFinite(y) || x < margin || y < margin ||
-          x >= options.width - margin || y >= options.height - margin)
-        throw new Error('invalid-query-point');
-      const caret = document.caretRangeFromPoint(x, y);
-      const entry = caret && nodes.find(entry => entry.node === caret.startContainer);
-      result = null;
-      if (entry) {
-        const stream = visibleText(), offset = entry.offset + caret.startOffset;
-        const index = stream.ends.findIndex(end => end > offset);
-        const words = new Intl.Segmenter(undefined, { granularity: 'word' }).segment(stream.text);
-        for (const at of [index < 0 ? stream.text.length - 1 : index, (index < 0 ? stream.text.length : index) - 1]) {
-          const word = at >= 0 ? words.containing(at) : null;
-          if (!word?.isWordLike) continue;
-          const candidate = rangeResult(textPoint(stream.starts[word.index]),
-            textPoint(stream.ends[word.index + word.segment.length - 1]));
-          if (candidate?.rectangles.some(r => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)) {
-            result = candidate;
-            break;
-          }
-        }
-      }
-    } else throw new Error('invalid-query');
+    else if (query.kind === 'word' || query.kind === 'annotation-token' || query.kind === 'drag-token')
+      result = pointToken(query);
+    else if (query.kind === 'annotation-range') result = annotationRange(query);
+    else if (query.kind === 'page-edges') result = pageEdges();
+    else throw new Error('invalid-query');
     return { source: document.URL, result };
   } catch (error) { return { source: document.URL, error: String(error.message) }; }
 };

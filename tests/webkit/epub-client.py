@@ -29,7 +29,9 @@ def fixture(path):
         book.writestr('EPUB/evil.js', attack)
         paragraphs = '<p id="unicode-target">Unique source anchor: Café 😀 e\u0301 العربية. A verified source position survives reflow.</p>'
         paragraphs += '<p>rain<span>bow</span> co\u00adoperation extraordinary A𐐀word Reader’s 日本語 中文 Straße ﬁnal e‑mail Cafe\u0301 CAFÉ <span style="display:none">hiddenneedle</span></p><p>BlockAlpha</p><p>BlockBeta</p><p>LineAlpha<br/>LineBeta</p>'
+        paragraphs += '<div id="selection" style="break-inside:avoid"><p>“Start finishes.” Another sentence!</p><p>Wait Dr. Smith waited…</p><p>Value 1.2. Next.</p><p>Alpha bravo charlie delta</p></div>'
         paragraphs += ''.join(f'<p>Paragraph {i:03}: A quiet reader turns the page. Typography and geometry stay tied to the source text through columns and viewport changes.</p>' for i in range(80))
+        paragraphs += '<section id="selection-boundary" style="break-before:page"><p>Semantic selection boundary.</p></section>'
         book.writestr('EPUB/one.xhtml', f'''<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title><link rel="stylesheet" href="style.css"/><script>{attack}</script><script src="evil.js"></script><meta http-equiv="refresh" content="0;url=http://127.0.0.1:18765/refresh"/></head><body onload="{attack}"><h1 id="guard">Book scripts blocked</h1><a href="two.xhtml#target">Chapter two</a><img src="picture.svg"/><img src="http://127.0.0.1:18765/image"/><iframe src="http://127.0.0.1:18765/frame"></iframe>{paragraphs}</body></html>''')
         book.writestr('EPUB/two.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1 id="target">Second chapter target</h1><a href="one.xhtml">Return to chapter one</a><p>End of the focused fixture.</p></body></html>')
 
@@ -236,6 +238,63 @@ try:
         geometry = query(0, page, kind='ranges', ranges=[long_range])['ranges'][0]
         assert geometry['rectangles'], geometry
         assert geometry['startEdge']['visible'] == start_visible and geometry['endEdge']['visible'] == end_visible, geometry
+    selection_page = query(0, 0, kind='layout', fragment='selection')['page']
+    def selection_hit(text):
+        hit = query(0, 0, kind='search', text=text, page=selection_page)['hits'][0]
+        return [hit['start'], hit['end']]
+
+    def selection_range(first, last, start_policy=True, end_policy=True):
+        return query(0, selection_page, kind='annotation-range', first=first, last=last,
+                     startPolicy=start_policy, endPolicy=end_policy)
+
+    def hit_rectangle(bounds):
+        return query(0, selection_page, kind='range', start=bounds[0], end=bounds[1])['rectangles'][0]
+
+    def hit_point(bounds):
+        rect = hit_rectangle(bounds)
+        return dict(x=rect['x'] + rect['width'] / 2, y=rect['y'] + rect['height'] / 2)
+
+    start_word, end_word = selection_hit('Start'), selection_hit('finishes')
+    complete = selection_range(start_word, end_word)
+    assert complete['text'] == '“Start finishes.”', complete
+    assert complete['chosenStart'] == start_word[0] and complete['chosenEnd'] == end_word[1], complete
+    assert selection_range(end_word, start_word) == complete
+    assert selection_range(end_word, end_word)['text'] == 'finishes'
+    unquoted = selection_range(start_word, end_word, start_policy=False)
+    assert unquoted['text'] == 'Start finishes.'
+    assert selection_range(end_word, start_word, end_policy=False) == unquoted
+    assert selection_range(start_word, selection_hit('sentence'))['text'] == '“Start finishes.” Another sentence!'
+    assert selection_range([start_word[0]] * 2, [end_word[1]] * 2) == complete
+    period_bounds = [end_word[1], selection_hit('finishes.')[1]]
+    period = query(0, selection_page, kind='annotation-token', **hit_point(period_bounds))
+    assert period and period['punctuation'] and period['text'] == '.', period
+    exact = selection_range(start_word, [period['start'], period['end']], end_policy=False)
+    assert exact['text'] == 'Start finishes.' and not exact['endPolicy'], exact
+    retained = selection_range([start_word[0]] * 2, [period['end']] * 2,
+                               start_policy=False, end_policy=False)
+    assert retained['text'] == exact['text'] and retained['chosenEnd'] == period['end'], retained
+    space = query(0, selection_page, kind='annotation-token', **hit_point([start_word[1], end_word[0]]))
+    assert space and space['text'] == 'Start' and space['startBeforePunctuation'] == complete['start'], space
+    assert selection_range(selection_hit('Wait'), selection_hit('Dr'))['text'] == 'Wait Dr'
+    assert selection_range(selection_hit('Smith'), selection_hit('waited'))['text'] == 'Smith waited'
+    assert selection_range(selection_hit('Value'), selection_hit('1.2'))['text'] == 'Value 1.2'
+    alpha, bravo, charlie = map(selection_hit, ('Alpha', 'bravo', 'charlie'))
+    assert query(0, selection_page, kind='drag-token', boundary=alpha[1],
+                 start=False, **hit_point(bravo)) is None
+    expanded = query(0, selection_page, kind='drag-token', boundary=alpha[1],
+                     start=False, **hit_point(charlie))
+    assert expanded and expanded['text'] == 'bravo', expanded
+    expanded_back = query(0, selection_page, kind='drag-token', boundary=charlie[0],
+                          start=True, **hit_point(alpha))
+    assert expanded_back and expanded_back['text'] == 'bravo', expanded_back
+    assert query(0, selection_page, kind='annotation-token', x=3, y=3) is None
+    middle = (early['page'] + late['page']) // 2
+    edges = query(0, middle, kind='page-edges')
+    assert edges['first']['text'] and edges['last']['text'] and edges['before'] and edges['after'], edges
+    semantic = query(0, 0, kind='layout', fragment='selection-boundary')['page']
+    assert semantic > 0 and query(0, semantic, kind='page-edges')['before'] is None
+    assert query(0, semantic - 1, kind='page-edges')['after'] is None
+    assert query(1, 0, kind='page-edges')['before'] is None
     assert query(0, 0, kind='word', x=575, y=25) is None
     call('QUERY 0 0 ' + encoded('{bad JSON'), error='query-failed')
     call('QUERY 999 0 ' + encoded('{}'), error='invalid-query')
@@ -419,6 +478,7 @@ try:
     (destination / 'epub-results.json').write_text(json.dumps(dict(network_attempts=hits, pages=transcript,
         text_queries=query_checks, source_range_geometry=True, word_hit_testing=True,
         annotation_terminal_edges=True, annotation_remote_edges=True, source_resolution=True,
+        pointer_tokens=True, punctuation_provenance=True, handle_extension=True, page_edges=True,
         queries_preserve_frames=True, general_book_search=True,
         metadata_without_frames=True, cleanup=True), indent=2))
     print('WEBKIT_EPUB_VERIFIED', flush=True)

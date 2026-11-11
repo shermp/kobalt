@@ -62,6 +62,12 @@ public:
     ChapterSelection chapterSelection(const QVector<ChapterLink> &) const override;
     QString chapterTitle(const QString &) const override;
     WordSelection wordAt(QPoint) override;
+    AnnotationToken annotationTokenAt(QPoint) override;
+    AnnotationToken annotationDragTokenAt(QPoint, const QString &, bool) override;
+    AnnotationPageEdges annotationPageEdges() override;
+    TextRange annotationRange(const QString &, const QString &) override;
+    TextRange annotationRange(const QString &, const QString &, const QString &, const QString &,
+                              bool = false, bool = false, std::function<bool()> = {}) override;
     TextRange textRange(const QString &, const QString &) override;
     QVector<QRect> rangeRects(const QString &, const QString &, bool = false) override;
     AnnotationGeometry annotationGeometry(const QString &, const QString &) override;
@@ -119,6 +125,7 @@ private:
     QString sourceToken(QJsonObject, int) const;
     QVector<QRect> queryRectangles(const QJsonObject &) const;
     SelectionEndpoint queryEndpoint(const QJsonObject &) const;
+    AnnotationToken queryAnnotationToken(const QJsonObject &, int) const;
     QVector<SourcePoint> resolvePositions(const QStringList &);
     QList<AnnotationGeometry> rangeGeometry(int, const QVector<QPair<QString, QString>> &);
     bool readFrame(const QString &, unsigned);

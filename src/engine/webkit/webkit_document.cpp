@@ -800,6 +800,166 @@ WordSelection WebKitDocument::wordAt(QPoint point)
     return { text, start, end, boxes };
 }
 
+AnnotationToken WebKitDocument::queryAnnotationToken(const QJsonObject &result, int index) const
+{
+    AnnotationToken token;
+    if (!result.value("punctuation").isBool())
+        return {};
+    const auto read = [&](const char *key) {
+        const auto position = sourceToken(result.value(key).toObject(), index);
+        return position.size() <= 4096 ? position : QString();
+    };
+    token.start = read("start");
+    token.end = read("end");
+    token.text = result.value("text").toString();
+    token.rectangles = queryRectangles(result);
+    if (token.start.isEmpty() || token.end.isEmpty() || token.text.isEmpty()
+        || token.text.size() > 8192 || token.rectangles.isEmpty())
+        return {};
+    token.punctuation = result.value("punctuation").toBool();
+    token.startBeforePunctuation = read("startBeforePunctuation");
+    token.endAfterPunctuation = read("endAfterPunctuation");
+    return token;
+}
+
+AnnotationToken WebKitDocument::annotationTokenAt(QPoint point)
+{
+    if (!QRect(QPoint(), size_).contains(point))
+        return {};
+    const int index = spine();
+    return queryAnnotationToken(query(index, chapterPage(),
+                                      qt::object({ { "kind", "annotation-token" },
+                                                   { "x", point.x() },
+                                                   { "y", point.y() } })),
+                                index);
+}
+
+AnnotationToken WebKitDocument::annotationDragTokenAt(QPoint point, const QString &boundary,
+                                                      bool start)
+{
+    if (boundary.isEmpty())
+        return annotationTokenAt(point);
+    if (!QRect(QPoint(), size_).contains(point))
+        return {};
+    const int index = spine();
+    const auto locator = sourceposition::fromToken(boundary);
+    if (sourceSpine(locator) != index || index < 0)
+        return {};
+    return queryAnnotationToken(query(index, chapterPage(),
+                                      qt::object({ { "kind", "drag-token" },
+                                                   { "x", point.x() },
+                                                   { "y", point.y() },
+                                                   { "boundary", queryPosition(locator) },
+                                                   { "start", start } })),
+                                index);
+}
+
+AnnotationPageEdges WebKitDocument::annotationPageEdges()
+{
+    const int index = spine();
+    const auto reply = query(index, chapterPage(), qt::object({ { "kind", "page-edges" } }));
+    AnnotationPageEdges result;
+    result.first = queryAnnotationToken(reply.value("first").toObject(), index);
+    result.last = queryAnnotationToken(reply.value("last").toObject(), index);
+    if (result.first.text.isEmpty() || result.last.text.isEmpty())
+        return {};
+    result.start = queryEndpoint(reply.value("startEdge").toObject());
+    result.end = queryEndpoint(reply.value("endEdge").toObject());
+    const auto continues = [&](const char *key, int direction) {
+        if (chapterPage() + direction < 0 || chapterPage() + direction >= chapterPages())
+            return false;
+        const auto boundary = reply.value(key).toArray();
+        if (boundary.size() != 2)
+            return false;
+        const auto inner = boundary.at(0).toObject(), outer = boundary.at(1).toObject();
+        if (sourceToken(inner, index).isEmpty() || sourceToken(outer, index).isEmpty())
+            return false;
+        const int from = inner.value("offset").toInt(), to = outer.value("offset").toInt();
+        if (direction > 0 ? from >= to : to >= from)
+            return false;
+        // The helper checks semantic sections. The proxy already owns the
+        // resolved TOC, including chapter boundaries within a spine entry.
+        for (const auto &chapter : chapters_) {
+            if (chapter.page != page() && chapter.page != page() + direction)
+                continue;
+            const auto marker = sourceposition::fromToken(chapter.position);
+            const int offset = marker.value("offset").toInt(-1);
+            if (offset > qMin(from, to) && offset <= qMax(from, to) && sourceSpine(marker) == index)
+                return false;
+        }
+        return true;
+    };
+    result.continuesBefore = continues("before", -1);
+    result.continuesAfter = continues("after", 1);
+    return result;
+}
+
+TextRange WebKitDocument::annotationRange(const QString &start, const QString &end)
+{
+    return textRange(start, end);
+}
+
+TextRange WebKitDocument::annotationRange(const QString &firstStart, const QString &firstEnd,
+                                          const QString &lastStart, const QString &lastEnd,
+                                          bool endPolicy, bool startPolicy,
+                                          std::function<bool()> current)
+{
+    if (current && !current())
+        return {};
+    const QStringList tokens{ firstStart, firstEnd, lastStart, lastEnd };
+    const int index = sourceSpine(sourceposition::fromToken(firstStart));
+    if (index < 0)
+        return {};
+    QJsonArray positions;
+    for (const auto &token : tokens) {
+        const auto locator = sourceposition::fromToken(token);
+        if (token.size() > 4096 || sourceSpine(locator) != index)
+            return {};
+        positions.append(queryPosition(locator));
+    }
+    auto request = qt::object({ { "kind", "annotation-range" },
+                                { "first", qt::array({ positions.at(0), positions.at(1) }) },
+                                { "last", qt::array({ positions.at(2), positions.at(3) }) },
+                                { "startPolicy", startPolicy },
+                                { "endPolicy", endPolicy } });
+    if (QJsonDocument(request).toJson(QJsonDocument::Compact).size() > 6000) {
+        // Four deeply nested CFIs can exceed a single KWRP line. Resolve them
+        // in bounded batches before sending their verified source offsets.
+        const auto resolved = resolvePositions(tokens);
+        if (resolved.size() != tokens.size()
+            || std::any_of(resolved.begin(), resolved.end(),
+                           [index](const SourcePoint &point) { return point.spine != index; }))
+            return {};
+        request["first"] = qt::array({ resolved[0].offset, resolved[1].offset });
+        request["last"] = qt::array({ resolved[2].offset, resolved[3].offset });
+    }
+    if (current && !current())
+        return {};
+    const auto reply = query(index, index == spine() ? chapterPage() : 0, request);
+    if ((current && !current()) || !reply.value("startPolicy").isBool()
+        || !reply.value("endPolicy").isBool())
+        return {};
+    const auto start = reply.value("start").toObject(), end = reply.value("end").toObject();
+    const auto chosenStart = reply.value("chosenStart").toObject(),
+               chosenEnd = reply.value("chosenEnd").toObject();
+    const auto offset = [](const QJsonObject &locator) {
+        return locator.value("offset").toInt(-1);
+    };
+    if (offset(start) > offset(chosenStart) || offset(chosenStart) >= offset(chosenEnd)
+        || offset(chosenEnd) > offset(end))
+        return {};
+    TextRange result{ sourceToken(start, index),        sourceToken(end, index),
+                      reply.value("text").toString(),   sourceToken(chosenEnd, index),
+                      sourceToken(chosenStart, index),  reply.value("startPolicy").toBool(),
+                      reply.value("endPolicy").toBool() };
+    if (result.text.isEmpty() || result.text.size() > 8192)
+        return {};
+    for (const auto &token : { result.start, result.end, result.chosenStart, result.chosenEnd })
+        if (token.isEmpty() || token.size() > 4096)
+            return {};
+    return result;
+}
+
 QJsonObject WebKitDocument::queryRange(const QString &start, const QString &end)
 {
     const auto first = sourceposition::fromToken(start), last = sourceposition::fromToken(end);

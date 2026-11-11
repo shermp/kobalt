@@ -156,6 +156,22 @@ int helper()
                       QJsonObject{ { "width", mode == "bad-layout-viewport" ? width + 1 : width },
                                    { "height", height } } }
                 };
+            } else if (kind == "annotation-token" || kind == "drag-token") {
+                result["punctuation"] = false;
+            } else if (kind == "annotation-range") {
+                result["chosenStart"] = start;
+                result["chosenEnd"] = end;
+                result["startPolicy"] = query.value("startPolicy");
+                result["endPolicy"] = query.value("endPolicy");
+            } else if (kind == "page-edges") {
+                result["punctuation"] = false;
+                result = {
+                    { "first", result },
+                    { "last", result },
+                    { "before",
+                      QJsonArray{ locatorAt(offset + 10), locatorAt(qMax(0, offset - 10)) } },
+                    { "after", QJsonArray{ locatorAt(offset + 16), locatorAt(offset + 60) } }
+                };
             } else if (kind == "resolve") {
                 QJsonArray points;
                 for (const auto &position : query.value("positions").toArray())
@@ -426,6 +442,20 @@ int main(int argc, char **argv)
         require(document.wordAt({ -1, 30 }).text.isEmpty()
                         && document.textRange("/legacy", word.end).text.isEmpty(),
                 "Invalid points and legacy anchors are not sent as source queries");
+        const auto token = document.annotationTokenAt({ 30, 30 });
+        require(token.start == word.start && token.end == word.end && !token.punctuation,
+                "The editor obtains its token from the active WebKit spine");
+        const auto selected = document.annotationRange(token.start, token.end, token.start,
+                                                       token.end, false, true);
+        require(selected.chosenStart == token.start && selected.chosenEnd == token.end
+                        && selected.sentenceStartPolicy && !selected.sentenceEndPolicy,
+                "The proxy keeps the chosen endpoints and punctuation policies");
+        require(document.annotationRange(token.start, token.end, tokenAt(10, 2), tokenAt(16, 2))
+                        .text.isEmpty(),
+                "The editor cannot extend a selection across spine entries");
+        const auto edges = document.annotationPageEdges();
+        require(!edges.first.text.isEmpty() && !edges.continuesBefore && !edges.continuesAfter,
+                "TOC and spine boundaries stop automatic selection turns");
         QVector<SearchHit> hits;
         for (int selected = 0; selected < document.pages(); ++selected) {
             const auto batch = document.searchPage("source", selected);
@@ -476,6 +506,8 @@ int main(int argc, char **argv)
                                 == 50,
                 "Bookmarks reflow from their source anchors and summary caches invalidate");
         require(document.image(document.page()).size() == QSize(800, 600), "resized image");
+        require(document.annotationPageEdges().continuesAfter,
+                "An adjacent page without a chapter marker remains selectable");
         require(!document.rangeRects(word.start, word.end).isEmpty(), "Prime reflowed geometry");
         require(document.applyAppearance({ { "font_pixels", 31 } }, { 800, 600 })
                         && document.page() == 2,

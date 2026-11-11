@@ -72,7 +72,8 @@ def prepare(root, device, package):
     (profile / 'live-state').touch()
 
 
-def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False):
+def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False,
+          annotations_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -344,12 +345,130 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'bookmark', 'backend': backend, 'source': original,
                            'returned': returned})
 
+    def annotation_list(expected):
+        open_marks()
+        device.tap_widget(name='rrAnnotationsTab')
+        if expected:
+            device.wait_widget(name='rrAnnotation0')
+            device.wait_widget(text=expected, ancestor_name='rrAnnotation0')
+            assert not any(w['name'] == 'rrAnnotation1' for w in device.ui()['widgets'])
+        else:
+            device.wait_widget(name='rrBookmarkListEmptyHint')
+            assert not any(widget['name'] == 'rrAnnotation0' for widget in device.ui()['widgets'])
+
+    def annotate(backend):
+        paper = device.wait_widget(name='rrPage')
+        assert (paper['width'], paper['height']) == (1264, 1680), paper
+        call('tap', x=paper['x'] + paper['width'] // 2, y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrAnnotate')
+        capture(backend + '-annotate-entry')
+        device.tap_widget(name='rrAnnotate')
+        device.wait_until(lambda: not any(w['name'] in ('rrAnnotate', 'rrAnnotationModeNotice')
+                                          for w in device.ui()['widgets']),
+                          description='highlight mode indicator dismissed')
+        device.run({'action': 'settle', 'quiet_ms': 250, 'timeout_ms': 10000})
+        # These points hit Type and the space beyond Tester on the pinned
+        # Trevelyan title page. Each renderer lays out the title independently.
+        x, y, beyond = (435, 434, 1010) if backend == 'webkit' else (415, 505, 1025)
+        frame = device.folder / 'artifacts/nickel-main.bmp'
+        gesture = backend + '-selection'
+        before = frame.read_bytes()
+        call('pointer', phase='down', gesture=gesture, x=x, y=y)
+        device.wait_until(lambda: frame.read_bytes() != before, timeout=4,
+                          description='long press selection painted')
+        before = frame.read_bytes()
+        call('pointer', phase='move', gesture=gesture, x=beyond, y=y)
+        device.wait_until(lambda: frame.read_bytes() != before, timeout=4,
+                          description='extended selection painted')
+        call('pointer', phase='up', gesture=gesture, x=beyond, y=y)
+        capture(backend + '-selection-draft')
+        call('tap', x=x, y=y)
+        device.wait_widget(name='rrAnnotationSave')
+        capture(backend + '-selection-choices')
+        device.tap_widget(name='rrAnnotationSave')
+        device.wait_until(lambda: not any(w['name'] == 'rrAnnotationPopover'
+                                          for w in device.ui()['widgets']),
+                          description='mark choices dismissed')
+        annotation_list('Type Tester')
+        capture(backend + '-annotation-list')
+        close_marks()
+        capture(backend + '-annotation-saved')
+        transcript.append({'action': 'annotate', 'backend': backend, 'excerpt': 'Type Tester'})
+
+    def adjust_source_annotation():
+        gesture = 'saved-selection'
+        call('pointer', phase='down', gesture=gesture, x=435, y=434)
+        device.wait_widget(name='rrAnnotationEdit', timeout=4)
+        call('pointer', phase='up', gesture=gesture, x=435, y=434)
+        device.tap_widget(name='rrAnnotationEdit')
+        capture('webkit-annotation-adjust')
+        frame = device.folder / 'artifacts/nickel-main.bmp'
+        before = frame.read_bytes()
+        # The captured title-page end handle is below the last glyph. Moving
+        # it horizontally keeps the adjusted pointer on the same text line.
+        gesture = 'end-handle'
+        call('pointer', phase='down', gesture=gesture, x=967, y=542)
+        call('pointer', phase='move', gesture=gesture, x=470, y=542)
+        device.wait_until(lambda: frame.read_bytes() != before, timeout=4,
+                          description='adjusted end handle painted')
+        call('pointer', phase='up', gesture=gesture, x=470, y=542)
+        call('tap', x=435, y=434)
+        device.wait_widget(name='rrAnnotationSave')
+        device.tap_widget(name='rrAnnotationSave')
+        annotation_list('Type')
+        capture('webkit-annotation-adjusted-list')
+        close_marks()
+        transcript.append({'action': 'adjust', 'backend': 'webkit', 'excerpt': 'Type'})
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if annotations_only:
+            annotate('webkit')
+            adjust_source_annotation()
+            close_book()
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                open_book('crengine')
+                annotation_list(None)
+                close_marks()
+                contents('crengine')
+                annotate('crengine')
+                close_book()
+            finally:
+                hidden.rename(launcher)
+            # Reopen from the persisted profile in a fresh Nickel process.
+            # Keep the helper's license files outside the library scan.
+            bundle = launcher.parent.parent
+            held_bundle = device.folder / 'held-webkit'
+            bundle.rename(held_bundle)
+            try:
+                device.restart(timeout=120)
+                device.wait_library_ready(timeout=120)
+            finally:
+                held_bundle.rename(bundle)
+            subprocess.run(['podman', 'update', '--cpus', '1', 'virtualnickel-' + device.name],
+                           check=True, stdout=subprocess.DEVNULL)
+            transcript.append({'action': 'restart', 'profile_reused': True})
+            open_book('webkit')
+            annotation_list('Type')
+            capture('webkit-annotation-reopened')
+            close_marks()
+            close_book()
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'source_highlights': True,
+                      'hold_and_drag': True, 'adjusted_end_handle': True,
+                      'backend_isolation': True, 'cold_reopen': True,
+                      'helper_cleanup': True, 'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_ANNOTATIONS_VERIFIED', flush=True)
+            return
         if bookmarks_only:
             bookmark('webkit')
             saved_page = current_page

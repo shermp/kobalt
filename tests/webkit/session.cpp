@@ -179,13 +179,33 @@ int main(int argc, char **argv)
             completion.quit();
         });
         completion.exec();
-        session->annotationGeometry(
-                hits.first().start, hits.first().end, [&](AnnotationGeometry geometry) {
-                    require(!geometry.rectangles.isEmpty() && geometry.start.visible
-                                    && geometry.end.visible,
-                            "Source highlight exposes actual terminal handles");
+        AnnotationToken token;
+        session->annotationTokenAt(boxes.first().center(), [&](AnnotationToken result) {
+            token = result;
+            completion.quit();
+        });
+        completion.exec();
+        require(token.text.contains("Trevelyan", Qt::CaseInsensitive) && !token.punctuation,
+                "The reader's pointer path resolves a WebKit annotation token");
+        TextRange selected;
+        session->annotationRange(
+                token.start, token.end, token.start, token.end,
+                [&](TextRange range) {
+                    selected = range;
                     completion.quit();
-                });
+                },
+                true, true);
+        completion.exec();
+        require(selected.text.contains(token.text) && selected.chosenStart == token.start
+                        && selected.chosenEnd == token.end && selected.sentenceStartPolicy
+                        && selected.sentenceEndPolicy,
+                "The reader's selection range retains the chosen source boundaries");
+        session->annotationGeometry(selected.start, selected.end, [&](AnnotationGeometry geometry) {
+            require(!geometry.rectangles.isEmpty() && geometry.start.visible
+                            && geometry.end.visible,
+                    "Source highlight exposes actual terminal handles");
+            completion.quit();
+        });
         completion.exec();
         HighlightStore legacyHighlights(annotationPaths.annotations(), request.identity,
                                         fingerprint, "Book", annotationPaths.database());
@@ -211,10 +231,14 @@ int main(int argc, char **argv)
         });
         {
             mainthread::Interaction reading([] { return true; });
-            highlights->save(hits.first().start, hits.first().end, {}, [&](bool ok) {
-                require(ok, "Source highlight save queued");
-                completion.quit();
-            });
+            highlights->save(
+                    selected.start, selected.end, {},
+                    [&](bool ok) {
+                        require(ok, "Source highlight save queued");
+                        completion.quit();
+                    },
+                    selected.chosenEnd, selected.sentenceEndPolicy, selected.chosenStart,
+                    selected.sentenceStartPolicy);
             completion.exec();
             if (highlights->saving() || !highlights->sync()) {
                 highlightReady.start(10);
@@ -223,7 +247,7 @@ int main(int argc, char **argv)
             }
             require(highlights->highlights().size() == 1 && highlights->error().isEmpty(),
                     "Background source highlight save completed");
-            highlights->save(hits.first().start, hits.first().end, {}, [&](bool ok) {
+            highlights->save(selected.start, selected.end, {}, [&](bool ok) {
                 require(!ok && highlights->error() == "overlap"
                                 && highlights->highlights().size() == 1,
                         "Overlapping source highlights are rejected without replacing the list");
@@ -236,7 +260,7 @@ int main(int argc, char **argv)
                                 == highlightJson(oldHighlight),
                 "Source highlight save preserves the original CREngine list");
         ReaderMarkupRequest markup;
-        markup.saved.append({ hits.first().start, hits.first().end, "gray", "shaded" });
+        markup.saved.append({ selected.start, selected.end, "gray", "shaded" });
         session->setMarkup(markup);
         session->captureMarkup([&](bool ok) {
             require(ok && session->markup().saved.size() == 1
@@ -267,7 +291,7 @@ int main(int argc, char **argv)
                 "Source bookmark navigation uses the reflowed page");
         require(session->goTo(sourceposition::token(anchor)), "Return after source bookmark");
         completion.exec();
-        require(session->goTo(hits.first().start), "Open source highlight after reflow");
+        require(session->goTo(selected.start), "Open source highlight after reflow");
         completion.exec();
         require(session->markup().saved.size() == 1
                         && !session->markup().saved.first().rectangles.isEmpty(),
@@ -283,11 +307,13 @@ int main(int argc, char **argv)
                                       "Book", annotationPaths.database(),
                                       AnnotationPositionFormat::SourceV1);
         require(coldHighlights.load() && coldHighlights.highlights().size() == 1
-                        && coldHighlights.highlights().first().start == hits.first().start
-                        && coldHighlights.highlights().first().text.compare("Trevelyan",
-                                                                            Qt::CaseInsensitive)
-                                == 0,
-                "Cold store restores source highlight text and anchors");
+                        && coldHighlights.highlights().first().start == selected.start
+                        && coldHighlights.highlights().first().text == selected.text
+                        && coldHighlights.highlights().first().chosenStart == selected.chosenStart
+                        && coldHighlights.highlights().first().chosenEnd == selected.chosenEnd
+                        && coldHighlights.highlights().first().sentenceStartPolicy
+                        && coldHighlights.highlights().first().sentenceEndPolicy,
+                "Cold store restores source highlight text, anchors and punctuation provenance");
         require(session->goTo(sourceposition::token(anchor)), "Return after source highlight");
         completion.exec();
         bookmarks.reset();
@@ -352,6 +378,7 @@ int main(int argc, char **argv)
                                                 { "text_ranges", true },
                                                 { "source_bookmarks", true },
                                                 { "source_highlights", true },
+                                                { "pointer_selection_provenance", true },
                                                 { "highlight_overlap_guard", true },
                                                 { "highlight_reflow_and_reopen", true },
                                                 { "annotation_terminal_edges", true },

@@ -23,6 +23,12 @@ endpoints. The production session verifies asynchronous source-highlight saves,
 overlap rejection, legacy preservation and markup after reflow and cold reload.
 These foundations do not establish pointer-editor parity.
 
+The [M4 pointer checks](../webkit-wpe/m4-selection.md) exercise WebKit word,
+space and punctuation hits, sentence boundary policies, handle movement and
+page-edge continuation. The installed scenario uses the production Annotate
+menu on Trevelyan's title page and verifies creation, adjustment, separate
+backend lists and persistence across a Nickel restart.
+
 ## Export
 
 `model.highlight-store` builds the export archives, and `desktop.annotations` exports through the reader with both the Kobo default folder and the save picker. Headless Qt uses its widget file picker for these checks. Native Mac save sheets, Android document-provider writes and Nickel's import scan still need platform validation.
