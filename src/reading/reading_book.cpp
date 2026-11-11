@@ -216,8 +216,6 @@ void ReadingBook::retryFailedReadingSave()
 
 void ReadingBook::observeReading(bool learnPace)
 {
-    if (!savesReadingState())
-        return;
     // Reading continues around these stops, so none of them waits for storage.
     if (released || (bridge && !bridge->writable())) {
         stopReading(true);
@@ -256,7 +254,7 @@ void ReadingBook::observeReading(bool learnPace)
             speed->pause();
         }
     }
-    if (bridge)
+    if (bridge && savesReadingState())
         bridge->observeReading(readingActivity());
 }
 
@@ -278,7 +276,7 @@ ReadingEstimates ReadingBook::estimates() const
     if (speed) {
         return speed->estimates(readingActivity());
     }
-    if (bridge && !released && bridge->writable()) {
+    if (bridge && !released && savesReadingState() && bridge->writable()) {
         ReadingEstimates result;
         if (bridge->estimates(readingActivity(), &result))
             return result;

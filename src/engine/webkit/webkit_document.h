@@ -56,10 +56,11 @@ public:
 
     QVector<ChapterLink> chapters() const override { return chapters_; }
 
-    QVector<ChapterLink> chapterGraph() const override
-    {
-        return chapterPageLengths(chapters_, pages());
-    }
+    DocumentWordCounts wordCounts(std::function<bool()> current = {}) override;
+
+    qint64 totalWords() const override { return counts_.total; }
+
+    QVector<ChapterLink> chapterGraph() const override;
 
     ChapterSelection chapterSelection(const QVector<ChapterLink> &) const override;
     QString chapterTitle(const QString &) const override;
@@ -98,6 +99,7 @@ private:
     QVector<int> offsets_;
     QVector<bool> linear_;
     QVector<ChapterLink> chapters_;
+    DocumentWordCounts counts_;
     QMap<QString, bool> chapterStartsAtPage_;
     QMap<int, QJsonObject> summaries_;
 
@@ -148,9 +150,10 @@ private:
     QList<AnnotationGeometry> rangeGeometry(int, const QVector<QPair<QString, QString>> &);
     bool readFrame(const QString &, unsigned, RenderedFrame &);
     bool style();
-    bool paginateBook();
+    bool scanBook(bool countWords);
+    bool countSpineWords(int index, int page, QVector<QPair<int, int>> anchors,
+                         QVector<QPair<int, qint64>> &prefixes, qint64 &total);
     bool locate(const QJsonObject &);
-    bool resolveContents();
     ChapterSelection selectContents(const QVector<ChapterLink> &, const QJsonObject &) const;
     bool fail(QString);
     bool rendererFailed(QString);

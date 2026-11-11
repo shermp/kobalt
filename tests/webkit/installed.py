@@ -1,6 +1,7 @@
 """Installed-mod diagnostics through the existing Device API; no build logic."""
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import struct
 import subprocess
@@ -76,7 +77,7 @@ def prepare(root, device, package, preview_menu=False):
 
 
 def check(device, output, search_only=False, rotate_after_search=False, bookmarks_only=False,
-          annotations_only=False, recovery_only=False, previews_only=False):
+          annotations_only=False, recovery_only=False, previews_only=False, stats_only=False):
     from control_stream import read_json
     profile = device.onboard / '.adds/kobalt'
     state_file = profile / 'diagnostics/state.json'
@@ -261,10 +262,11 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'turn', 'state': value})
         return value
 
-    def close_book(menu_capture=None):
-        paper = device.wait_widget(name='rrPage')
-        call('tap', x=paper['x'] + paper['width'] // 2,
-             y=paper['y'] + paper['height'] // 2)
+    def close_book(menu_capture=None, menu_open=False):
+        if not menu_open:
+            paper = device.wait_widget(name='rrPage')
+            call('tap', x=paper['x'] + paper['width'] // 2,
+                 y=paper['y'] + paper['height'] // 2)
         if menu_capture:
             device.wait_widget(name='rrReturn')
             capture(menu_capture)
@@ -530,12 +532,56 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         transcript.append({'action': 'previews', 'backend': backend, 'origin': origin,
                            'accepted': arrived['page'], 'returned': returned['page']})
 
+    def stats(backend):
+        paper = device.wait_widget(name='rrPage')
+        call('tap', x=paper['x'] + paper['width'] // 2, y=paper['y'] + paper['height'] // 2)
+        device.wait_widget(name='rrNavStats')
+        capture(backend + '-stats-entry')
+        device.tap_widget(name='rrNavStats')
+        device.wait_widget(name='rrChapterGraph')
+        device.wait_widget(name='rrGraphChapterTitle', text='Title Page')
+        value = state(lambda item: item.get('backend', 'crengine') == backend
+                      and item.get('session_reading_ms', 0) > 0,
+                      description=backend + ' active reading session')
+        detail = device.wait_widget(name='rrGraphBookDetail')
+        book_detail = detail.get('text', '')
+        words = re.fullmatch(r'([0-9,]+) words', book_detail)
+        if backend == 'webkit':
+            assert words and int(words[1].replace(',', '')) > 0, detail
+        else:
+            # Nickel can supply a pace immediately, which takes the place
+            # of the total on the existing Stats panel.
+            assert words or book_detail.endswith(' left'), detail
+        device.wait_widget(name='rrGraphSessionFigure')
+        capture(backend + '-stats')
+        transcript.append({'action': 'stats', 'backend': backend, 'book_detail': book_detail,
+                           'session_ms': value['session_reading_ms']})
+        close_book(menu_open=True)
+
     try:
         device.wait_log('reader: native controller ready', timeout=120)
         capture('library')
         first = open_book('webkit')
         capture('webkit-open')
         assert first['chapters'] > 0, first
+        if stats_only:
+            stats('webkit')
+            launcher = device.onboard / '.adds/kobalt-webkit/bin/kobalt-webkit'
+            hidden = launcher.with_suffix('.held')
+            launcher.rename(hidden)
+            try:
+                open_book('crengine')
+                contents('crengine')
+                stats('crengine')
+            finally:
+                hidden.rename(launcher)
+            blocked = [entry for entry in events() if entry.get('event') == 'main-thread-blocked']
+            assert not blocked, blocked
+            report = {'status': 'passed', 'installed_mod': True, 'stats': True,
+                      'main_thread_blocked': blocked, 'transcript': transcript}
+            (results / 'installed.json').write_text(json.dumps(report, indent=2) + '\n')
+            print('WEBKIT_INSTALLED_STATS_VERIFIED', flush=True)
+            return
         if previews_only:
             previews('webkit', first)
             close_book()

@@ -1,0 +1,59 @@
+{
+  "milestone": "M4 reading statistics",
+  "base": "f4fbe55",
+  "branch": "feature/webkit-wpe-m4",
+  "source_tree": "9c6e1964bbfa0abcbe69e9bc05b6e18dc02bb2ca6f6e904f3f6cf17217a76ace",
+  "checks": {
+    "native_progress": {
+      "status": "passed. Reused after the WebKit-only scan was consolidated",
+      "log": "build/m4-stats-native-progress.log"
+    },
+    "native_focused": {
+      "status": "shared reading-book and main-thread checks passed",
+      "log": "build/m4-stats-native-focused.log"
+    },
+    "native_webkit": {
+      "status": "passed on the final application source",
+      "log": "build/m4-stats-native-webkit.log"
+    },
+    "syntax": {
+      "status": "host clang++ unavailable. Both pinned Kobo SDK checks passed"
+    },
+    "kobo_qt5": {
+      "status": "compile, link and adapter checks passed",
+      "log": "build/m4-stats-qt5.log"
+    },
+    "kobo_qt6": {
+      "status": "compile, link, adapter and diagnostic package checks passed",
+      "log": "build/m4-stats-qt6-check.log",
+      "package_log": "build/m4-stats-qt6.log",
+      "diagnostic_package_sha256": "0c968516a574d5c2afef6d9cd598ea5c4240ad461926db121bf615f83ae80379"
+    },
+    "arm_epub": {
+      "status": "passed",
+      "log": "build/webkit/firmware-dbf854b28a/epub-client.log",
+      "helper_archive_sha256": "9eee5494ea8785b0cf653030fdc83643ca1532f885e39af258c0ae9a2cccb5c2"
+    },
+    "arm_session": {
+      "status": "passed",
+      "result": "build/webkit/firmware-2f24214397/session-results/session.json",
+      "total_words": 7316
+    },
+    "installed": {
+      "status": "passed",
+      "device": "Libra Colour",
+      "firmware": "6.0.274403",
+      "result": "build/webkit/firmware-517ce92211/installed-results/installed.json",
+      "log": "build/m4-stats-installed.log",
+      "main_thread_blocked": [],
+      "peak_mib": 689,
+      "memory_limit_mib": 768,
+      "webkit_opening_ms": 12595
+    },
+    "screen_review": {
+      "status": "both screens seen without requested changes",
+      "data": "build/review/webkit-m4-stats",
+      "manifest": "build/screenshots/webkit-m4-stats/manifest.json"
+    }
+  }
+}

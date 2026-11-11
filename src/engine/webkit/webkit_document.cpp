@@ -35,6 +35,7 @@ QJsonObject queryPosition(const QJsonObject &position)
 
 constexpr int maximumReply = 1024 * 1024;
 constexpr int maximumChapterPages = 100001; // M2 bounds GOTO to 100000.
+constexpr int maximumWordCountOffsets = 1024; // Keep QUERY below its 16 KiB request limit.
 
 QByteArray encoded(const QString &text)
 {
@@ -333,6 +334,7 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     offsets_.clear();
     linear_.clear();
     chapters_.clear();
+    counts_ = {};
     chapterStartsAtPage_.clear();
     position_ = {};
     summaries_.clear();
@@ -397,9 +399,7 @@ bool WebKitDocument::ensureOpen()
         return false;
     if (!style())
         return false;
-    if (offsets_.isEmpty() && !paginateBook())
-        return false;
-    if (chapters_.isEmpty() && !resolveContents())
+    if (offsets_.isEmpty() && !scanBook(true))
         return false;
     if (!restore.isEmpty() && !locate(restore))
         return false;
@@ -485,25 +485,6 @@ bool WebKitDocument::runOperation(const std::function<bool()> &operation, bool c
     return completed;
 }
 
-bool WebKitDocument::paginateBook()
-{
-    const auto description = frame_.value("document").toObject();
-    const int count = description.value("spine").toArray().size();
-    const auto linear = description.value("linear").toArray();
-    QVector<int> offsets{ 0 };
-    QVector<bool> flags;
-    for (int i = 0; i < count; ++i) {
-        const auto inspected = layout(i);
-        if (inspected.isEmpty())
-            return false;
-        offsets.append(offsets.last() + inspected.value("pages").toInt());
-        flags.append(linear.size() == count ? linear.at(i).toBool() : true);
-    }
-    offsets_ = std::move(offsets);
-    linear_ = std::move(flags);
-    return true;
-}
-
 bool WebKitDocument::locate(const QJsonObject &position)
 {
     const int index = sourceSpine(position);
@@ -527,44 +508,137 @@ int WebKitDocument::sourceSpine(const QJsonObject &position) const
     return -1;
 }
 
-bool WebKitDocument::resolveContents()
+bool WebKitDocument::scanBook(bool countWords)
 {
-    QVector<ChapterLink> contents;
-    QMap<QString, bool> boundaries;
-    const auto navigation = frame_.value("document").toObject().value("navigation").toArray();
-    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    const auto description = frame_.value("document").toObject();
+    const auto navigation = description.value("navigation").toArray();
+    const auto paths = description.value("spine").toArray();
+    const auto linear = description.value("linear").toArray();
     const QUrl origin(frame_.value("layout").toObject().value("source").toString());
     if (navigation.size() > 4096)
         return fail("Oversized WebKit table of contents");
-    for (const auto &entry : navigation) {
-        const auto item = entry.toObject();
-        const QUrl destination(item.value("href").toString());
+    QVector<QVector<int>> targets(paths.size());
+    QVector<QString> fragments(navigation.size());
+    for (int i = 0; i < navigation.size(); ++i) {
+        const QUrl destination(navigation.at(i).toObject().value("href").toString());
         if (destination.scheme() != origin.scheme() || destination.host() != origin.host())
             continue;
-        int index = -1;
-        for (int candidate = 0; candidate < paths.size(); ++candidate)
-            if (paths.at(candidate).toString() == destination.path().mid(1)) {
-                index = candidate;
+        const auto path = destination.path().mid(1);
+        for (int index = 0; index < paths.size(); ++index) {
+            if (paths.at(index).toString() == path) {
+                targets[index].append(i);
+                fragments[i] = destination.fragment(QUrl::FullyDecoded);
                 break;
             }
-        if (index < 0)
-            continue;
-        const auto inspected = layout(index, destination.fragment(QUrl::FullyDecoded));
-        if (inspected.isEmpty()) {
-            if (!error_.endsWith("missing-link-target"))
-                return false;
-            error_.clear();
-            continue;
         }
-        const auto position = sourceToken(inspected.value("locator").toObject(), index);
-        boundaries[position] = inspected.value("locator").toObject().value("offset").toInt()
-                <= inspected.value("location").toObject().value("start").toInt();
-        contents.append({ item.value("title").toString().simplified().left(512), position,
-                          offsets_.at(index) + inspected.value("page").toInt(),
-                          qBound(0, item.value("depth").toInt(), 256) });
     }
+
+    QVector<int> offsets{ 0 };
+    QVector<bool> flags;
+    QVector<ChapterLink> links(navigation.size());
+    QMap<QString, bool> boundaries;
+    QVector<QPair<int, qint64>> prefixes;
+    qint64 total = 0;
+    for (int index = 0; index < paths.size(); ++index) {
+        const auto inspected = layout(index);
+        if (inspected.isEmpty())
+            return false;
+        int loadedPage = 0;
+        QVector<QPair<int, int>> anchors;
+        for (const int i : targets.at(index)) {
+            const auto fragment = fragments.at(i);
+            const auto target = fragment.isEmpty() ? inspected : layout(index, fragment);
+            if (target.isEmpty()) {
+                if (!error_.endsWith("missing-link-target"))
+                    return false;
+                error_.clear();
+                continue;
+            }
+            const auto item = navigation.at(i).toObject();
+            const auto locator = target.value("locator").toObject();
+            const auto position = sourceToken(locator, index);
+            const int offset = locator.value("offset").toInt();
+            const int selected = target.value("page").toInt();
+            if (!fragment.isEmpty())
+                loadedPage = selected;
+            boundaries[position] =
+                    offset <= target.value("location").toObject().value("start").toInt();
+            links[i] = { item.value("title").toString().simplified().left(512), position,
+                         offsets.last() + selected, qBound(0, item.value("depth").toInt(), 256) };
+            if (countWords)
+                anchors.append({ offset, i });
+        }
+        // The helper still has this spine loaded, so counting needs no extra
+        // document load, layout or frame. An older helper can omit the counts.
+        if (countWords
+            && !countSpineWords(index, loadedPage, std::move(anchors), prefixes, total)) {
+            if (restartableFailure_)
+                return false;
+            countWords = false;
+            error_.clear();
+        }
+        offsets.append(offsets.last() + inspected.value("pages").toInt());
+        flags.append(linear.size() == paths.size() ? linear.at(index).toBool() : true);
+    }
+    QVector<ChapterLink> contents;
+    DocumentWordCounts counts;
+    QVector<qint64> chapterWords(navigation.size(), -1);
+    if (countWords) {
+        counts.total = total;
+        for (int i = 0; i < prefixes.size(); ++i) {
+            const auto prefix = prefixes.at(i);
+            const auto end = i + 1 < prefixes.size() ? prefixes.at(i + 1).second : total;
+            chapterWords[prefix.first] = end - prefix.second;
+        }
+    }
+    for (int i = 0; i < links.size(); ++i) {
+        if (links.at(i).position.isEmpty())
+            continue;
+        if (countWords)
+            counts.chapters.append({ links.at(i).position, chapterWords.at(i) });
+        contents.append(links.at(i));
+    }
+    if (countWords)
+        counts_ = std::move(counts);
+    offsets_ = std::move(offsets);
+    linear_ = std::move(flags);
     chapters_ = std::move(contents);
     chapterStartsAtPage_ = std::move(boundaries);
+    return true;
+}
+
+bool WebKitDocument::countSpineWords(int index, int page, QVector<QPair<int, int>> anchors,
+                                     QVector<QPair<int, qint64>> &prefixes, qint64 &total)
+{
+    // Sort by source offset, with TOC order breaking ties at one destination.
+    std::sort(anchors.begin(), anchors.end());
+    int spineTotal = -1, previousPrefix = 0, first = 0;
+    do {
+        const int end = qMin(first + maximumWordCountOffsets, int(anchors.size()));
+        QJsonArray offsets;
+        for (int i = first; i < end; ++i)
+            offsets.append(anchors.at(i).first);
+        QJsonObject reply;
+        if (!queryPage(index, page,
+                       qt::object({ { "kind", "word-counts" }, { "offsets", offsets } }), {},
+                       reply))
+            return false;
+        const int words = reply.value("total").toInt(-1);
+        const auto values = reply.value("prefixes").toArray();
+        if (words < 0 || (spineTotal >= 0 && spineTotal != words)
+            || !reply.value("prefixes").isArray() || values.size() != end - first)
+            return false;
+        spineTotal = words;
+        for (int i = first; i < end; ++i) {
+            const int prefix = values.at(i - first).toInt(-1);
+            if (prefix < previousPrefix || prefix > spineTotal)
+                return false;
+            prefixes.append({ anchors.at(i).second, total + prefix });
+            previousPrefix = prefix;
+        }
+        first = end;
+    } while (first < anchors.size());
+    total += spineTotal;
     return true;
 }
 
@@ -623,7 +697,7 @@ bool WebKitDocument::applyLayout(const QJsonObject &settings, QSize size)
     sourcePoints_.clear();
     geometryPage_ = -1;
     appearance_ = settings;
-    return style() && paginateBook() && resolveContents() && locate(restore);
+    return style() && scanBook(false) && locate(restore);
 }
 
 int WebKitDocument::spine() const
@@ -843,6 +917,30 @@ QString WebKitDocument::chapterTitle(const QString &position) const
 {
     const auto selected = selectContents(chapters_, sourceposition::fromToken(position));
     return selected.current >= 0 ? chapters_.at(selected.current).title : QString();
+}
+
+DocumentWordCounts WebKitDocument::wordCounts(std::function<bool()> current)
+{
+    if (current && !current())
+        return {};
+    const auto result = counts_;
+    counts_.cached = counts_.total >= 0;
+    return result;
+}
+
+QVector<ChapterLink> WebKitDocument::chapterGraph() const
+{
+    if (counts_.total < 0)
+        return chapterPageLengths(chapters_, pages());
+    auto graph = chapters_;
+    for (int i = 0; i < graph.size(); ++i) {
+        auto &chapter = graph[i];
+        chapter.words =
+                i < counts_.chapters.size() && counts_.chapters.at(i).position == chapter.position
+                ? counts_.chapters.at(i).words
+                : -1;
+    }
+    return graph;
 }
 
 QJsonObject WebKitDocument::query(int index, int selected, const QJsonObject &request,

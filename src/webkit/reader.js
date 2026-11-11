@@ -393,14 +393,13 @@ const pageStart = locatorAt(firstPoint);
 // Queries retain this layout's source map in the isolated world. They never
 // change selection, styles, scrolling or the logical reading anchor.
 let visible = null, searchIndex = null;
-function visibleText() {
-  if (visible) return visible;
+function* visibleSegments(exclude = null) {
   if (text.length > 2000000) throw new Error('query-text-too-large');
-  const parts = [], starts = [], ends = [], breaks = [];
   let previousBlock = null, lineBreak = false;
   const sourceNodes = new Map(nodes.map(entry => [entry.node, entry]));
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT |
     NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION);
+  const range = document.createRange();
   for (let node; (node = walker.nextNode());) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.localName === 'br' && getComputedStyle(node).display !== 'none' &&
@@ -408,22 +407,28 @@ function visibleText() {
       continue;
     }
     const entry = sourceNodes.get(node);
-    if (!entry) continue;
-    const range = document.createRange();
+    if (!entry || (exclude && node.parentElement.closest(exclude))) continue;
     range.selectNodeContents(entry.node);
     if (!Array.from(range.getClientRects()).some(r => r.width > 0 && r.height > 0) ||
         getComputedStyle(entry.node.parentElement).visibility !== 'visible') continue;
     let block = entry.node.parentElement;
     while (block !== body && /^(inline|contents)$/u.test(getComputedStyle(block).display))
       block = block.parentElement;
-    if (previousBlock && (previousBlock !== block || lineBreak)) {
+    yield { entry, boundary: previousBlock && (previousBlock !== block || lineBreak) };
+    previousBlock = block;
+    lineBreak = false;
+  }
+}
+function visibleText() {
+  if (visible) return visible;
+  const parts = [], starts = [], ends = [], breaks = [];
+  for (const { entry, boundary } of visibleSegments()) {
+    if (boundary) {
       breaks.push(starts.length);
       parts.push('\n');
       starts.push(entry.offset);
       ends.push(entry.offset);
     }
-    previousBlock = block;
-    lineBreak = false;
     parts.push(entry.node.data);
     for (let i = 0; i < entry.node.length; ++i) {
       starts.push(entry.offset + i);
@@ -431,6 +436,39 @@ function visibleText() {
     }
   }
   return visible = { text: parts.join(''), starts, ends, breaks };
+}
+function wordCounts(offsets) {
+  if (!Array.isArray(offsets) || offsets.length > 1024 ||
+      offsets.some((offset, i) => !Number.isInteger(offset) || offset < 0 ||
+        offset > length || (i > 0 && offset < offsets[i - 1]))) throw new Error('invalid-query');
+  let total = 0, inWord = false, connector = false;
+  const prefixes = [];
+  function capture(offset) {
+    while (prefixes.length < offsets.length && offsets[prefixes.length] <= offset)
+      prefixes.push(total);
+  }
+  // Match the logical count used by Stats across inline nodes. This stream
+  // skips the per-character search map and retains only the requested totals.
+  for (const { entry, boundary } of visibleSegments('svg,rt,rp')) {
+    if (boundary) inWord = connector = false;
+    let offset = entry.offset;
+    for (const character of entry.node.data) {
+      capture(offset);
+      offset += character.length;
+      if (/[\p{L}\p{N}]/u.test(character)) {
+        const separate = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(character);
+        if (separate || !inWord) ++total;
+        inWord = !separate;
+        connector = false;
+      } else if (/['\u2019\u002d\u2010\u2011]/u.test(character) && !connector) {
+        connector = inWord;
+      } else if (!/[\p{M}\p{Cf}]/u.test(character)) {
+        inWord = connector = false;
+      }
+    }
+  }
+  capture(length);
+  return { total, prefixes };
 }
 function cleanText(value) {
   return value.replace(/[\u00ad\u200b\u2060\ufeff]/gu, '').replace(/\s+/gu, ' ');
@@ -873,6 +911,7 @@ globalThis.kobaltQuery = function(query) {
       result = { page: Math.max(0, Math.min(pages - 1, selected)), locator: locatorAt(resolved) };
     }
     else if (query.kind === 'search') result = search(query.text, query.page);
+    else if (query.kind === 'word-counts') result = wordCounts(query.offsets);
     else if (query.kind === 'resolve') {
       if (!Array.isArray(query.positions) || query.positions.length > 64) throw new Error('invalid-query');
       const stream = visibleText();

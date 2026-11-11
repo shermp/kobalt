@@ -159,6 +159,11 @@ int helper()
                               { "page", selected } } } },
                     { "limited", false }
                 };
+            } else if (kind == "word-counts") {
+                QJsonArray prefixes;
+                for (const auto &anchor : query.value("offsets").toArray())
+                    prefixes.append(mode == "bad-word-counts" ? -1 : anchor.toInt() / 10);
+                result = { { "total", lengths[spine] / 10 }, { "prefixes", prefixes } };
             } else if (kind == "layout") {
                 result = {
                     { "page", page },
@@ -377,6 +382,19 @@ int main(int argc, char **argv)
                 "Chapter header uses the navigation title rather than an archive path");
         require(document.chapterProgress().page == 1 && document.chapterProgress().pages == 1,
                 "Chapter progress uses the reader's one-based page numbering");
+        const auto framesBeforeCount = QFileInfo(frameLog).size();
+        const auto countAnchor = document.state().value("source_position");
+        const auto counts = document.wordCounts();
+        const auto graph = document.chapterGraph();
+        require(counts.total == 60 && graph.size() == 4 && graph.at(0).words == 10
+                        && graph.at(1).words == 20 && graph.at(2).words == 0
+                        && graph.at(3).words == 30,
+                "Chapter counts follow source order across non-linear and duplicate entries");
+        const auto queriesAfterCount = QFileInfo(queryLog).size();
+        require(document.wordCounts().cached && QFileInfo(queryLog).size() == queriesAfterCount
+                        && QFileInfo(frameLog).size() == framesBeforeCount
+                        && document.state().value("source_position") == countAnchor,
+                "Word counts are reused without extra queries, frames or anchor movement");
         require(document.turnTarget(1, 1) == 3 && document.turnTarget(3, -1) == 1,
                 "turns skip non-linear spine entries");
         const auto first = document.image(0);
@@ -575,6 +593,16 @@ int main(int argc, char **argv)
     }
     qunsetenv("KOBALT_TEST_WEBKIT_FRAME_LOG");
     qunsetenv("KOBALT_TEST_WEBKIT_QUERY_LOG");
+    qputenv("KOBALT_TEST_WEBKIT_MODE", "bad-word-counts");
+    {
+        WebKitDocument document({}, "/unused.epub");
+        require(document.openResources({}, {}, { 600, 800 }, {}, nullptr),
+                "Malformed counts fixture opens");
+        require(document.wordCounts().total == -1 && document.totalWords() == -1
+                        && document.resourceError().isEmpty()
+                        && document.chapterGraph().first().words == 1 && document.go(1),
+                "Malformed counts preserve navigation and the page-length chart");
+    }
     qputenv("KOBALT_TEST_WEBKIT_MODE", "wrong-preview-page");
     {
         WebKitDocument document({}, "/unused.epub");

@@ -33,7 +33,7 @@ def fixture(path):
         paragraphs += ''.join(f'<p>Paragraph {i:03}: A quiet reader turns the page. Typography and geometry stay tied to the source text through columns and viewport changes.</p>' for i in range(80))
         paragraphs += '<section id="selection-boundary" style="break-before:page"><p>Semantic selection boundary.</p></section>'
         book.writestr('EPUB/one.xhtml', f'''<html xmlns="http://www.w3.org/1999/xhtml"><head><title>One</title><link rel="stylesheet" href="style.css"/><script>{attack}</script><script src="evil.js"></script><meta http-equiv="refresh" content="0;url=http://127.0.0.1:18765/refresh"/></head><body onload="{attack}"><h1 id="guard">Book scripts blocked</h1><a href="two.xhtml#target">Chapter two</a><img src="picture.svg"/><img src="http://127.0.0.1:18765/image"/><iframe src="http://127.0.0.1:18765/frame"></iframe>{paragraphs}</body></html>''')
-        book.writestr('EPUB/two.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1 id="target">Second chapter target</h1><a href="one.xhtml">Return to chapter one</a><p>End of the focused fixture.</p></body></html>')
+        book.writestr('EPUB/two.xhtml', '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Two</title></head><body><h1 id="target">Second chapter target</h1><a href="one.xhtml">Return to chapter one</a><p>End of the focused fixture.</p><p id="words">rain<span id="inside">bow</span> Reader’s e‑mail co\u00adoperation 1,234 cafe\u0301 日本語 中文 <ruby>字<rt>gloss</rt></ruby><span style="display:none">hidden text</span><svg xmlns="http://www.w3.org/2000/svg" width="50" height="40"><text y="20">SVG text</text></svg><br/>Tail</p></body></html>')
 
 
 def break_fixture(path):
@@ -181,6 +181,10 @@ try:
     summary = query(0, 0, kind='summary')
     assert summary['start'] == first['layout']['locator'] and summary['excerpt'], summary
     assert query(0, 0, kind='position', position=summary['start'])['page'] == 0
+    beginning = query(1, 0, fragment='words', kind='layout')['locator']['offset']
+    inside = query(1, 0, fragment='inside', kind='layout')['locator']['offset']
+    counted = query(1, 0, kind='word-counts', offsets=[0, beginning, inside, inside])
+    assert counted == {'total': 26, 'prefixes': [0, 12, 13, 13]}, counted
     query_checks = []
     def search(text, spine=0, pages=None):
         found = []

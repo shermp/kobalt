@@ -64,6 +64,16 @@ int main(int argc, char **argv)
         require(beats > 0, "GUI event loop continues during opening");
         require(session->pages() > 1 && !session->image().isNull(), "CPU page and pagination");
         require(!session->chapters().isEmpty(), "Publication table of contents exposed");
+        const auto totalWords = session->totalWords();
+        qint64 chapterWords = 0;
+        const auto graph = session->chapterGraph();
+        for (const auto &chapter : graph) {
+            require(chapter.words >= 0, "TOC destination has a word count");
+            chapterWords += chapter.words;
+        }
+        require(graph.size() == session->chapters().size() && chapterWords > 0
+                        && totalWords >= chapterWords,
+                "Chapter word intervals are bounded by the publication count");
         const auto firstPage = session->page();
         const auto first = digest(session->image());
         require(session->image().save(output + "/first.png"), "Capture first reader frame");
@@ -82,6 +92,9 @@ int main(int argc, char **argv)
         completion.exec();
         require(session->error().isEmpty() && session->image().size() == QSize(700, 900),
                 "Stale resize result discarded");
+        require(session->totalWords() == totalWords
+                        && session->chapterGraph().last().words == graph.last().words,
+                "Reflow retains logical word counts");
         session->suspend();
         ReaderSession::drain([&] { completion.quit(); });
         completion.exec();
@@ -370,6 +383,11 @@ int main(int argc, char **argv)
             ReadingBook book(std::move(session), paths.bookState(identity), paths, identity,
                              fingerprint, nullptr, {}, {});
             mainthread::Interaction reading([] { return true; });
+            book.observeReading();
+            require(book.readingActive() && !book.tracksReadingHistory(),
+                    "WebKit starts the active session clock without recording history");
+            book.stopReading(true);
+            require(!book.readingActive(), "Hiding WebKit stops the session clock");
             book.checkpointForClose([&](bool saved) {
                 require(saved, "Background source checkpoint saved");
                 completion.quit();
@@ -404,6 +422,9 @@ int main(int argc, char **argv)
                                                 { "source_position", anchor },
                                                 { "persistent_position", true },
                                                 { "toc_navigation", true },
+                                                { "total_words", double(totalWords) },
+                                                { "chapter_words", double(chapterWords) },
+                                                { "session_clock", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },
