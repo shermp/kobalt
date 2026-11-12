@@ -22,6 +22,8 @@ public:
 
     void setFingerprint(QByteArray fingerprint) { fingerprint_ = std::move(fingerprint); }
 
+    bool importNativePosition(const QString &location);
+
     void close() override;
     bool openResources(std::shared_ptr<ResourceCache>, const QMap<QString, qint64> &, QSize,
                        const QJsonObject &, QString *, OpeningProgress = {},

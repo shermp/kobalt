@@ -103,6 +103,7 @@ def typography_fixture(path):
         <p class="prose">Aligned prose gives a useful way to compare the spacing along this line
         and the next few lines of the same paragraph.</p>
         <p style="width:4.8em;hyphens:manual !important">co­operation</p>
+        <span id="duplicate">One</span><span id="duplicate">Two</span>
         </body></html>'''.encode()
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as book:
         for name, data in members.items():
@@ -282,6 +283,7 @@ try:
     assert call(typography_style)['sha256'] == publisher['sha256']
     call(typography_style + ' 24 24 justify on 13', error='invalid-style')
     call(typography_style + ' 24 24 invalid on 0', error='invalid-style')
+    assert query(0, 0, kind='native-position', nativeFragment='duplicate:1')['locator'] is None
     (destination / 'typography.json').write_text(json.dumps(
         {name: frame['frame'] for name, frame in (('publisher', publisher), ('left', left),
                                                 ('justify', justified), ('thickness', thick))}, indent=2))
@@ -472,6 +474,18 @@ try:
     source = target['layout']['locator']
     assert source['version'] == 1 and source['after'].startswith('Unique source anchor:'), source
     assert source['cfi'].startswith('epubcfi(/4/2!'), source
+    prefix = 'Unique source anchor: Café 😀'
+    units = len(prefix.encode('utf-16-le')) // 2
+    byte_count = len(prefix.encode())
+    by_id = query(0, 0, kind='native-position', nativeFragment=f'unicode-target:{units}')['locator']
+    by_point = query(0, 0, kind='native-position', nativeFragment=f'point(/1/2/6/1:{byte_count})')['locator']
+    assert by_point == by_id and by_id['offset'] == source['offset'] + units, (by_id, by_point)
+    assert by_id['before'].endswith(prefix) and by_id['after'].startswith(' e\u0301'), by_id
+    for invalid in (f'unicode-target:{units - 1}', f'point(/1/2/6/1:{byte_count - 1})',
+                    'unicode-target:9999', 'missing:0', 'point(/1/1/1:0)'):
+        assert query(0, 0, kind='native-position', nativeFragment=invalid)['locator'] is None, invalid
+    imported = call('LOCATE 0 ' + encoded(json.dumps(by_id)))
+    assert imported['layout']['locator'] == by_id
     call('GOTO 1 0')
     restored = call('LOCATE 0 ' + encoded(json.dumps(source)))
     assert restored['layout']['locator'] == source

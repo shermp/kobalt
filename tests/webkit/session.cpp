@@ -7,11 +7,13 @@
 #include "reading/highlight_session.h"
 #include "storage/profile_database.h"
 #include "support/main_thread.h"
+#include "platforms/kobo/common/engine_positions.h"
 #include <QGuiApplication>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QSqlQuery>
 #include <QTimer>
@@ -543,6 +545,10 @@ int main(int argc, char **argv)
         request.lease = lease;
         request.resources = localResourceFactory(path, lease);
         request.saved = saved;
+        const auto positions = nickel::positionCodec();
+        const QString native = QStringLiteral("OEBPS/chapter6.xhtml#kobo.2.1:4");
+        request.positions = positions;
+        request.platformLocation = native;
         session->open(request, [&](OpeningResult result) {
             require(result.ready() && session->experimentalBackend(), "Cold WebKit reopening");
             require(session->state().value("source_position").toObject() == anchor,
@@ -563,6 +569,56 @@ int main(int argc, char **argv)
                             && restored.learningPace,
                     "A cold WebKit reader reuses its own saved pace");
         }
+        const auto launcher = QFileInfo(QString::fromLocal8Bit(qgetenv("KOBALT_WEBKIT_LAUNCHER")));
+        const auto font = QDir(launcher.absolutePath()).filePath("../share/fixture/font.ttf");
+        require(QFileInfo(font).isFile(), "Find the packaged diagnostic font for CREngine");
+        EngineFontInputs importFonts;
+        importFonts.sources.bundled = QStringList{ font };
+        importFonts.hyphenationDirectory = QFileInfo(font).absolutePath();
+        const auto openForImport = [&](const QString &backend, const QString &location,
+                                       const QJsonObject &savedState) {
+            auto importing = std::make_unique<ReaderSession>(importFonts, "serif");
+            const auto importLease = std::make_shared<SourceLease>();
+            OpenRequest opening = request;
+            opening.backend = backend;
+            opening.lease = importLease;
+            opening.resources = localResourceFactory(path, importLease);
+            opening.platformLocation = location;
+            opening.saved = savedState;
+            importing->open(opening, [&](OpeningResult result) {
+                if (const auto *failure = result.failure())
+                    std::fprintf(stderr, "%s conversion fixture: %s %s\n",
+                                 backend.toUtf8().constData(), failure->reason.constData(),
+                                 failure->detail.toUtf8().constData());
+                require(result.ready() && importing->experimentalBackend() == (backend == "webkit"),
+                        "Open saved-position conversion fixture on the requested backend");
+                completion.quit();
+            });
+            completion.exec();
+            const auto state = importing->state();
+            importing.reset();
+            importLease->cancel();
+            ReaderSession::drain([&] { completion.quit(); });
+            completion.exec();
+            return state;
+        };
+        auto legacyState = openForImport("crengine", native, {});
+        require(!legacyState.value("position").toString().isEmpty()
+                        && legacyState.value("dom_version").toInt() > 0,
+                "CREngine exposes the imported native point as a saved XPointer");
+        legacyState["fingerprint"] = QString::fromLatin1(fingerprint);
+        const auto direct = openForImport("webkit", native, {}).value("source_position").toObject();
+        require(direct.value("href").toString() == "OEBPS/chapter6.xhtml"
+                        && direct.value("after").toString().startsWith("Breath Between"),
+                "WebKit imports the exact native UTF-16 text offset");
+        const auto converted =
+                openForImport("webkit", {}, legacyState).value("source_position").toObject();
+        require(converted == direct, "The saved XPointer round-trips to the same WebKit point");
+        legacyState["fingerprint"] = "different-edition";
+        const auto changed =
+                openForImport("webkit", {}, legacyState).value("source_position").toObject();
+        require(!changed.isEmpty() && changed != direct,
+                "A saved XPointer from a different publication fingerprint is skipped");
         QFile report(output + "/session.json");
         require(report.open(QIODevice::WriteOnly), "Open firmware report");
         report.write(QJsonDocument(QJsonObject{ { "backend", "webkit" },
@@ -574,6 +630,8 @@ int main(int argc, char **argv)
                                                 { "sleep_resume", true },
                                                 { "source_position", anchor },
                                                 { "persistent_position", true },
+                                                { "native_position_import", true },
+                                                { "legacy_position_import", true },
                                                 { "toc_navigation", true },
                                                 { "total_words", double(totalWords) },
                                                 { "chapter_words", double(chapterWords) },

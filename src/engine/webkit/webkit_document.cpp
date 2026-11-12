@@ -589,6 +589,38 @@ bool WebKitDocument::locate(const QJsonObject &position)
                   + QJsonDocument(position).toJson(QJsonDocument::Compact).toBase64());
 }
 
+bool WebKitDocument::importNativePosition(const QString &location)
+{
+    if (location.isEmpty() || location.size() > 4096)
+        return false;
+    const int separator = location.indexOf('#');
+    const auto path = QUrl::fromPercentEncoding(
+            location.left(separator < 0 ? location.size() : separator).toUtf8());
+    const auto paths = frame_.value("document").toObject().value("spine").toArray();
+    int index = -1;
+    for (int entry = 0; entry < paths.size(); ++entry) {
+        if (paths.at(entry).toString() == path) {
+            if (index >= 0)
+                return false;
+            index = entry;
+        }
+    }
+    if (index < 0)
+        return false;
+    const auto fragment = separator < 0 ? QString() : location.mid(separator + 1);
+    return runOperation([&] {
+        QJsonObject result;
+        if (!queryPage(
+                    index, 0,
+                    qt::object({ { "kind", "native-position" }, { "nativeFragment", fragment } }),
+                    {}, result))
+            return false;
+        const auto position =
+                sourceposition::fromToken(sourceToken(result.value("locator").toObject(), index));
+        return !position.isEmpty() && locate(position);
+    });
+}
+
 int WebKitDocument::sourceSpine(const QJsonObject &position) const
 {
     if (!sourceposition::valid(position))

@@ -1,0 +1,12 @@
+{
+  "milestone": "M4 saved-position import",
+  "base": "4524516",
+  "source_tree": "2f5bc0e89352ae7177d46dfea0999ccd251f2070be521fe9eacfc716df6898ee",
+  "helper_archive_sha256": "838c2f4418795351aeab5e948ce9e73a3c2a1cd5be37d178a4a696fd2a502085",
+  "native_layout_storage_progress_lifecycle": "build/m4-import-native.log",
+  "kobo_qt5": "build/m4-import-qt5.log",
+  "kobo_qt6": "build/m4-import-qt6.log",
+  "host_syntax": "clang++ unavailable",
+  "epub": "build/webkit/firmware-81b6ffd4e4/epub-client.log",
+  "arm_session": "build/webkit/firmware-0272a76274/session-results/session.json"
+}

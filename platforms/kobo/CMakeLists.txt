@@ -256,7 +256,8 @@ if(KOBALT_BUILD_TESTS)
         # Explicit firmware diagnostic: it requires the separately deployed WPE
         # bundle and is therefore not a prepared-SDK CTest test.
         add_executable(kobalt-webkit-session-check "${KOBALT_ROOT}/tests/webkit/session.cpp")
-        target_include_directories(kobalt-webkit-session-check PRIVATE "${source}" "${KOBALT_ROOT}/tests/support")
+        target_include_directories(kobalt-webkit-session-check PRIVATE
+            "${KOBALT_ROOT}" "${source}" "${KOBALT_ROOT}/tests/support")
         target_link_libraries(kobalt-webkit-session-check PRIVATE kobalt-test-code ${kobalt_libraries})
         list(APPEND tests kobalt-webkit-session-check)
     endif()

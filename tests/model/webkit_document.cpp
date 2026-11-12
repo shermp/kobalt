@@ -655,6 +655,9 @@ int main(int argc, char **argv)
         require(position.value("href").toString() == "one"
                         && position.value("cfi").toString().startsWith("epubcfi(/6/4!"),
                 "Repeated resources retain their package occurrence");
+        require(!document.importNativePosition("one#target:1")
+                        && document.state().value("source_position") == position,
+                "A native position cannot guess which repeated spine occurrence it names");
         WebKitDocument reopened({}, "/unused.epub");
         require(reopened.openResources(
                         {}, {}, { 600, 800 },

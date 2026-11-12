@@ -961,11 +961,68 @@ const layout = { source: document.URL, title: document.title, page, pages,
   location: { version: 1, unit: 'utf16-text', start, end, element: objects[0]?.path || null },
   viewport: { width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio },
   content, links, objects, excerpt };
+function nativePosition(fragment) {
+  if (typeof fragment !== 'string' || fragment.length > 4096) return null;
+  if (!fragment) return pageStart;
+  let target, offset;
+  if (fragment.startsWith('point(')) {
+    const point = /^point\(\/1((?:\/[1-9][0-9]*)*)(?::([0-9]+))?\)$/.exec(fragment);
+    if (!point) return null;
+    target = document.documentElement;
+    const types = [Node.ELEMENT_NODE, Node.TEXT_NODE, Node.CDATA_SECTION_NODE, Node.COMMENT_NODE];
+    for (const index of point[1].split('/').slice(1)) {
+      if (!target || target.nodeType !== Node.ELEMENT_NODE) return null;
+      target = Array.from(target.childNodes).filter(node => types.includes(node.nodeType))[Number(index) - 1];
+    }
+    const bytes = Number(point[2] || 0);
+    if (!target || target.nodeType === Node.COMMENT_NODE || !body.contains(target) ||
+        !Number.isSafeInteger(bytes) || bytes > 16 * 1024 * 1024) return null;
+    const utf8 = new TextEncoder().encode(target.textContent);
+    if (bytes > utf8.length) return null;
+    try { offset = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(utf8.subarray(0, bytes)).length; }
+    catch (_) { return null; }
+  } else {
+    const colon = fragment.lastIndexOf(':');
+    const digits = colon < 0 ? '0' : fragment.slice(colon + 1);
+    if (!/^[0-9]+$/.test(digits)) return null;
+    offset = Number(digits);
+    let id;
+    try { id = decodeURIComponent(colon < 0 ? fragment : fragment.slice(0, colon)); }
+    catch (_) { return null; }
+    if (!id) return offset === 0 ? pageStart : null;
+    const matches = Array.from(document.querySelectorAll('[id]')).filter(node => node.id === id);
+    if (matches.length !== 1) return null;
+    target = matches[0];
+  }
+  if (!body.contains(target) || !Number.isSafeInteger(offset) || offset > target.textContent.length)
+    return null;
+  const isText = target.nodeType === Node.TEXT_NODE || target.nodeType === Node.CDATA_SECTION_NODE;
+  const children = document.createTreeWalker(target, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_CDATA_SECTION);
+  for (let node = isText ? target : children.nextNode(); node; node = children.nextNode()) {
+    if (offset > node.length) {
+      offset -= node.length;
+      continue;
+    }
+    // Native ID offsets are UTF-16. An offset inside a surrogate is invalid.
+    if (offset && /[\uD800-\uDBFF]/u.test(node.data[offset - 1]) &&
+        /[\uDC00-\uDFFF]/u.test(node.data[offset] || '')) return null;
+    const entry = nodes.find(entry => entry.node === node);
+    const rect = rectAt(node, offset);
+    if (!entry || !rect.width || !rect.height ||
+        getComputedStyle(node.parentElement).visibility !== 'visible') return null;
+    return locatorAt({ node, local: offset, offset: entry.offset + offset });
+  }
+  const rect = target.getBoundingClientRect();
+  return rect.width && rect.height && getComputedStyle(target).visibility === 'visible'
+    ? locatorAt(objectPoint(target)) : null;
+}
 globalThis.kobaltQuery = function(query) {
   try {
     let result;
     if (!query || typeof query !== 'object') throw new Error('invalid-query');
     if (query.kind === 'layout') result = layout;
+    else if (query.kind === 'native-position')
+      result = { locator: nativePosition(query.nativeFragment) };
     else if (query.kind === 'summary') {
       const stream = visibleText();
       const first = stream.ends.findIndex(offset => offset > start);

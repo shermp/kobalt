@@ -716,8 +716,36 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         const auto modelStart = timer.elapsed();
                         report(OpeningStage::Text, 0);
                         const bool attempted = outcome.ready();
-                        if (auto *webkit = dynamic_cast<WebKitDocument *>(engine.get()))
+                        QString importLocation;
+                        if (auto *webkit = dynamic_cast<WebKitDocument *>(engine.get())) {
                             webkit->setFingerprint(digest);
+                            if (attempted && !restart && positions
+                                && !saved.value("backend_positions").toObject().contains("webkit")
+                                && !cancelled()) {
+                                importLocation = initial;
+                                const auto xpointer = saved.value("position").toString();
+                                if (importLocation.isEmpty() && !xpointer.isEmpty()) {
+                                    // Let the original engine interpret its own DOM version. End
+                                    // its lifetime before starting the WebKit process.
+                                    EngineDocument legacy(engine->fontInputs());
+                                    legacy.setUserStyleSheet(userStyleSheet);
+                                    if (legacy.openResources(resources, publication.sizes(), size,
+                                                             saved, nullptr)
+                                        && legacy.goTo(xpointer)) {
+                                        QString error;
+                                        const auto native = positions.encode(legacy, &error);
+                                        // The native encoder can use a chapter fallback. Only
+                                        // accept a location that decodes to the same source point.
+                                        if (!native.isEmpty() && error.isEmpty()
+                                            && legacy.comparePlatformPosition(positions, native,
+                                                                              &error)
+                                                    == 0
+                                            && error.isEmpty())
+                                            importLocation = native;
+                                    }
+                                }
+                            }
+                        }
                         bool opened = attempted
                                 && engine->openResources(resources, publication.sizes(), size,
                                                          saved, nullptr, report, &outcome,
@@ -737,9 +765,15 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                                            publishCover);
                         }
                         if (opened) {
-                            if (QString::fromLatin1(engine->backend()) == "webkit"
-                                && engine->state().contains("page_progression_rtl"))
-                                formattingWarning = false;
+                            if (auto *webkit = dynamic_cast<WebKitDocument *>(engine.get())) {
+                                if (webkit->state().contains("page_progression_rtl"))
+                                    formattingWarning = false;
+                                if (!importLocation.isEmpty() && !cancelled())
+                                    diagnostic(
+                                            "webkit-position-import",
+                                            { { "resolved",
+                                                webkit->importNativePosition(importLocation) } });
+                            }
                             if (restart && QString::fromLatin1(engine->backend()) == "crengine")
                                 engine->go(0);
                             else if (!initial.isEmpty()
