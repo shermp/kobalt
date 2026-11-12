@@ -390,7 +390,8 @@ Never destructively migrate existing records without a validated fallback.
 
 **Deliverable:** WebKit supports Kobalt's essential reader features and reliably restores saved state.
 
-**Review gate:** Feature parity demonstrated with automated tests.
+**Review gate:** Feature parity demonstrated with automated tests. See the
+[M4 verification and limits](m4-parity.md).
 
 ## M5 — Automated regression testing
 

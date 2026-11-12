@@ -1,0 +1,31 @@
+{
+  "milestone": "M4 experimental reading features",
+  "candidate": "1b49a7d",
+  "source_tree": "2f5bc0e89352ae7177d46dfea0999ccd251f2070be521fe9eacfc716df6898ee",
+  "native": {
+    "preset": "linux",
+    "variants": "representative",
+    "log": "build/m4-native-final.log",
+    "junit": "build/m4-native-final.xml"
+  },
+  "kobo_qt5": "build/m4-import-qt5.log",
+  "kobo_qt6": "build/m4-import-qt6.log",
+  "helper_archive_sha256": "838c2f4418795351aeab5e948ce9e73a3c2a1cd5be37d178a4a696fd2a502085",
+  "diagnostic_package_sha256": "510ce19ae9b535edbc4ee9c8b3b55f2c9781fc6a721197a8831d0b7db807b2b2",
+  "firmware": "6.0.274403",
+  "epub": "build/webkit/firmware-81b6ffd4e4/epub-client.log",
+  "arm_session": "build/webkit/firmware-0272a76274/session-results/session.json",
+  "installed": {
+    "navigation_and_lifecycle": "build/webkit/firmware-32746dc8cf/installed-results/installed.json",
+    "annotation_editing_and_reopening": "build/webkit/firmware-6911f2c884/installed-results/installed.json",
+    "renderer_loss": "build/webkit/firmware-663e302cd7/installed-results/installed.json",
+    "highest_peak_bytes": 720785408,
+    "memory_limit_bytes": 805306368,
+    "oom_events": 0,
+    "main_thread_blocked": []
+  },
+  "screen_reviews": [
+    "build/review/webkit-m4-margins",
+    "build/review/webkit-m4-typography"
+  ]
+}
