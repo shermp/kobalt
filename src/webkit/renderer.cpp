@@ -42,6 +42,8 @@ struct Renderer
     unsigned linkSpine = 0, linkPage = 0;
     unsigned fontSize = 24, lineHeight = 150, margin = 24, letterSpacing = 0, wordSpacing = 0;
     unsigned topMargin = 24, bottomMargin = 24;
+    unsigned thickness = 0;
+    std::string alignment = "publisher", hyphenation = "auto";
     std::string family = "publisher", fragment, bridge, metadata;
     std::string elementAnchor = "null", pendingError, sourcePosition, query;
     bool dark = false;
@@ -187,7 +189,8 @@ static void snapshotReady(GObject *object, GAsyncResult *result, gpointer data)
                 + ",\"format\":\"BGRA8-premultiplied\",\"pixels\":" + jsonString(stem + ".bgra")
                 + ",\"png\":" + jsonString(memory ? "" : path)
                 + ",\"document\":" + renderer.book.description()
-                + ",\"vertical_margins\":true,\"layout\":" + renderer.metadata + "}\n";
+                + ",\"vertical_margins\":true,\"typography_controls\":true,\"layout\":"
+                + renderer.metadata + "}\n";
         if (written)
             written = g_file_set_contents((stem + ".json").c_str(), metadata.data(),
                                           metadata.size(), &error);
@@ -339,7 +342,9 @@ static void paginate(Renderer &renderer)
             + ",\"lineHeight\":" + std::to_string(renderer.lineHeight)
             + ",\"letterSpacing\":" + std::to_string(renderer.letterSpacing) + ",\"wordSpacing\":"
             + std::to_string(renderer.wordSpacing) + ",\"family\":" + jsonString(renderer.family)
-            + ",\"dark\":" + (renderer.dark ? "true" : "false")
+            + ",\"alignment\":" + jsonString(renderer.alignment)
+            + ",\"hyphenation\":" + jsonString(renderer.hyphenation) + ",\"thickness\":"
+            + std::to_string(renderer.thickness) + ",\"dark\":" + (renderer.dark ? "true" : "false")
             + ",\"page\":" + std::to_string(renderer.targetPage)
             + ",\"anchor\":" + (renderer.preserveAnchor ? std::to_string(renderer.anchor) : "null")
             + ",\"element\":" + (renderer.preserveAnchor ? renderer.elementAnchor : "null")
@@ -675,13 +680,22 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
     bool reload = false, preserve = false;
     if (action == "STYLE") {
         unsigned values[5]{};
-        const bool independentMargins = args.size() == 9;
+        const bool typography = args.size() == 12;
+        const bool independentMargins = args.size() == 9 || typography;
         bool valid = args.size() == 7 || independentMargins;
         for (unsigned i = 0; valid && i < 5; ++i)
             valid &= number(args[i], values[i]);
         unsigned top = values[2], bottom = values[2];
         if (valid && independentMargins)
             valid = number(args[7], top) && number(args[8], bottom);
+        unsigned thickness = 0;
+        const std::string alignment = typography ? args[9] : "publisher";
+        const std::string hyphenation = typography ? args[10] : "auto";
+        if (typography)
+            valid = valid && number(args[11], thickness) && thickness <= 12
+                    && (alignment == "publisher" || alignment == "left" || alignment == "right"
+                        || alignment == "center" || alignment == "justify")
+                    && (hyphenation == "auto" || hyphenation == "on" || hyphenation == "off");
         if (!valid || values[0] < 8 || values[0] > 96 || values[1] < 100 || values[1] > 300
             || values[2] > 2048 || top > 2048 || bottom > 2048
             || (!independentMargins
@@ -702,6 +716,9 @@ static bool epubCommand(Renderer &renderer, unsigned id, const std::string &acti
         renderer.wordSpacing = values[4];
         renderer.family = args[5];
         renderer.dark = args[6] == "dark";
+        renderer.alignment = alignment;
+        renderer.hyphenation = hyphenation;
+        renderer.thickness = thickness;
         preserve = true;
     } else if (action == "GOTO") {
         unsigned index = 0, selected = 0;

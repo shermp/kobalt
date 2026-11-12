@@ -88,6 +88,27 @@ def direction_fixture(path, writing_mode, direction):
     return phrase.split()[0] if writing_mode == 'horizontal-tb' else '日本語'
 
 
+def typography_fixture(path):
+    fixture(path)
+    with zipfile.ZipFile(path) as source:
+        members = {name: source.read(name) for name in source.namelist()}
+    members['EPUB/one.xhtml'] = '''<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+        <head><title>Typography</title><style>
+        .prose { text-align:right !important; width:360px; }
+        .centered { text-align:center; }
+        </style></head><body>
+        <h1 style="text-align:right">Protected heading</h1>
+        <p class="centered">Centered dedication</p>
+        <figure style="text-align:right"><p>Illustration caption</p></figure>
+        <p class="prose">Aligned prose gives a useful way to compare the spacing along this line
+        and the next few lines of the same paragraph.</p>
+        <p style="width:4.8em;hyphens:manual !important">co­operation</p>
+        </body></html>'''.encode()
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as book:
+        for name, data in members.items():
+            book.writestr(name, data)
+
+
 def obfuscated_fixture(path, adobe):
     fixture(path)
     with zipfile.ZipFile(path) as source:
@@ -231,6 +252,39 @@ try:
         assert call('NEXT')['spine'] == 1
         direction_checks.append(dict(writing_mode=writing_mode, direction=direction, pages=layout['pages']))
     (destination / 'writing-directions.json').write_text(json.dumps(direction_checks, indent=2))
+
+    typography = destination / 'typography.epub'
+    typography_fixture(typography)
+    call(f'OPEN {encoded(typography)} 600 800')
+    typography_style = 'STYLE 24 150 24 0 0 publisher light'
+    publisher = call(typography_style + ' 24 24 publisher auto 0')
+    assert publisher['typography_controls']
+
+    def typography_rects(term):
+        match = query(0, 0, kind='search', text=term, page=0)['hits'][0]
+        return query(0, 0, kind='range', start=match['start'], end=match['end'])['rectangles']
+
+    protected = ('Protected heading', 'Centered dedication', 'Illustration caption')
+    original = {word: typography_rects(word) for word in (*protected, 'Aligned', 'prose', 'cooperation')}
+    assert len({rect['y'] for rect in original['cooperation']}) > 1, original
+    left = call(typography_style + ' 24 24 left off 0')
+    assert typography_rects('Aligned')[0]['x'] < original['Aligned'][0]['x']
+    left_prose = typography_rects('prose')
+    assert all(typography_rects(word) == original[word] for word in protected)
+    assert len({rect['y'] for rect in typography_rects('cooperation')}) == 1
+    justified = call(typography_style + ' 24 24 justify on 0')
+    assert typography_rects('prose')[0]['x'] > left_prose[0]['x']
+    assert len({rect['y'] for rect in typography_rects('cooperation')}) > 1
+    thick = call(typography_style + ' 24 24 justify on 8')
+    assert thick['sha256'] != justified['sha256']
+    assert thick['layout']['pages'] == justified['layout']['pages']
+    assert thick['layout']['locator'] == justified['layout']['locator']
+    assert call(typography_style)['sha256'] == publisher['sha256']
+    call(typography_style + ' 24 24 justify on 13', error='invalid-style')
+    call(typography_style + ' 24 24 invalid on 0', error='invalid-style')
+    (destination / 'typography.json').write_text(json.dumps(
+        {name: frame['frame'] for name, frame in (('publisher', publisher), ('left', left),
+                                                ('justify', justified), ('thickness', thick))}, indent=2))
 
     first = call(f'OPEN {encoded(synthetic)} 600 800')
     assert first['spine'] == 0 and first['layout']['pages'] > 1

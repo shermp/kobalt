@@ -612,6 +612,7 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
             return {'before': initial, 'after': changed, 'render_ms': rendered['elapsed_ms']}
 
         text_size = edit('rrLarger', 'rrTextSizeValue')
+        thickness = edit('rrHeavier', 'rrFontWeightValue')
         capture(backend + '-text-draft')
         device.tap_widget(name='rrNavLayout')
         device.wait_widget(name='rrWider')
@@ -630,6 +631,7 @@ def check(device, output, search_only=False, rotate_after_search=False, bookmark
         capture(backend + '-appearance-applied')
         transcript.append({'action': 'appearance', 'backend': backend,
                            'text_size': text_size, 'side_margin': margin,
+                           'thickness': thickness,
                            'vertical_margin': vertical_margin,
                            'apply_ms': rendered['elapsed_ms']})
         close_book()

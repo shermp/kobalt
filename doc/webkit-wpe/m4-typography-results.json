@@ -1,0 +1,23 @@
+{
+  "milestone": "M4 typography",
+  "base": "d406cf5",
+  "source_tree": "2128e3a479258eb6c5e67320c7158b7db25124eb455ea4ccb89c2b5fcd565a11",
+  "helper_archive_sha256": "55906edaba2c16618b1f6341eb35069e5f2d34c2645b173a3fbff1edfda92dc5",
+  "diagnostic_package_sha256": "a2f73e15f56b11fc658dff55e6d67c22d88a393fd3cbd89286b384cb7be1d688",
+  "native_layout": "build/m4-typography-layout.log",
+  "native_proxy": "build/m4-typography-proxy.log",
+  "kobo_qt5": "build/m4-typography-qt5.log",
+  "kobo_qt6": "build/m4-typography-qt6.log",
+  "host_syntax": "clang++ unavailable",
+  "epub": "build/webkit/firmware-8f98f2d533/epub-results/typography.json",
+  "arm_session": "build/webkit/firmware-9cdd6d197e/session-results/session.json",
+  "installed": {
+    "result": "build/webkit/firmware-c78c4d4cf1/installed-results/installed.json",
+    "thickness_preview_ms": 524,
+    "peak_mib": 682,
+    "memory_limit_mib": 768,
+    "thickness_row_pixels_match": true,
+    "main_thread_blocked": []
+  },
+  "review": "build/review/webkit-m4-typography"
+}

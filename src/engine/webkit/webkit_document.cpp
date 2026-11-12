@@ -41,6 +41,24 @@ QByteArray encoded(const QString &text)
 {
     return text.toUtf8().toBase64();
 }
+
+QString textAlignment(const QJsonValue &value)
+{
+    const auto mode = value.toString();
+    if (mode == "left" || mode == "right" || mode == "center" || mode == "justify")
+        return mode;
+    return QStringLiteral("publisher");
+}
+
+QString hyphenationMode(const QJsonValue &value)
+{
+    const auto mode = value.toString();
+    if (mode == "on" || mode == "off")
+        return mode;
+    if (value.isBool() && !value.toBool())
+        return QStringLiteral("off");
+    return QStringLiteral("auto");
+}
 } // namespace
 
 WebKitDocument::WebKitDocument(EngineFontInputs fonts, QString path)
@@ -375,7 +393,9 @@ bool WebKitDocument::openResources(std::shared_ptr<ResourceCache>, const QMap<QS
     const auto face = saved.value("font_face").toString();
     appearance_["font_face"] =
             face == "serif" || face == "sans-serif" || face == "monospace" ? face : QString();
-    appearance_["text_alignment"] = QStringLiteral("publisher");
+    appearance_["text_alignment"] = textAlignment(saved.value("text_alignment"));
+    appearance_["hyphenation"] = hyphenationMode(saved.value("hyphenation"));
+    appearance_["weight_steps"] = qBound(0, saved.value("weight_steps").toInt(), 12);
     appearance_["margin_pixels"] = qBound(
             0, saved.value("margin_pixels").toInt(defaultMarginPixels()), maximumMarginPixels());
     const int vertical = defaultVerticalMarginPixels(appearance_.value("margin_pixels").toInt());
@@ -752,6 +772,11 @@ bool WebKitDocument::style(QSize legacyMarginViewport)
             const int inset = qBound(0, appearance_.value(key).toInt(vertical),
                                      qMin(maximumMarginPixels(), 2048));
             command += ' ' + QByteArray::number(inset);
+        }
+        if (frame_.value("typography_controls").toBool()) {
+            command += ' ' + textAlignment(appearance_.value("text_alignment")).toLatin1() + ' '
+                    + hyphenationMode(appearance_.value("hyphenation")).toLatin1() + ' '
+                    + QByteArray::number(qBound(0, appearance_.value("weight_steps").toInt(), 12));
         }
     }
     return render(command);

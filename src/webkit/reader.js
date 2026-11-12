@@ -14,15 +14,14 @@ const topMargin = options.topMargin, bottomMargin = options.bottomMargin;
 const content = { x: margin, y: topMargin, width: options.width - 2 * margin,
   height: options.height - topMargin - bottomMargin };
 const rightEdge = content.x + content.width, bottomEdge = content.y + content.height;
-// Restore publisher declarations before resolving the cascade again. Keeping
-// only our previous computed override would freeze media-query break rules.
-for (const override of state.breakOverrides || []) {
+// Restore publisher declarations before resolving the cascade again.
+for (const override of state.inlineStyles || []) {
   if (override.style !== null)
     override.element.setAttribute('style', override.style);
   else
     override.element.removeAttribute('style');
 }
-state.breakOverrides = [];
+state.inlineStyles = [];
 state.style?.remove();
 body.style.removeProperty('transform');
 const writingMode = getComputedStyle(body).writingMode;
@@ -66,6 +65,7 @@ body * { animation: none !important; transition: none !important;
   ${options.dark ? 'color: #eeeeee !important; background-color: transparent !important;' : ''}
   letter-spacing: ${options.letterSpacing / 100}em !important;
   word-spacing: ${options.wordSpacing / 100}em !important; }
+${options.thickness ? `body, body * { -webkit-text-stroke-width: ${options.thickness / 256}em !important; }` : ''}
 img, svg, math { max-width: 100% !important;
   max-height: ${content.height}px !important; object-fit: contain; }
 pre { white-space: pre-wrap !important; overflow-wrap: anywhere; }
@@ -80,8 +80,18 @@ const elements = Array.from(body.querySelectorAll('*'));
 if (elements.length > 200000) throw new Error('chapter-too-large');
 // Read the complete cascade before writing overrides, including legacy
 // page-break-* aliases, inline declarations and author !important rules.
-const breakChanges = [];
-const breakElements = new Map();
+const styleChanges = [];
+const inlineStyles = new Map();
+function overrideStyle(element, property, value) {
+  if (!inlineStyles.has(element)) inlineStyles.set(element, element.getAttribute('style'));
+  element.style.setProperty(property, value, 'important');
+}
+const blocks = 'p,li,dt,dd,blockquote,div,section,article';
+const protectedElements = 'h1,h2,h3,h4,h5,h6,header,figure,figcaption,caption,table,img,svg,math,picture,object,video,audio,canvas,iframe,pre,code,[role~="heading"]';
+const candidates = [], blocked = new Set(), containsBlock = new Set();
+const alignment = options.alignment !== 'publisher';
+const hyphens = options.hyphenation === 'on' ? 'auto' : 'none';
+const overrideHyphens = options.hyphenation !== 'auto';
 let firstContent = null;
 const contentWalker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
 for (let node; (node = contentWalker.nextNode());) {
@@ -102,6 +112,24 @@ for (let node; (node = contentWalker.nextNode());) {
 }
 for (const element of elements) {
   const computed = getComputedStyle(element);
+  if (alignment) {
+    const headingType = element.getAttributeNS('http://www.idpf.org/2007/ops', 'type') || '';
+    const preserve = computed.textAlign === 'center' || computed.textAlign === '-webkit-center'
+      || element.matches(protectedElements)
+      || /(?:^|\s)(?:title|subtitle|fulltitle|covertitle|halftitle|titlepage)(?:$|\s)/.test(headingType)
+      || /(?:^|[\s_-])(?:title|subtitle|heading)(?:$|[\s_-])/i.test(element.getAttribute('class') || '');
+    const block = element.matches(blocks);
+    if (preserve || blocked.has(element.parentElement)) blocked.add(element);
+    if (preserve || block) {
+      for (let parent = element.parentElement; parent && parent !== body; parent = parent.parentElement) {
+        if (containsBlock.has(parent)) break;
+        containsBlock.add(parent);
+      }
+    }
+    if (block && !blocked.has(element)) candidates.push(element);
+  }
+  if (overrideHyphens && computed.hyphens !== hyphens)
+    styleChanges.push({ element, property: 'hyphens', value: hyphens });
   for (const property of ['break-before', 'break-after', 'break-inside']) {
     const value = computed.getPropertyValue(property);
     let mapped = value === 'avoid-page' ? 'avoid-column'
@@ -113,15 +141,14 @@ for (const element of elements) {
           || !(firstContent.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))
         mapped = 'auto';
     }
-    if (mapped) {
-      breakChanges.push({ element, property, mapped });
-      breakElements.set(element, element.getAttribute('style'));
-    }
+    if (mapped) styleChanges.push({ element, property, value: mapped });
   }
 }
-for (const change of breakChanges) {
-  change.element.style.setProperty(change.property, change.mapped, 'important');
-}
+if (overrideHyphens) overrideStyle(body, 'hyphens', hyphens);
+for (const element of candidates)
+  if (!containsBlock.has(element) && element.textContent.trim())
+    overrideStyle(element, 'text-align', options.alignment);
+for (const { element, property, value } of styleChanges) overrideStyle(element, property, value);
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 // WebKit's column layout does not enforce avoid-before/after sibling boundaries.
 // Move a fitting normal-flow group intact, without wrapping or rewriting book DOM.
@@ -140,8 +167,7 @@ function keepGroup(group) {
       parseFloat(getComputedStyle(group[index]).marginBlockStart) || 0);
   if (extent > blockSize) return;
   const first = group[0];
-  if (!breakElements.has(first)) breakElements.set(first, first.getAttribute('style'));
-  first.style.setProperty('break-before', 'column', 'important');
+  overrideStyle(first, 'break-before', 'column');
 }
 for (const parent of [body, ...elements]) {
   if (!/^(block|flow-root|list-item)$/.test(getComputedStyle(parent).display)) continue;
@@ -167,7 +193,7 @@ for (const parent of [body, ...elements]) {
   }
   keepGroup(group);
 }
-state.breakOverrides = Array.from(breakElements, ([element, style]) => ({ element, style }));
+state.inlineStyles = Array.from(inlineStyles, ([element, style]) => ({ element, style }));
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 let overflow = vertical ? body.scrollHeight : body.scrollWidth;
 if (vertical && reverse) {

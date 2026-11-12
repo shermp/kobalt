@@ -397,10 +397,20 @@ int main(int argc, char **argv)
                             && digest(draft.image()) != sideOnly
                             && digest(session->image()) == original,
                     "Vertical margins reflow independently in the draft");
+            const auto beforeThickness = digest(draft.image());
+            const int beforeThicknessPages = draft.pages();
+            require(draft.setThickness(8), "Queue an outline thickness preview");
+            completion.exec();
+            require(draft.error().isEmpty() && draft.pages() == beforeThicknessPages
+                            && draft.navigationPosition() == sourceposition::token(anchor)
+                            && digest(draft.image()) != beforeThickness
+                            && digest(session->image()) == original,
+                    "Thickness previews repaint without moving or repaginating the book");
             session->apply(draft.requestedState(), size);
             completion.exec();
             require(session->error().isEmpty() && session->margin() == changedMargin
                             && session->topMargin() == verticalMargin
+                            && session->state().value("weight_steps").toInt() == 8
                             && session->navigationPosition() == draft.navigationPosition()
                             && digest(session->image()) == digest(draft.image()),
                     "Applying the draft uses the same layout at the same source point");
@@ -572,6 +582,7 @@ int main(int argc, char **argv)
                                                 { "source_pace_restored", true },
                                                 { "appearance_preview", true },
                                                 { "vertical_margin_preview", true },
+                                                { "outline_thickness_preview", true },
                                                 { "source_search", true },
                                                 { "word_hit_testing", true },
                                                 { "text_ranges", true },
