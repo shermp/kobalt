@@ -17,3 +17,33 @@ if(KOBALT_WEBKIT_EMBEDDED_GLIB)
 else()
     target_link_libraries(wpe-snapshot-fixture PRIVATE PkgConfig::WPE)
 endif()
+
+# Embed the canonical introspection XML so the standalone binary needs no data file.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS renderer1.xml)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/renderer1.xml" renderer1_xml)
+configure_file(renderer1-xml.h.in renderer1-xml.h @ONLY)
+
+add_executable(wpe-renderer renderer.cpp renderer-frame.cpp)
+target_compile_features(wpe-renderer PRIVATE cxx_std_23)
+target_compile_options(wpe-renderer PRIVATE -Wall -Wextra -Werror)
+target_include_directories(wpe-renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+if(KOBALT_WEBKIT_EMBEDDED_GLIB)
+    target_include_directories(wpe-renderer SYSTEM PRIVATE ${WPE_INCLUDE_DIRS})
+    target_compile_options(wpe-renderer PRIVATE ${WPE_CFLAGS_OTHER})
+    target_link_options(wpe-renderer PRIVATE -static-libstdc++ -static-libgcc)
+    target_link_libraries(wpe-renderer PRIVATE "${wpe_webkit}")
+else()
+    target_link_libraries(wpe-renderer PRIVATE PkgConfig::WPE)
+endif()
+
+include(CTest)
+if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
+    add_executable(wpe-renderer-smoke renderer-smoke.cpp)
+    target_compile_features(wpe-renderer-smoke PRIVATE cxx_std_23)
+    target_compile_options(wpe-renderer-smoke PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(wpe-renderer-smoke PRIVATE PkgConfig::WPE)
+    add_test(NAME wpe-renderer-peer
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/run-renderer-smoke.sh"
+            "$<TARGET_FILE:wpe-renderer>" "$<TARGET_FILE:wpe-renderer-smoke>")
+    set_tests_properties(wpe-renderer-peer PROPERTIES TIMEOUT 45)
+endif()
