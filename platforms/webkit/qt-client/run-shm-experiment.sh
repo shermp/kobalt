@@ -6,7 +6,7 @@ renderer=$1
 client=$2
 mode=$3
 tmpfs=$4
-case "$mode" in fd|named|crash) ;; *) exit 2 ;; esac
+case "$mode" in fd|named|crash|hello-crash) ;; *) exit 2 ;; esac
 run=$(mktemp -d "$tmpfs/kobalt-shm.XXXXXX")
 pid=
 cleanup() {
@@ -35,9 +35,9 @@ client_status=0
 case "$mode" in
     fd) "$client" "$address" || client_status=$? ;;
     named) "$client" "$address" "$run" || client_status=$? ;;
-    crash) "$client" "$address" "$run" "$pid" || client_status=$? ;;
+    crash|hello-crash) "$client" "$address" "$run" "$pid" || client_status=$? ;;
 esac
-if [ "$client_status" -ne 0 ] && [ "$mode" != crash ]; then
+if [ "$client_status" -ne 0 ] && [ "$mode" != crash ] && [ "$mode" != hello-crash ]; then
     exit "$client_status"
 fi
 if [ "$client_status" -ne 0 ] && kill -0 "$pid" 2>/dev/null; then
@@ -47,7 +47,11 @@ status=0
 wait "$pid" || status=$?
 pid=
 set -- "$run"/frame-??????
-if [ "$mode" = crash ]; then
+if [ "$mode" = hello-crash ]; then
+    test "$status" -eq 137
+    test ! -e "$1"
+    echo "Renderer killed before any frame was created"
+elif [ "$mode" = crash ]; then
     test "$status" -eq 137
     test "$#" -eq 1 && test -f "$1"
     echo "One crash orphan reclaimed by supervisor"
