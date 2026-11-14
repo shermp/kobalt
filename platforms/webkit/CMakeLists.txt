@@ -21,6 +21,12 @@ endif()
 # Embed the canonical introspection XML so the standalone binary needs no data file.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS renderer1.xml)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/renderer1.xml" renderer1_xml)
+# Derive the opt-in experiment from the canonical method signatures.
+string(REPLACE "org.kobalt.Renderer1" "org.kobalt.RendererShm1" renderer_shm_xml "${renderer1_xml}")
+string(REPLACE "org/kobalt/Renderer1" "org/kobalt/RendererShm1" renderer_shm_xml "${renderer_shm_xml}")
+string(REPLACE "name=\"frameFd\" type=\"h\"" "name=\"frameName\" type=\"s\"" renderer_shm_xml "${renderer_shm_xml}")
+string(REPLACE "      <annotation name=\"org.gtk.GDBus.C.UnixFD\" value=\"true\" />" ""
+    renderer_shm_xml "${renderer_shm_xml}")
 configure_file(renderer1-xml.h.in renderer1-xml.h @ONLY)
 
 add_executable(wpe-renderer renderer.cpp renderer-frame.cpp)

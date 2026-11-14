@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <fcntl.h>
+#include <memory>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/vfs.h>
@@ -50,8 +51,7 @@ int privateFrame(const unsigned char *pixels, guint stride, guint rowBytes, guin
         close(memory);
     }
 #endif
-    struct statfs filesystem {};
-    if (statfs(runDirectory, &filesystem) != 0 || filesystem.f_type != tmpfsMagic)
+    if (!isFrameTmpfs(runDirectory))
         return -1;
 
     g_autofree gchar *path = g_build_filename(runDirectory, "frame-XXXXXX", nullptr);
@@ -70,6 +70,21 @@ int privateFrame(const unsigned char *pixels, guint stride, guint rowBytes, guin
     return reader;
 }
 } // namespace
+
+bool isFrameTmpfs(const char *directory)
+{
+    struct statfs filesystem {};
+    return statfs(directory, &filesystem) == 0 && filesystem.f_type == tmpfsMagic;
+}
+
+FrameBacking::~FrameBacking()
+{
+    g_clear_object(&descriptors);
+    if (path) {
+        unlink(path);
+        g_free(path);
+    }
+}
 
 bool validViewport(guint width, guint height)
 {
@@ -93,9 +108,9 @@ FixturePixels *fixturePixels(WebKitImage *image, guint width, guint height, unsi
     return new FixturePixels{ g_bytes_ref(bytes), width, height, stride, page, nullptr };
 }
 
-GUnixFDList *makeFixtureFrame(const FixturePixels &frame, GCancellable *cancel)
+FrameBacking *makeFixtureFrame(const FixturePixels &frame, GCancellable *cancel)
 {
-    const auto &[bytes, width, height, stride, page, runDirectory] = frame;
+    const auto &[bytes, width, height, stride, page, runDirectory, named] = frame;
     const auto *pixels = static_cast<const unsigned char *>(g_bytes_get_data(bytes, nullptr));
     const guint rowBytes = width * 4;
     // A fresh fixture view and load event identify the request. Check the pixels as well.
@@ -111,13 +126,24 @@ GUnixFDList *makeFixtureFrame(const FixturePixels &frame, GCancellable *cancel)
         }
     }
 
+    auto backing = std::make_unique<FrameBacking>();
+    if (named) {
+        backing->path = g_build_filename(runDirectory, "frame-XXXXXX", nullptr);
+        const int fd = g_mkstemp_full(backing->path, O_RDWR | O_CLOEXEC, 0600);
+        if (fd < 0) {
+            g_clear_pointer(&backing->path, g_free);
+            return nullptr;
+        }
+        const bool written = writeRows(fd, pixels, stride, rowBytes, height, cancel)
+                && fchmod(fd, 0400) == 0;
+        const bool closed = close(fd) == 0;
+        return written && closed ? backing.release() : nullptr;
+    }
     const int fd = privateFrame(pixels, stride, rowBytes, height, runDirectory, cancel);
     if (fd < 0)
         return nullptr;
-    GUnixFDList *list = g_unix_fd_list_new();
-    const int handle = g_unix_fd_list_append(list, fd, nullptr);
+    backing->descriptors = g_unix_fd_list_new();
+    const int handle = g_unix_fd_list_append(backing->descriptors, fd, nullptr);
     close(fd);
-    if (handle != 0)
-        g_clear_object(&list);
-    return list;
+    return handle == 0 ? backing.release() : nullptr;
 }
