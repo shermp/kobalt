@@ -1,0 +1,52 @@
+--- a/Source/WebKit/UIProcess/Launcher/glib/BubblewrapLauncher.cpp
++++ b/Source/WebKit/UIProcess/Launcher/glib/BubblewrapLauncher.cpp
+@@ -48,26 +48,19 @@
+ 
+ #include "Syscalls.h"
+ 
+-#if !defined(MFD_ALLOW_SEALING) && HAVE(LINUX_MEMFD_H)
+-
+-// These defines were added in glibc 2.27, the same release that added memfd_create.
+-// But the kernel added all of this in Linux 3.17. So it's totally safe for us to
+-// depend on, as long as we define it all ourselves. Remove this once we depend on
+-// glibc 2.27.
+-
++// Kernel memfd flags can be present even when libc lacks its wrapper or seal constants.
++#ifndef F_ADD_SEALS
+ #define F_ADD_SEALS 1033
+-#define F_GET_SEALS 1034
+-
+ #define F_SEAL_SEAL   0x0001
+ #define F_SEAL_SHRINK 0x0002
+ #define F_SEAL_GROW   0x0004
+ #define F_SEAL_WRITE  0x0008
+-
+-static int memfd_create(const char* name, unsigned flags)
++#endif
++
++static int createMemfd(const char* name, unsigned flags)
+ {
+     return syscall(__NR_memfd_create, name, flags);
+ }
+-#endif // #if !defined(MFD_ALLOW_SEALING) && HAVE(LINUX_MEMFD_H)
+ 
+ #if PLATFORM(GTK)
+ #define BASE_DIRECTORY "webkitgtk"
+@@ -92,7 +85,7 @@
+ 
+ static int createSealedMemFdWithData(const char* name, gconstpointer data, size_t size)
+ {
+-    int fd = memfd_create(name, MFD_ALLOW_SEALING);
++    int fd = createMemfd(name, MFD_ALLOW_SEALING);
+     if (fd == -1) {
+         g_warning("memfd_create failed: %s", g_strerror(errno));
+         return -1;
+@@ -708,7 +701,7 @@
+         }
+     }
+ 
+-    int tmpfd = memfd_create("seccomp-bpf", 0);
++    int tmpfd = createMemfd("seccomp-bpf", 0);
+     if (tmpfd == -1)
+         g_error("Failed to create memfd: %s", g_strerror(errno));
+ 

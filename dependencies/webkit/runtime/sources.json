@@ -1,0 +1,74 @@
+{
+  "brotli": {
+    "sha256": "816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec",
+    "url": "https://codeload.github.com/google/brotli/tar.gz/refs/tags/v1.2.0"
+  },
+  "egl-headers": {
+    "sha256": "c4c9edde9db1a0ff14bcf692f421498bed3b612207499cfb5a435545859bc63f",
+    "url": "https://codeload.github.com/KhronosGroup/EGL-Registry/tar.gz/8e56e86e65687697ef54114cdb1afabdfac756bf"
+  },
+  "epoxy": {
+    "sha256": "a7ced37f4102b745ac86d6a70a9da399cc139ff168ba6b8002b4d8d43c900c15",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libe/libepoxy/libepoxy_1.5.10.orig.tar.gz"
+  },
+  "expat": {
+    "sha256": "ddc1111651cdd4095b67c9d9ed46babfb8fb64843d89ff785399f5739b84867b",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/e/expat/expat_2.4.7.orig.tar.gz"
+  },
+  "fontconfig": {
+    "sha256": "f655dd2a986d7aa97e052261b36aa67b0a64989496361eca8d604e6414006741",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/f/fontconfig/fontconfig_2.13.1.orig.tar.bz2"
+  },
+  "gcrypt": {
+    "sha256": "ea849c83a72454e3ed4267697e8ca03390aee972ab421e7df69dfe42b65caaf7",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libg/libgcrypt20/libgcrypt20_1.9.4.orig.tar.bz2"
+  },
+  "gpg-error": {
+    "sha256": "a9ab83ca7acc442a5bd846a75b920285ff79bdb4e3d34aa382be88ed2c3aebaf",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libg/libgpg-error/libgpg-error_1.43.orig.tar.bz2"
+  },
+  "nghttp2": {
+    "sha256": "556f24653397c71ebb8270b3c5e5507f0893e6eac2c6eeda6be2ecf6e1f50f62",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/n/nghttp2/nghttp2_1.43.0.orig.tar.bz2"
+  },
+  "psl": {
+    "sha256": "055aa87ec166c7afb985d0816c07ff440e1eb899881a318c51c69a0aeea8e279",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libp/libpsl/libpsl_0.21.0.orig.tar.gz"
+  },
+  "psl-list": {
+    "sha256": "508a4cb15daacfb99a520d568c24062496d99dabf242012d058201ab31a9baf8",
+    "url": "https://codeload.github.com/publicsuffix/list/tar.gz/71c235dd3f888dd4ecd066817050a7482da710e5"
+  },
+  "seccomp": {
+    "sha256": "59065c8733364725e9721ba48c3a99bbc52af921daf48df4b1e012fbc7b10a76",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libs/libseccomp/libseccomp_2.5.3.orig.tar.gz"
+  },
+  "soup": {
+    "sha256": "ebdf90cf3599c11acbb6818a9d9e3fc9d2c68e56eb829b93962972683e1bf7c8",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/universe/libs/libsoup3/libsoup3_3.0.7.orig.tar.xz"
+  },
+  "sqlite": {
+    "sha256": "4089a8d9b467537b3f246f217b84cd76e00b1d1a971fe5aca1e30e230e46b2d8",
+    "url": "https://sqlite.org/2022/sqlite-autoconf-3370200.tar.gz"
+  },
+  "tasn1": {
+    "sha256": "4365c154953563d64c67a024b607d1ee75c6db76e0d0f65709ea80a334cd1898",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libt/libtasn1-6/libtasn1-6_4.18.0.orig.tar.gz"
+  },
+  "uuid": {
+    "sha256": "6a0764c1aae7fb607ef8a6dd2c0f6c47d5e5fd27aa08820abaad9ec14e28e9d9",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/u/util-linux/util-linux_2.37.2.orig.tar.xz"
+  },
+  "webp": {
+    "sha256": "7656532f837af5f4cec3ff6bafe552c044dc39bf453587bd5b77450802f4aee6",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libw/libwebp/libwebp_1.2.2.orig.tar.gz"
+  },
+  "xkbcommon": {
+    "sha256": "106cec5263f9100a7e79b5f7220f889bc78e7d7ffc55d2b6fdb1efefb8024031",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libx/libxkbcommon/libxkbcommon_1.4.0.orig.tar.xz"
+  },
+  "xml2": {
+    "sha256": "13cf2e55e603c34143486f4082cbf202859ac1eec5130b8d8e5e3c06a9902d8a",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261108T000000Z/pool/main/libx/libxml2/libxml2_2.9.13+dfsg.orig.tar.xz"
+  }
+}
