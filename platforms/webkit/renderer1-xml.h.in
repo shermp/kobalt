@@ -1,3 +1,4 @@
 #pragma once
 
 inline constexpr char rendererXml[] = R"RendererXml(@renderer1_xml@)RendererXml";
+inline constexpr char rendererShmXml[] = R"RendererXml(@renderer_shm_xml@)RendererXml";

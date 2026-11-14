@@ -11,13 +11,15 @@
 #include <unistd.h>
 
 namespace {
-constexpr char objectPath[] = "/org/kobalt/Renderer1";
 constexpr char errorPrefix[] = "org.kobalt.Renderer1.Error.";
 constexpr const char *tokens[] = { "fixture:color-pages:0", "fixture:color-pages:1" };
 
 void error(GDBusMethodInvocation *call, const char *name, const char *message)
 {
-    g_autofree gchar *qualified = g_strconcat(errorPrefix, name, nullptr);
+    const char *prefix = g_str_equal(g_dbus_method_invocation_get_interface_name(call),
+                                    "org.kobalt.RendererShm1")
+            ? "org.kobalt.RendererShm1.Error." : errorPrefix;
+    g_autofree gchar *qualified = g_strconcat(prefix, name, nullptr);
     g_dbus_method_invocation_return_dbus_error(call, qualified, message);
 }
 
@@ -78,7 +80,7 @@ struct Render
 class Service
 {
 public:
-    explicit Service(const char *directory) : runDirectory(directory) {}
+    Service(const char *directory, bool named) : runDirectory(directory), namedFrames(named) {}
     ~Service()
     {
         g_clear_object(&shutdownCall);
@@ -93,11 +95,13 @@ private:
     void startRender(guint64, State, GDBusMethodInvocation *);
     void snapshotReady(GAsyncResult *);
     void abortRender(const char *);
-    void finishRender(GUnixFDList *);
+    void finishRender(std::unique_ptr<FrameBacking>);
     void finishShutdown();
     void accept(GSocketConnection *);
 
     const char *runDirectory;
+    const bool namedFrames;
+    std::unique_ptr<FrameBacking> published;
     GMainLoop *loop = g_main_loop_new(nullptr, FALSE);
     GSocketService *listener = nullptr;
     GDBusNodeInfo *schema = nullptr;
@@ -123,8 +127,8 @@ void Service::call(const char *method, GVariant *args, GDBusMethodInvocation *in
         g_variant_get(args, "(u)", &version);
         if (version != 1)
             return fail("UnsupportedVersion", "Renderer1 requires protocol version 1");
-        if (!(g_dbus_connection_get_capabilities(connection)
-              & G_DBUS_CAPABILITY_FLAGS_UNIX_FD_PASSING))
+        if (!namedFrames && !(g_dbus_connection_get_capabilities(connection)
+                             & G_DBUS_CAPABILITY_FLAGS_UNIX_FD_PASSING))
             return fail("UnixFdUnavailable", "Peer did not negotiate Unix FD passing");
         greeted = true;
         GVariantBuilder capabilities;
@@ -196,6 +200,7 @@ void Service::call(const char *method, GVariant *args, GDBusMethodInvocation *in
         return fail("StaleState", "Document is no longer current");
     if (is("Close")) {
         current = {};
+        published.reset();
         g_dbus_method_invocation_return_value(invocation, nullptr);
         return;
     }
@@ -345,18 +350,21 @@ void Service::snapshotReady(GAsyncResult *result)
     if (!pixels)
         return finishRender(nullptr);
     pixels->directory = runDirectory;
+    pixels->named = namedFrames;
     g_autoptr(GTask) task = g_task_new(nullptr, active->cancel,
                                      +[](GObject *, GAsyncResult *result, gpointer data) {
-        g_autoptr(GUnixFDList) descriptors = static_cast<GUnixFDList *>(
-                g_task_propagate_pointer(G_TASK(result), nullptr));
-        static_cast<Service *>(data)->finishRender(descriptors);
+        std::unique_ptr<FrameBacking> backing(static_cast<FrameBacking *>(
+                g_task_propagate_pointer(G_TASK(result), nullptr)));
+        static_cast<Service *>(data)->finishRender(std::move(backing));
     }, this);
     g_task_set_task_data(task, pixels, +[](gpointer data) {
         delete static_cast<FixturePixels *>(data);
     });
     g_task_run_in_thread(task, +[](GTask *task, gpointer, gpointer data, GCancellable *cancel) {
-        auto *descriptors = makeFixtureFrame(*static_cast<FixturePixels *>(data), cancel);
-        g_task_return_pointer(task, descriptors, descriptors ? g_object_unref : nullptr);
+        auto *backing = makeFixtureFrame(*static_cast<FixturePixels *>(data), cancel);
+        g_task_return_pointer(task, backing, +[](gpointer data) {
+            delete static_cast<FrameBacking *>(data);
+        });
     });
 }
 
@@ -371,24 +379,34 @@ void Service::abortRender(const char *reason)
     finishRender(nullptr);
 }
 
-void Service::finishRender(GUnixFDList *descriptors)
+void Service::finishRender(std::unique_ptr<FrameBacking> backing)
 {
     auto render = std::move(active);
     if (render->view)
         g_signal_handlers_disconnect_by_data(render->view, this);
     if (!disconnected) {
-        if (render->failure || !descriptors) {
+        if (render->failure || !backing) {
             error(g_steal_pointer(&render->call), render->failure ? render->failure : "RenderFailed",
                   "Fixture snapshot did not commit");
         } else {
             current = render->candidate;
             lastDocument = current.document;
-            g_dbus_method_invocation_return_value_with_unix_fd_list(
-                    g_steal_pointer(&render->call),
-                    g_variant_new("(tttt@a{sv}huuus)", render->request, current.document,
-                                  current.layout, current.frame, describe(current), 0, current.width,
-                                  current.height, current.width * 4, frameFormat),
-                    descriptors);
+            if (namedFrames) {
+                g_autofree gchar *name = g_path_get_basename(backing->path);
+                published = std::move(backing);
+                g_dbus_method_invocation_return_value(
+                        g_steal_pointer(&render->call),
+                        g_variant_new("(tttt@a{sv}suuus)", render->request, current.document,
+                                      current.layout, current.frame, describe(current), name,
+                                      current.width, current.height, current.width * 4, frameFormat));
+            } else {
+                g_dbus_method_invocation_return_value_with_unix_fd_list(
+                        g_steal_pointer(&render->call),
+                        g_variant_new("(tttt@a{sv}huuus)", render->request, current.document,
+                                      current.layout, current.frame, describe(current), 0, current.width,
+                                      current.height, current.width * 4, frameFormat),
+                        backing->descriptors);
+            }
         }
     }
     render.reset();
@@ -399,6 +417,7 @@ void Service::finishRender(GUnixFDList *descriptors)
 void Service::finishShutdown()
 {
     current = {};
+    published.reset();
     if (disconnected) {
         g_main_loop_quit(loop);
         return;
@@ -444,7 +463,7 @@ void Service::accept(GSocketConnection *socket)
             nullptr, nullptr, { nullptr }
         };
         if (!service.connection
-            || !g_dbus_connection_register_object(service.connection, objectPath,
+            || !g_dbus_connection_register_object(service.connection, service.schema->path,
                                                    service.schema->interfaces[0], &vtable,
                                                    &service, nullptr, &failure)) {
             g_printerr("Peer setup failed: %s\n", failure->message);
@@ -473,8 +492,13 @@ int Service::run()
         g_printerr("Expected an absolute, owner-only run directory\n");
         return 1;
     }
+    if (namedFrames && !isFrameTmpfs(runDirectory)) {
+        g_printerr("Named frame experiment requires a private tmpfs directory\n");
+        return 1;
+    }
     g_autoptr(GError) failure = nullptr;
-    g_autoptr(GDBusNodeInfo) info = g_dbus_node_info_new_for_xml(rendererXml, &failure);
+    g_autoptr(GDBusNodeInfo) info =
+            g_dbus_node_info_new_for_xml(namedFrames ? rendererShmXml : rendererXml, &failure);
     if (!info) {
         g_printerr("%s\n", failure->message);
         return 1;
@@ -513,9 +537,10 @@ int Service::run()
 
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
-        g_printerr("usage: %s /absolute/private-run-directory\n", argv[0]);
+    const bool named = argc == 3 && g_str_equal(argv[1], "--shm-experiment");
+    if (argc != 2 && !named) {
+        g_printerr("usage: %s [--shm-experiment] /absolute/private-run-directory\n", argv[0]);
         return 2;
     }
-    return Service(argv[1]).run();
+    return Service(argv[argc - 1], named).run();
 }
