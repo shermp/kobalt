@@ -1,0 +1,9 @@
+--- a/Source/WebKit/webkitglib-symbols.map
++++ b/Source/WebKit/webkitglib-symbols.map
+@@ -1,5 +1,6 @@
+ {
+ global:
++  g_*;
+   jsc_*;
+   webkit_*;
+   wpe_*;

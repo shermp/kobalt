@@ -1,0 +1,22 @@
+--- a/Source/WebKit/WebProcess/glib/WebProcessGLib.cpp
++++ b/Source/WebKit/WebProcess/glib/WebProcessGLib.cpp
+@@ -238,7 +238,7 @@
+         } else
+             initializePlatformDisplayIfNeeded();
+     }
+-#else
++#elif !ENABLE(WPE_PLATFORM)
+     initializePlatformDisplayIfNeeded();
+ #endif
+     initializeVulkanIfNeeded();
+--- a/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/DrawingAreaCoordinatedGraphicsGLib.cpp
++++ b/Source/WebKit/WebProcess/WebPage/CoordinatedGraphics/DrawingAreaCoordinatedGraphicsGLib.cpp
+@@ -114,7 +114,7 @@
+ {
+     Ref page = *m_webPage->corePage();
+     Settings& settings = page->settings();
+-#if PLATFORM(GTK)
++#if PLATFORM(GTK) || ENABLE(WPE_PLATFORM)
+     if (settings.hardwareAccelerationEnabled()) {
+         WebProcess::singleton().initializePlatformDisplayIfNeeded();
+         WebProcess::singleton().initializeVulkanIfNeeded();
