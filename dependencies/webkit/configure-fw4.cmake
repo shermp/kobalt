@@ -63,6 +63,18 @@ unset(ENV{PKG_CONFIG_SYSROOT_DIR})
 execute_process(COMMAND "${pkg_config}" --libs --static
     gio-unix-2.0 gmodule-2.0 libsoup-3.0 fontconfig freetype2 harfbuzz-icu
     OUTPUT_VARIABLE static_libraries OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+# WebKit probes for -latomic and later links it by name. Put only the
+# verified toolchain archive in this search directory so it wins over the DSO.
+execute_process(COMMAND "${KOBALT_WEBKIT_TOOLCHAIN}/bin/arm-kobov4-linux-gnueabihf-g++"
+    -print-file-name=libatomic.a OUTPUT_VARIABLE atomic_archive
+    OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+if(NOT IS_ABSOLUTE "${atomic_archive}" OR NOT EXISTS "${atomic_archive}")
+    message(FATAL_ERROR "The FW4 toolchain must provide a static libatomic archive")
+endif()
+set(static_compiler_lib "${output}/compiler-lib")
+file(MAKE_DIRECTORY "${static_compiler_lib}")
+file(CREATE_LINK "${atomic_archive}" "${static_compiler_lib}/libatomic.a" SYMBOLIC)
+set(compiler_link_flags "-static-libstdc++ -static-libgcc -L${static_compiler_lib}")
 message(STATUS "FW4 WPE configure output: ${output}")
 execute_process(COMMAND "${CMAKE_COMMAND}" -G Ninja
     -S "${output}/wpewebkit-2.54.2" -B "${output}/build"
@@ -74,8 +86,9 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -G Ninja
     "-DCMAKE_INSTALL_PREFIX=${output}/install"
     "-DGLIB_COMPILE_RESOURCES_EXECUTABLE=${glib_compile_resources}"
     "-DCMAKE_CXX_STANDARD_LIBRARIES=-Wl,--start-group ${static_libraries} -Wl,--end-group"
-    "-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++ -static-libgcc"
-    "-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc"
+    "-DCMAKE_SHARED_LINKER_FLAGS=${compiler_link_flags}"
+    "-DCMAKE_MODULE_LINKER_FLAGS=${compiler_link_flags}"
+    "-DCMAKE_EXE_LINKER_FLAGS=${compiler_link_flags}"
     "-DCMAKE_C_FLAGS_RELEASE=-O1 -DNDEBUG"
     "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG"
     -DBWRAP_EXECUTABLE=/usr/bin/bwrap -DDBUS_PROXY_EXECUTABLE=/usr/bin/xdg-dbus-proxy
