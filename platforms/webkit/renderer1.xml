@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Renderer1 peer protocol. Semantics are in doc/webkit/WPE-M3.1.md. -->
+<node name="/org/kobalt/Renderer1">
+  <interface name="org.kobalt.Renderer1">
+    <method name="Hello">
+      <arg name="clientVersion" type="u" direction="in" />
+      <arg name="protocolVersion" type="u" direction="out" />
+      <arg name="capabilities" type="a{sv}" direction="out" />
+    </method>
+    <method name="Open">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="sourceKind" type="s" direction="in" />
+      <arg name="source" type="s" direction="in" />
+      <arg name="fingerprint" type="s" direction="in" />
+      <arg name="width" type="u" direction="in" />
+      <arg name="height" type="u" direction="in" />
+      <arg name="appearance" type="a{sv}" direction="in" />
+      <arg name="savedToken" type="s" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="state" type="a{sv}" direction="out" />
+      <arg name="frameFd" type="h" direction="out" />
+      <arg name="frameWidth" type="u" direction="out" />
+      <arg name="frameHeight" type="u" direction="out" />
+      <arg name="frameStride" type="u" direction="out" />
+      <arg name="frameFormat" type="s" direction="out" />
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true" />
+    </method>
+    <method name="Close">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+    </method>
+    <method name="SetAppearance">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+      <arg name="baseFrameRevision" type="t" direction="in" />
+      <arg name="appearance" type="a{sv}" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="state" type="a{sv}" direction="out" />
+      <arg name="frameFd" type="h" direction="out" />
+      <arg name="frameWidth" type="u" direction="out" />
+      <arg name="frameHeight" type="u" direction="out" />
+      <arg name="frameStride" type="u" direction="out" />
+      <arg name="frameFormat" type="s" direction="out" />
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true" />
+    </method>
+    <method name="SetViewport">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+      <arg name="baseFrameRevision" type="t" direction="in" />
+      <arg name="width" type="u" direction="in" />
+      <arg name="height" type="u" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="state" type="a{sv}" direction="out" />
+      <arg name="frameFd" type="h" direction="out" />
+      <arg name="frameWidth" type="u" direction="out" />
+      <arg name="frameHeight" type="u" direction="out" />
+      <arg name="frameStride" type="u" direction="out" />
+      <arg name="frameFormat" type="s" direction="out" />
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true" />
+    </method>
+    <method name="Turn">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+      <arg name="baseFrameRevision" type="t" direction="in" />
+      <arg name="delta" type="i" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="state" type="a{sv}" direction="out" />
+      <arg name="frameFd" type="h" direction="out" />
+      <arg name="frameWidth" type="u" direction="out" />
+      <arg name="frameHeight" type="u" direction="out" />
+      <arg name="frameStride" type="u" direction="out" />
+      <arg name="frameFormat" type="s" direction="out" />
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true" />
+    </method>
+    <method name="Navigate">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+      <arg name="baseFrameRevision" type="t" direction="in" />
+      <arg name="kind" type="s" direction="in" />
+      <arg name="target" type="s" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="state" type="a{sv}" direction="out" />
+      <arg name="frameFd" type="h" direction="out" />
+      <arg name="frameWidth" type="u" direction="out" />
+      <arg name="frameHeight" type="u" direction="out" />
+      <arg name="frameStride" type="u" direction="out" />
+      <arg name="frameFormat" type="s" direction="out" />
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="true" />
+    </method>
+    <method name="Query">
+      <arg name="requestId" type="t" direction="in" />
+      <arg name="documentId" type="t" direction="in" />
+      <arg name="baseFrameRevision" type="t" direction="in" />
+      <arg name="kind" type="s" direction="in" />
+      <arg name="arguments" type="a{sv}" direction="in" />
+      <arg name="replyRequestId" type="t" direction="out" />
+      <arg name="replyDocumentId" type="t" direction="out" />
+      <arg name="layoutRevision" type="t" direction="out" />
+      <arg name="frameRevision" type="t" direction="out" />
+      <arg name="result" type="a{sv}" direction="out" />
+    </method>
+    <method name="Cancel">
+      <arg name="targetRequestId" type="t" direction="in" />
+      <arg name="accepted" type="b" direction="out" />
+    </method>
+    <method name="Shutdown" />
+  </interface>
+</node>
