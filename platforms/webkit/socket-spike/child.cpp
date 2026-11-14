@@ -1,8 +1,12 @@
-#include "wire.h"
+#include "pool-wire.h"
 
 #include <gio/gio.h>
 
 #include <algorithm>
+#include <array>
+#include <cstring>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -15,12 +19,14 @@ using namespace spike;
 class Child
 {
 public:
-    Child(GSocket *socket, GMainLoop *loop) : socket(socket), loop(loop) {}
+    Child(GSocket *socket, GMainLoop *loop, std::array<unsigned char *, 2> maps,
+          uint32_t capacity) : socket(socket), loop(loop), maps(maps), capacity(capacity) {}
     int run();
 
 private:
     bool received(const Message &);
-    void queue(Type, uint64_t);
+    void queue(Type, uint64_t, const std::string &payload = {});
+    void paint(uint32_t start, uint32_t end);
     void stop(int code);
     bool receive();
     bool send();
@@ -29,6 +35,10 @@ private:
     GMainLoop *loop;
     GSource *writer = nullptr;
     std::string in, out;
+    std::array<unsigned char *, 2> maps;
+    uint32_t capacity;
+    uint64_t generation = 0;
+    FrameSpec frame;
     uint64_t last = 0, pending = 0;
     bool greeted = false, closing = false;
     int status = 0;
@@ -40,9 +50,9 @@ void Child::stop(int code)
     g_main_loop_quit(loop);
 }
 
-void Child::queue(Type type, uint64_t id)
+void Child::queue(Type type, uint64_t id, const std::string &payload)
 {
-    out += encode(type, id);
+    out += encode(type, id, payload);
     if (writer)
         return;
     writer = g_socket_create_source(socket, G_IO_OUT, nullptr);
@@ -73,21 +83,58 @@ bool Child::send()
     return false;
 }
 
+void Child::paint(uint32_t start, uint32_t end)
+{
+    auto *pixels = maps[frame.slot];
+    for (uint32_t i = start; i < end; ++i) {
+        pixels[i * 4] = frame.color ? 255 : 0;
+        pixels[i * 4 + 1] = 0;
+        pixels[i * 4 + 2] = frame.color ? 0 : 255;
+        pixels[i * 4 + 3] = 255;
+    }
+}
+
 bool Child::received(const Message &message)
 {
     if (closing || message.id <= last)
         return false;
     last = message.id;
     if (!greeted) {
-        if (message.type != Hello || !message.payload.empty())
+        if (capacity) {
+            if (message.type != PoolHello || message.payload.size() != 12
+                || read(message.payload.data() + 8, 4) != capacity)
+                return false;
+            generation = read(message.payload.data(), 8);
+            if (!generation)
+                return false;
+        } else if (message.type != Hello || !message.payload.empty()) {
             return false;
+        }
         greeted = true;
-        queue(Ready, message.id);
+        queue(Ready, message.id, message.payload);
         return true;
     }
     switch (message.type) {
+    case Frame:
+        if (!capacity || pending || message.payload.size() != 24
+            || !FrameSpec::decode(message.payload, frame) || frame.generation != generation
+            || !validGeometry(frame.width, frame.height, capacity))
+            return false;
+        pending = message.id;
+        paint(0, capacity / 8);
+        // Pause at a deterministic write barrier for cancellation and SIGKILL.
+        queue(HalfWritten, pending);
+        return true;
+    case Finish:
+        if (!capacity || !pending || message.payload.size() != 8
+            || read(message.payload.data(), 8) != pending)
+            return false;
+        paint(capacity / 8, capacity / 4);
+        queue(FrameReady, pending, frame.reply(capacity));
+        pending = 0;
+        return true;
     case Work:
-        if (pending || message.payload != std::string(maxPayload, 'w'))
+        if (capacity || pending || message.payload != std::string(maxPayload, 'w'))
             return false;
         // The mock operation remains pending until Cancel or shutdown.
         pending = message.id;
@@ -168,7 +215,7 @@ int descriptor(const char *text)
 
 int main(int argc, char **argv)
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 7)
         return 2;
     const int control = descriptor(argv[1]);
     const int parent = descriptor(argv[2]);
@@ -180,6 +227,34 @@ int main(int argc, char **argv)
         || fcntl(parent, F_GETFD) != -1 || errno != EBADF
         || fcntl(sentinel, F_GETFD) != -1 || errno != EBADF)
         return 2;
+    const int bytes = argc == 7 ? descriptor(argv[6]) : 0;
+    std::array<unsigned char *, 2> maps{};
+    if (argc == 7) {
+        const int a = descriptor(argv[4]), b = descriptor(argv[5]);
+        if (bytes <= 0 || unsigned(bytes) > maxFrameBytes || bytes % 4
+            || a < 0 || b < 0 || a == b || a == control || b == control)
+            return 2;
+        const int fds[] = {a, b};
+        struct stat objects[2]{};
+        for (unsigned i = 0; i < maps.size(); ++i) {
+            const int fd = fds[i];
+            const int flags = fcntl(fd, F_GETFD);
+            auto &info = objects[i];
+            if (flags < 0 || (flags & FD_CLOEXEC) || fstat(fd, &info) < 0
+                || !S_ISREG(info.st_mode) || info.st_size != bytes || info.st_nlink != 0)
+                return 2;
+            if (i && info.st_ino == objects[0].st_ino && info.st_dev == objects[0].st_dev)
+                return 2;
+            void *map = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            if (close(fd) < 0 || map == MAP_FAILED)
+                return 2;
+            maps[i] = static_cast<unsigned char *>(map);
+        }
+        for (int fd : fds) {
+            if (fcntl(fd, F_GETFD) != -1 || errno != EBADF)
+                return 2;
+        }
+    }
     g_autoptr(GError) error = nullptr;
     g_autoptr(GSocket) socket = g_socket_new_from_fd(control, &error);
     if (!socket || g_socket_get_family(socket) != G_SOCKET_FAMILY_UNIX
@@ -187,5 +262,10 @@ int main(int argc, char **argv)
         return 2;
     g_socket_set_blocking(socket, FALSE);
     g_autoptr(GMainLoop) loop = g_main_loop_new(nullptr, FALSE);
-    return Child(socket, loop).run();
+    const int status = Child(socket, loop, maps, bytes).run();
+    for (auto *map : maps) {
+        if (map)
+            munmap(map, bytes);
+    }
+    return status;
 }

@@ -1,4 +1,5 @@
 #include "wire.h"
+#include "inherited-process.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>
@@ -13,36 +14,6 @@
 
 namespace {
 using namespace spike;
-
-void inheritControl(int descriptor)
-{
-    const int flags = fcntl(descriptor, F_GETFD);
-    if (flags < 0 || fcntl(descriptor, F_SETFD, flags & ~FD_CLOEXEC) < 0)
-        _exit(126);
-}
-
-class Process final : public QProcess
-{
-public:
-    void passControl(int fd)
-    {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        control = fd;
-#else
-        setChildProcessModifier([fd] { inheritControl(fd); });
-#endif
-    }
-
-private:
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    void setupChildProcess() override
-    {
-        if (control >= 0)
-            inheritControl(control);
-    }
-    int control = -1;
-#endif
-};
 
 class Smoke final : public QObject
 {
@@ -66,7 +37,7 @@ private:
     void fail(const char *);
 
     const QString mode;
-    Process process;
+    InheritedProcess process;
     QLocalSocket socket;
     int childFd = -1, sentinel = -1;
     std::string in, out;
@@ -143,7 +114,7 @@ bool Smoke::start(const QString &program, QStringList args)
     QTimer::singleShot(10000, this, [this] { fail("Socket spike timed out"); });
     process.setProcessChannelMode(QProcess::ForwardedErrorChannel);
     if (mode != QStringLiteral("missing-fd"))
-        process.passControl(childFd);
+        process.passDescriptors({{childFd, -1, -1}});
     args << QString::number(childFd) << QString::number(parent) << QString::number(sentinel);
     process.start(program, args);
     return true;

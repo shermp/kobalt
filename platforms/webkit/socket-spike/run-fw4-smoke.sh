@@ -26,7 +26,12 @@ if [ "$#" -eq 0 ]; then
     set -- normal version oversize truncated missing-fd kill kill kill kill kill
 fi
 for mode do
+    if [ "$mode" = pool ]; then
+        set -- "$out/$sdk/wpe-pool-smoke"
+    else
+        set -- "$out/$sdk/wpe-socket-launcher" "$mode"
+    fi
     timeout 15 qemu-arm -cpu cortex-a9 -L "$prefix" -E "LD_LIBRARY_PATH=$libs" \
-        "$out/$sdk/wpe-socket-launcher" "$mode" /usr/bin/qemu-arm \
+        "$@" /usr/bin/qemu-arm \
         -cpu cortex-a9 -L "$stock" -U LD_LIBRARY_PATH "$out/fw4/wpe-socket-child"
 done

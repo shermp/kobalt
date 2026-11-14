@@ -5,12 +5,19 @@ set(KOBALT_SPIKE_QT_MAJOR "" CACHE STRING "Build the launcher with this Qt major
 option(KOBALT_SPIKE_GLIB "Build the GLib child" ON)
 
 if(KOBALT_SPIKE_QT_MAJOR)
-    find_package(Qt${KOBALT_SPIKE_QT_MAJOR} REQUIRED COMPONENTS Core Network)
+    find_package(Qt${KOBALT_SPIKE_QT_MAJOR} REQUIRED COMPONENTS Core Network Gui)
     add_executable(wpe-socket-launcher launcher.cpp)
     target_compile_features(wpe-socket-launcher PRIVATE cxx_std_17)
     target_compile_options(wpe-socket-launcher PRIVATE -Wall -Wextra -Werror)
     target_link_libraries(wpe-socket-launcher PRIVATE
         Qt${KOBALT_SPIKE_QT_MAJOR}::Core Qt${KOBALT_SPIKE_QT_MAJOR}::Network)
+
+    add_executable(wpe-pool-smoke pool-smoke.cpp frame-pool.cpp)
+    target_compile_features(wpe-pool-smoke PRIVATE cxx_std_17)
+    target_compile_options(wpe-pool-smoke PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(wpe-pool-smoke PRIVATE
+        Qt${KOBALT_SPIKE_QT_MAJOR}::Core Qt${KOBALT_SPIKE_QT_MAJOR}::Network
+        Qt${KOBALT_SPIKE_QT_MAJOR}::Gui rt)
 endif()
 
 if(KOBALT_SPIKE_GLIB)
