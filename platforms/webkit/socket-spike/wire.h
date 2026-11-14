@@ -13,7 +13,8 @@ constexpr uint16_t version = 1;
 enum Type : uint16_t {
     Hello = 1, Work, Cancel, Shutdown,
     PoolHello, Frame, Finish,
-    Ready = 101, Pending, Cancelled, CancelAck, Bye, HalfWritten, FrameReady
+    Open = 20, Turn, Navigate, SetViewport, SetAppearance, Query, Close,
+    Ready = 101, Pending, Cancelled, CancelAck, Bye, HalfWritten, FrameReady, StateReply, ErrorReply, Closed
 };
 
 struct Message

@@ -89,12 +89,17 @@ int FramePool::descriptor(unsigned slot) const
 
 bool FramePool::reserve(uint32_t color, spike::FrameSpec &spec)
 {
-    if (!valid() || color > 1)
+    return reserve(color, width, height, spec);
+}
+
+bool FramePool::reserve(uint32_t color, uint32_t w, uint32_t h, spike::FrameSpec &spec)
+{
+    if (!valid() || color > 1 || !spike::validGeometry(w, h, capacity))
         return false;
     for (unsigned i = 0; i < buffers.size(); ++i) {
         State expected = Free;
         if (buffers[i]->state.compare_exchange_strong(expected, Writing)) {
-            spec = {generation, i, width, height, color};
+            spec = {generation, i, w, h, color};
             return true;
         }
     }
@@ -104,7 +109,7 @@ bool FramePool::reserve(uint32_t color, spike::FrameSpec &spec)
 bool FramePool::matches(const spike::FrameSpec &spec) const
 {
     return valid() && spec.generation == generation && spec.slot < buffers.size()
-            && spec.width == width && spec.height == height
+            && spike::validGeometry(spec.width, spec.height, capacity)
             && buffers[spec.slot]->state == Writing;
 }
 
@@ -122,12 +127,12 @@ void FramePool::release(void *opaque)
 
 QImage FramePool::publish(const spike::FrameSpec &spec, const std::string &reply)
 {
-    if (!matches(spec) || reply != spec.reply(capacity))
+    if (!matches(spec) || reply != spec.reply(spec.width * 4 * spec.height))
         return {};
     const auto &slot = buffers[spec.slot];
     auto *lease = new std::shared_ptr<Slot>(slot);
     slot->state = Leased;
-    QImage image(slot->map, width, height, width * 4, QImage::Format_ARGB32_Premultiplied,
+    QImage image(slot->map, spec.width, spec.height, spec.width * 4, QImage::Format_ARGB32_Premultiplied,
                  release, lease);
     if (image.isNull())
         release(lease);

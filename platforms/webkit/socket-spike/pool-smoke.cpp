@@ -1,8 +1,12 @@
 #include "frame-pool.h"
+#include "render-wire.h"
 #include "inherited-process.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>
+#include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtCore/QSet>
 #include <QtCore/QTimer>
 #include <QtGui/QPainter>
 #include <QtNetwork/QLocalSocket>
@@ -39,7 +43,7 @@ public:
         const int parent = fcntl(pair[0], F_DUPFD_CLOEXEC, 80);
         close(pair[0]);
         require(parent >= 0, "duplicate parent endpoint");
-        child = pair[1];
+        child = childNumber = pair[1];
         require(socket.setSocketDescriptor(parent, QLocalSocket::ConnectedState, QIODevice::ReadWrite),
                 "adopt socket");
         const int fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
@@ -94,6 +98,57 @@ public:
         flush();
     }
 
+    QSet<int> auditHelpers(const FramePool &pool) const
+    {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        const auto pid = process.pid();
+#else
+        const auto pid = process.processId();
+#endif
+        const auto proc = QStringLiteral("/proc/%1").arg(pid);
+        const auto control = descriptorTarget(proc, childNumber);
+        const auto shmA = descriptorTarget(QStringLiteral("/proc/self"), pool.descriptor(0));
+        const auto shmB = descriptorTarget(QStringLiteral("/proc/self"), pool.descriptor(1));
+        require(control.startsWith("socket:") && shmA.contains("kobalt-wpe-")
+                && shmB.contains("kobalt-wpe-"), "cannot identify inherited resources");
+        require(descriptorTarget(proc, pool.descriptor(0)) != shmA
+                && descriptorTarget(proc, pool.descriptor(1)) != shmB, "renderer retained SHM FD");
+
+        QSet<int> helpers;
+        bool web = false, network = false;
+        QDir tasks(proc + QStringLiteral("/task"));
+        for (const auto &thread : tasks.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QFile children(tasks.filePath(thread + QStringLiteral("/children")));
+            if (!children.open(QIODevice::ReadOnly))
+                continue;
+            for (const auto &number : children.readAll().split(' ')) {
+                const int childPid = number.toInt();
+                if (childPid <= 0 || helpers.contains(childPid))
+                    continue;
+                const auto childPath = QStringLiteral("/proc/%1").arg(childPid);
+                QFile cmdline(childPath + QStringLiteral("/cmdline"));
+                if (!cmdline.open(QIODevice::ReadOnly))
+                    continue;
+                const auto command = cmdline.readAll();
+                if (!command.contains("WPEWebProcess") && !command.contains("WPENetworkProcess"))
+                    continue;
+                helpers.insert(childPid);
+                web |= command.contains("WPEWebProcess");
+                network |= command.contains("WPENetworkProcess");
+                QDir descriptors(childPath + QStringLiteral("/fd"));
+                const auto files = descriptors.entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
+                require(!files.isEmpty(), "cannot inspect WebKit helper descriptors");
+                for (const auto &file : files) {
+                    const auto target = descriptorTarget(childPath, file.toInt());
+                    require(target != control && target != shmA && target != shmB,
+                            "launcher descriptor leaked into WebKit helper");
+                }
+            }
+        }
+        require(web && network, "did not inspect both WebKit helpers");
+        return helpers;
+    }
+
     void kill()
     {
         killed = true;
@@ -101,6 +156,14 @@ public:
     }
 
 private:
+    static QByteArray descriptorTarget(const QString &processPath, int fd)
+    {
+        const auto file = QFile::encodeName(processPath + QStringLiteral("/fd/%1").arg(fd));
+        char target[512];
+        const auto size = readlink(file.constData(), target, sizeof target);
+        return size > 0 ? QByteArray(target, int(size)) : QByteArray();
+    }
+
     void flush()
     {
         if (out.empty())
@@ -137,7 +200,7 @@ private:
     QLocalSocket socket;
     Reply received;
     std::function<void()> stopped;
-    int child, sentinel;
+    int child, childNumber, sentinel;
     std::string in, out;
     bool killed = false, eof = false, reaped = false;
 };
@@ -145,11 +208,11 @@ private:
 class Smoke : public QObject
 {
 public:
-    explicit Smoke(QStringList command) : command(std::move(command))
+    Smoke(QStringList command, bool webkit) : command(std::move(command)), webkit(webkit)
     {
         deferred.setInterval(1);
         connect(&deferred, &QTimer::timeout, this, [this] {
-            if (!pool->reserve(0, candidate))
+            if (!reserveSlot(0))
                 return;
             deferred.stop();
             sendCandidate();
@@ -157,22 +220,23 @@ public:
         deadline.setSingleShot(true);
         connect(&deadline, &QTimer::timeout, this, [] { fail("pool smoke timed out"); });
         deadline.start(10000);
-        pool = std::make_unique<FramePool>(1, 160, 120);
+        pool = std::make_unique<FramePool>(1, webkit ? 208 : 160, webkit ? 136 : 120);
         launch();
     }
 
 private:
-    enum Phase { FirstRed, Blue, DeferredRed, Cancelling, Crashing, RestartBlue, ResizedRed };
-    enum Event { Handshake, Partial, Publication, Cancellation, CancelAcknowledged, Goodbye, Exit };
+    enum Phase { FirstRed, Blue, DeferredRed, Cancelling, Resize, Crashing, RestartBlue, ResizedRed };
+    enum Event { Handshake, Partial, Publication, Cancellation, CancelAcknowledged, QueryRollback, StaleQuery, CloseReply, Goodbye, Exit };
 
-    static void check(const QImage &image, uint32_t color)
+    void check(const QImage &image, uint32_t color) const
     {
         require(!image.isNull(), "missing frame");
         const auto pixel = color ? qRgb(0, 0, 255) : qRgb(255, 0, 0);
         for (int y = 0; y < image.height(); ++y) {
             const auto *row = reinterpret_cast<const QRgb *>(image.constScanLine(y));
             for (int x = 0; x < image.width(); ++x)
-                require(row[x] == pixel, "torn or changed pixel");
+                require(row[x] == (webkit && x < 32 && y < 32 ? qRgb(255, 255, 255) : pixel),
+                        "torn or changed pixel");
         }
     }
 
@@ -180,6 +244,7 @@ private:
     {
         require(pool->valid(), "POSIX SHM allocation");
         request = 0;
+        revision = {};
         event = Handshake;
         session = std::make_unique<Session>(
                 *pool, command,
@@ -196,9 +261,17 @@ private:
                 });
     }
 
+    bool reserveSlot(uint32_t color)
+    {
+        if (!webkit)
+            return pool->reserve(color, candidate);
+        const bool large = phase == Cancelling || phase == Resize || phase == ResizedRed;
+        return pool->reserve(color, large ? 208 : 160, large ? 136 : 120, candidate);
+    }
+
     void reserve(uint32_t color)
     {
-        require(pool->reserve(color, candidate), "no writable slot");
+        require(reserveSlot(color), "no writable slot");
         sendCandidate();
     }
 
@@ -206,7 +279,26 @@ private:
     {
         event = Partial;
         frameRequest = ++request;
-        session->send(Frame, frameRequest, candidate.encode());
+        if (!webkit)
+            return session->send(Frame, frameRequest, candidate.encode());
+        if (phase == Crashing) {
+            event = Exit;
+            return session->kill();
+        }
+        Type method = Open;
+        if (phase == Blue)
+            method = Turn;
+        else if (phase == DeferredRed)
+            method = Navigate;
+        else if (phase == Cancelling || phase == Resize)
+            method = SetViewport;
+        event = phase == Cancelling ? CancelAcknowledged : Publication;
+        expectedRevision = method == Open ? Revision{1, 1, 1}
+                                           : Revision{revision.document, revision.layout + (phase == Resize),
+                                                      revision.frame + 1};
+        session->send(method, frameRequest, candidate.encode() + revision.encode());
+        if (phase == Cancelling)
+            session->send(Cancel, ++request, targetRequest(frameRequest));
     }
 
     void receive(const Message &msg)
@@ -230,32 +322,82 @@ private:
             }
             break;
         case Publication: {
-            require(msg.type == FrameReady && msg.id == frameRequest, "wrong frame reply");
-            // Reject stale generation and invalid stride without releasing the reservation.
-            auto malformed = msg.payload;
-            require(malformed.size() == 36, "wrong frame payload size");
-            malformed[0] ^= 1;
-            require(pool->publish(candidate, malformed).isNull(), "accepted stale generation");
-            malformed = msg.payload;
-            malformed[24] ^= 1;
-            require(pool->publish(candidate, malformed).isNull(), "accepted bad stride");
-            auto image = pool->publish(candidate, msg.payload);
+            auto bad = msg;
+            require(msg.payload.size() == (webkit ? 60u : 36u), "wrong frame payload size");
+            ++bad.id;
+            require(frameFrom(bad).isNull(), "accepted stale request");
+            bad = msg;
+            bad.payload[0] ^= 1;
+            require(frameFrom(bad).isNull(), "accepted stale generation");
+            bad = msg;
+            bad.payload[24] ^= 1;
+            require(frameFrom(bad).isNull(), "accepted bad stride");
+            bad = msg;
+            bad.payload.pop_back();
+            require(frameFrom(bad).isNull(), "accepted truncated frame metadata");
+            if (webkit) {
+                bad = msg;
+                bad.payload[52] ^= 1;
+                require(frameFrom(bad).isNull(), "accepted stale frame revision");
+            }
+            auto image = frameFrom(msg);
             check(image, candidate.color);
+            require(frameFrom(msg).isNull(), "accepted duplicate publication");
+            revision = expectedRevision;
             published(std::move(image));
             break;
         }
         case Cancellation:
+            if (webkit) {
+                require(msg.type == ErrorReply && msg.id == frameRequest && msg.payload.size() == 4
+                        && read(msg.payload.data(), 4) == uint32_t(RenderError::Cancelled),
+                        "cancelled render published or lost its terminal result");
+                pool->discard(candidate);
+                check(red, 0);
+                event = QueryRollback;
+                session->send(Query, ++request, revision.encode());
+                return;
+            }
             require(msg.type == Cancelled && msg.id == frameRequest && msg.payload.empty(),
                     "missing cancellation result");
             event = CancelAcknowledged;
             break;
         case CancelAcknowledged:
+            if (webkit) {
+                require(msg.type == CancelAck && msg.id == request
+                        && msg.payload == std::string(1, '\1'), "cancel did not win");
+                event = Cancellation;
+                return;
+            }
             require(msg.type == CancelAck && msg.id == request && msg.payload.empty(),
                     "missing cancellation acknowledgement");
             pool->discard(candidate);
             check(red, 0);
             phase = Crashing;
             reserve(1);
+            break;
+        case QueryRollback: {
+            auto expected = candidate;
+            expected.width = 160;
+            expected.height = 120;
+            require(msg.type == StateReply && msg.id == request
+                    && msg.payload == stateReply(revision, expected), "layout advanced on cancellation");
+            event = StaleQuery;
+            auto stale = revision;
+            --stale.frame;
+            session->send(Query, ++request, stale.encode());
+            break;
+        }
+        case StaleQuery:
+            require(msg.type == ErrorReply && msg.id == request && msg.payload.size() == 4
+                    && read(msg.payload.data(), 4) == uint32_t(RenderError::Stale), "accepted stale state");
+            phase = Resize;
+            reserve(0);
+            break;
+        case CloseReply:
+            require(msg.type == Closed && msg.id == request && msg.payload.empty(), "missing close reply");
+            event = Goodbye;
+            session->send(Shutdown, ++request);
             break;
         case Goodbye:
             require(msg.type == Bye && msg.id == request && msg.payload.empty(), "missing goodbye");
@@ -266,8 +408,20 @@ private:
         }
     }
 
+    QImage frameFrom(const Message &msg)
+    {
+        if (msg.type != FrameReady || msg.id != frameRequest
+            || msg.payload.size() != (webkit ? 60u : 36u))
+            return {};
+        if (webkit && !(Revision::decode(msg.payload.data() + 36) == expectedRevision))
+            return {};
+        return pool->publish(candidate, msg.payload.substr(0, 36));
+    }
+
     void published(QImage image)
     {
+        if (webkit)
+            helpers.unite(session->auditHelpers(*pool));
         switch (phase) {
         case FirstRed:
             red = std::move(image);
@@ -304,6 +458,14 @@ private:
             check(red, 0);
             image = {};
             phase = Cancelling;
+            reserve(webkit ? 0 : 1);
+            break;
+        case Resize:
+            require(image.size() == QSize(208, 136) && revision.layout == 2,
+                    "resize did not commit a new layout");
+            check(red, 0);
+            image = {};
+            phase = Crashing;
             reserve(1);
             break;
         case RestartBlue:
@@ -316,8 +478,11 @@ private:
             require(image.size() == QSize(208, 136), "bad resized geometry");
             check(red, 0);
             check(blue, 1);
-            event = Goodbye;
-            session->send(Shutdown, ++request);
+            event = webkit ? CloseReply : Goodbye;
+            if (webkit)
+                session->send(Close, ++request, revision.encode());
+            else
+                session->send(Shutdown, ++request);
             break;
         default:
             fail("unexpected publication");
@@ -328,6 +493,23 @@ private:
     {
         require(event == Exit, "renderer exited before expected");
         session.reset();
+        waitForHelpers();
+    }
+
+    void waitForHelpers()
+    {
+        for (int pid : helpers) {
+            if (QFile::exists(QStringLiteral("/proc/%1").arg(pid))) {
+                QTimer::singleShot(10, this, [this] { waitForHelpers(); });
+                return;
+            }
+        }
+        helpers.clear();
+        rendererStopped();
+    }
+
+    void rendererStopped()
+    {
         if (phase == Crashing) {
             check(red, 0);
             pool->discard(candidate);
@@ -355,6 +537,7 @@ private:
     }
 
     const QStringList command;
+    const bool webkit;
     std::unique_ptr<FramePool> pool;
     std::unique_ptr<Session> session;
     QTimer deferred, deadline;
@@ -362,18 +545,23 @@ private:
     Event event = Handshake;
     uint64_t request = 0, frameRequest = 0;
     FrameSpec candidate;
+    Revision revision, expectedRevision;
     std::string hello;
     QImage red, blue, heldBlue;
     std::array<int, 2> retired{};
+    QSet<int> helpers;
 };
 } // namespace
 
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const auto command = app.arguments().mid(1);
+    auto command = app.arguments().mid(1);
+    const bool webkit = !command.isEmpty() && command[0] == QStringLiteral("--webkit");
+    if (webkit)
+        command.removeFirst();
     if (command.isEmpty())
         return 2;
-    Smoke smoke(command);
+    Smoke smoke(command, webkit);
     return app.exec();
 }

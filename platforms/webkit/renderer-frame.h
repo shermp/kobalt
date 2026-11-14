@@ -26,4 +26,5 @@ struct FrameBacking
     gchar *path = nullptr;
 };
 
+bool validateFixturePixels(const FixturePixels &, GCancellable *);
 FrameBacking *makeFixtureFrame(const FixturePixels &, GCancellable *);

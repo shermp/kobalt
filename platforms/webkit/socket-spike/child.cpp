@@ -1,4 +1,7 @@
 #include "pool-wire.h"
+#ifdef KOBALT_SPIKE_WEBKIT
+#include "webkit-render.h"
+#endif
 
 #include <gio/gio.h>
 
@@ -20,7 +23,17 @@ class Child
 {
 public:
     Child(GSocket *socket, GMainLoop *loop, std::array<unsigned char *, 2> maps,
-          uint32_t capacity) : socket(socket), loop(loop), maps(maps), capacity(capacity) {}
+          uint32_t capacity) : socket(socket), loop(loop), maps(maps), capacity(capacity)
+    {
+#ifdef KOBALT_SPIKE_WEBKIT
+        real = std::make_unique<WebKitRender>(maps, capacity,
+                [this](Type type, uint64_t id, const std::string &payload) {
+            if (type == Bye)
+                closing = true;
+            queue(type, id, payload);
+        });
+#endif
+    }
     int run();
 
 private:
@@ -42,12 +55,24 @@ private:
     uint64_t last = 0, pending = 0;
     bool greeted = false, closing = false;
     int status = 0;
+#ifdef KOBALT_SPIKE_WEBKIT
+    std::unique_ptr<WebKitRender> real;
+    bool stopping = false;
+#endif
 };
 
 void Child::stop(int code)
 {
+#ifdef KOBALT_SPIKE_WEBKIT
+    if (stopping)
+        return;
+    stopping = true;
+    status = code;
+    real->disconnect([this] { g_main_loop_quit(loop); });
+#else
     status = code;
     g_main_loop_quit(loop);
+#endif
 }
 
 void Child::queue(Type type, uint64_t id, const std::string &payload)
@@ -99,6 +124,9 @@ bool Child::received(const Message &message)
     if (closing || message.id <= last)
         return false;
     last = message.id;
+#ifdef KOBALT_SPIKE_WEBKIT
+    return real->receive(message);
+#endif
     if (!greeted) {
         if (capacity) {
             if (message.type != PoolHello || message.payload.size() != 12
@@ -118,7 +146,8 @@ bool Child::received(const Message &message)
     case Frame:
         if (!capacity || pending || message.payload.size() != 24
             || !FrameSpec::decode(message.payload, frame) || frame.generation != generation
-            || !validGeometry(frame.width, frame.height, capacity))
+            || !validGeometry(frame.width, frame.height, capacity)
+            || frame.width * 4 * frame.height != capacity)
             return false;
         pending = message.id;
         paint(0, capacity / 8);
@@ -215,8 +244,13 @@ int descriptor(const char *text)
 
 int main(int argc, char **argv)
 {
+#ifdef KOBALT_SPIKE_WEBKIT
+    if (argc != 7)
+        return 2;
+#else
     if (argc != 4 && argc != 7)
         return 2;
+#endif
     const int control = descriptor(argv[1]);
     const int parent = descriptor(argv[2]);
     const int sentinel = descriptor(argv[3]);

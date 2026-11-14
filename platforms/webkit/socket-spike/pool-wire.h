@@ -10,7 +10,7 @@ inline bool validGeometry(uint32_t width, uint32_t height, uint32_t capacity)
 {
     return width && height && capacity <= maxFrameBytes
             && uint64_t(width) * 4 <= capacity
-            && uint64_t(width) * 4 * height == capacity;
+            && uint64_t(width) * 4 * height <= capacity;
 }
 
 // The mock writes tightly packed opaque BGRA rows. The production codec is

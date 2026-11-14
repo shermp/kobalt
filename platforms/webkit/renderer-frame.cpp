@@ -108,24 +108,35 @@ FixturePixels *fixturePixels(WebKitImage *image, guint width, guint height, unsi
     return new FixturePixels{ g_bytes_ref(bytes), width, height, stride, page, nullptr };
 }
 
-FrameBacking *makeFixtureFrame(const FixturePixels &frame, GCancellable *cancel)
+bool validateFixturePixels(const FixturePixels &frame, GCancellable *cancel)
 {
     const auto &[bytes, width, height, stride, page, runDirectory, named] = frame;
     const auto *pixels = static_cast<const unsigned char *>(g_bytes_get_data(bytes, nullptr));
-    const guint rowBytes = width * 4;
     // A fresh fixture view and load event identify the request. Check the pixels as well.
     for (guint y = 0; y < height; ++y) {
         if (g_cancellable_is_cancelled(cancel))
-            return nullptr;
+            return false;
         for (guint x = 0; x < width; ++x) {
             const auto *pixel = pixels + size_t(y) * stride + x * 4;
             const bool white = x < 32 && y < 32;
             if (pixel[0] != (white || page == 1 ? 255 : 0) || pixel[1] != (white ? 255 : 0)
                 || pixel[2] != (white || page == 0 ? 255 : 0) || pixel[3] != 255)
-                return nullptr;
+                return false;
         }
     }
 
+    return true;
+}
+
+FrameBacking *makeFixtureFrame(const FixturePixels &frame, GCancellable *cancel)
+{
+    if (!validateFixturePixels(frame, cancel))
+        return nullptr;
+    const auto *pixels = static_cast<const unsigned char *>(g_bytes_get_data(frame.bytes, nullptr));
+    const guint rowBytes = frame.width * 4;
+    const auto stride = frame.stride, height = frame.height;
+    const auto *runDirectory = frame.directory;
+    const bool named = frame.named;
     auto backing = std::make_unique<FrameBacking>();
     if (named) {
         backing->path = g_build_filename(runDirectory, "frame-XXXXXX", nullptr);

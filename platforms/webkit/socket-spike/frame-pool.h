@@ -15,6 +15,7 @@ public:
     bool valid() const { return buffers[0] && buffers[1]; }
     int descriptor(unsigned slot) const;
     bool reserve(uint32_t color, spike::FrameSpec &);
+    bool reserve(uint32_t color, uint32_t width, uint32_t height, spike::FrameSpec &);
     QImage publish(const spike::FrameSpec &, const std::string &reply);
     void discard(const spike::FrameSpec &);
 

@@ -26,12 +26,24 @@ if [ "$#" -eq 0 ]; then
     set -- normal version oversize truncated missing-fd kill kill kill kill kill
 fi
 for mode do
-    if [ "$mode" = pool ]; then
+    child="$out/fw4/wpe-socket-child"
+    if [ "$mode" = webkit ]; then
+        package=/work/build/webkit-m2-package
+        export QEMU_LD_PREFIX="$stock" QEMU_CPU=cortex-a9
+        export WEBKIT_EXEC_PATH="$package/libexec" WEBKIT_INJECTED_BUNDLE_PATH="$package/lib"
+        export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+        child=/work/build/webkit-m3.2/fw4/wpe-socket-renderer
+        set -- "$out/$sdk/wpe-pool-smoke" --webkit
+        timeout 30 qemu-arm -cpu cortex-a9 -L "$prefix" -E "LD_LIBRARY_PATH=$libs" \
+            "$@" /usr/bin/qemu-arm -cpu cortex-a9 -L "$stock" \
+            -E "LD_LIBRARY_PATH=$package/lib" "$child"
+        continue
+    elif [ "$mode" = pool ]; then
         set -- "$out/$sdk/wpe-pool-smoke"
     else
         set -- "$out/$sdk/wpe-socket-launcher" "$mode"
     fi
     timeout 15 qemu-arm -cpu cortex-a9 -L "$prefix" -E "LD_LIBRARY_PATH=$libs" \
         "$@" /usr/bin/qemu-arm \
-        -cpu cortex-a9 -L "$stock" -U LD_LIBRARY_PATH "$out/fw4/wpe-socket-child"
+        -cpu cortex-a9 -L "$stock" -U LD_LIBRARY_PATH "$child"
 done
