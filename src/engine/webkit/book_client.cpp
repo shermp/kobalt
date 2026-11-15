@@ -56,6 +56,7 @@ BookClient::BookClient(QString executable, Source source, QSize capacity)
       transport_(new Transport),
       executable_(std::move(executable)),
       source_(std::move(source)),
+      capacity_(capacity),
       pool_(new FramePool(source_.lease->generation(), capacity.width(), capacity.height()))
 {
     auto &io = *transport_;
@@ -468,6 +469,18 @@ void BookClient::accept(const Page &page)
 {
     displayed_ = page;
     displayed_.image = {};
+}
+
+BookClient *BookClient::recover()
+{
+    if (!failed_)
+        return this;
+    // The failed child may still own writable mappings. The replacement
+    // gets new slots and a new socket, even while the old child drains.
+    auto *replacement = new BookClient(executable_, source_, capacity_);
+    replacement->displayed_ = displayed_;
+    close();
+    return replacement;
 }
 
 void BookClient::finish(Page page)

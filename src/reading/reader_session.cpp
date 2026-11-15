@@ -948,6 +948,7 @@ void ReaderSession::dispatchWebKit()
 {
     if (!webKitClient_ || !lease_ || lease_->revoked())
         return;
+    webKitClient_ = webKitClient_->recover();
     running = true;
     const auto delta = std::exchange(pageDelta, 0);
     turning = delta != 0;

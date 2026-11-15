@@ -33,6 +33,9 @@
 #include <QFile>
 #include <QUrl>
 #include <functional>
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#  include <signal.h>
+#endif
 
 using namespace kobalt;
 
@@ -2219,6 +2222,32 @@ static int webKitReader(int argc, char **argv)
     const auto path = QFileInfo(QString::fromLocal8Bit(argv[2])).absoluteFilePath();
     const auto identity = QUrl::fromLocalFile(path).toString();
     QTimer::singleShot(0, &app, [&] {
+        const auto launcher = qgetenv("KOBALT_WPE_RENDERER");
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        QTemporaryDir child;
+        QFile recorder(child.filePath("run"));
+        require(child.isValid() && recorder.open(QIODevice::WriteOnly),
+                "Could not write the renderer test launcher");
+        const QByteArray launchScript = "#!/bin/sh\n"
+                                        "printf '%s\\n' \"$$\" > \"$KOBALT_TEST_WPE_PID\"\n"
+                                        "exec \"$KOBALT_TEST_WPE_COMMAND\" \"$@\"\n";
+        require(recorder.write(launchScript) == launchScript.size()
+                        && recorder.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                                   | QFileDevice::ExeOwner),
+                "Could not prepare the renderer test launcher");
+        recorder.close();
+        QFile pidFile(child.filePath("pid"));
+        qputenv("KOBALT_TEST_WPE_PID", QFile::encodeName(pidFile.fileName()));
+        qputenv("KOBALT_TEST_WPE_COMMAND", launcher);
+        qputenv("KOBALT_WPE_RENDERER", QFile::encodeName(recorder.fileName()));
+        const auto rendererPid = [&] {
+            require(pidFile.open(QIODevice::ReadOnly), "Could not read the renderer PID");
+            const auto pid = pidFile.readAll().trimmed().toInt();
+            pidFile.close();
+            require(pid > 1, "Invalid test renderer PID");
+            return pid;
+        };
+#endif
         auto reader =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto lease = std::make_shared<SourceLease>();
@@ -2249,6 +2278,25 @@ static int webKitReader(int argc, char **argv)
         require(reader->turn(-1), "WPE rejected a reverse turn");
         wait();
         require(reader->page() == 0 && reader->image() == first, "WPE first page did not restore");
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        const auto originalPosition = reader->state().value("position");
+        const auto retained = reader->image();
+        const auto pid = rendererPid();
+        require(::kill(pid, SIGSTOP) == 0 && reader->turn(1) && reader->busy()
+                        && ::kill(pid, SIGKILL) == 0,
+                "Could not kill a renderer with a turn outstanding");
+        finished.exec();
+        require(!reader->busy() && !reader->error().isEmpty() && reader->image() == first
+                        && reader->state().value("position") == originalPosition,
+                "Renderer failure replaced the last confirmed position or pixels");
+        require(reader->turn(1), "WPE rejected a turn after renderer failure");
+        wait();
+        require(rendererPid() != pid && reader->image() != first && retained == first,
+                "WPE recovery did not use fresh slots or replaced a retained image");
+        require(reader->turn(-1), "WPE rejected a reverse turn after recovery");
+        wait();
+        require(reader->image() == first, "WPE recovery changed the original page");
+#endif
         const auto target = QStringLiteral("OEBPS/chapter1.xhtml");
         require(reader->title().contains("Type Tester") && !reader->author().isEmpty()
                         && reader->chapters().size() > 2
@@ -2273,7 +2321,6 @@ static int webKitReader(int argc, char **argv)
         require(sourcePositionFromToken(bookmark, digest) == savedLocation
                         && !sourcePositionFromToken(bookmark, QByteArray("another-book")).valid(),
                 "Bookmark location did not belong to its publication");
-        const auto launcher = qgetenv("KOBALT_WPE_RENDERER");
         qunsetenv("KOBALT_WPE_RENDERER");
         const auto openAgain = [&](const QString &book, const QJsonObject &saved, QSize size) {
             auto reopened =

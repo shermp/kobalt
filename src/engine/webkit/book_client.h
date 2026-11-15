@@ -52,6 +52,7 @@ public:
     void render(QSize size, int fontPixels, int direction, quint64 layout, Completion,
                 const Location &target = {}, const QString &fragment = {});
     void accept(const Page &);
+    BookClient *recover();
 
     bool contains(const Location &location) const { return source_.spine.contains(location.href); }
 
@@ -80,6 +81,7 @@ private:
     std::unique_ptr<Transport> transport_;
     QString executable_;
     Source source_;
+    QSize capacity_;
     std::unique_ptr<FramePool> pool_;
     Completion complete_;
     spike::BookPage candidate_;
