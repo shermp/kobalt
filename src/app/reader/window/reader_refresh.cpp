@@ -728,7 +728,7 @@ void Reader::syncReadingControls()
         if (action)
             action->setVisible(!settingsOpen
                                && (standardActions || action == toolbarComposition.exitAction));
-    toolbarComposition.search->setVisible(standardActions && !settingsOpen && !zen);
+    toolbarComposition.search->setVisible(!settingsOpen && (!zen || !standardActions));
     const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
     const bool annotationsShown = features::enabled(preferences, features::Annotations);
     const bool wordsShown = savedWords && features::enabled(preferences, features::Words);

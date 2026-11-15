@@ -550,6 +550,7 @@ void Reader::buildReadingPage()
         refresh();
     });
     searchPanel = new kobalt::SearchPanel(this, services.keyboard);
+    searchPanel->setPageScopesAvailable(!session->usesWebKit());
     searchPanel->requested = [this](const QString &query) {
         const auto epoch = ++searchEpoch;
         QPointer<Reader> guard(this);
@@ -870,10 +871,10 @@ void Reader::buildToolbar()
     if (session->usesWebKit()) {
         for (auto *action :
              { toolbarButtons.typography, toolbarButtons.layout, toolbarButtons.graph,
-               toolbarComposition.search, toolbarComposition.sync, toolbarComposition.annotate,
-               toolbarComposition.settings })
+               toolbarComposition.sync, toolbarComposition.annotate, toolbarComposition.settings })
             action->setEnabled(false);
         toolbarComposition.readingActions.append(toolbarComposition.bookmarks);
+        toolbarComposition.readingActions.append(toolbarComposition.search);
         for (const int delta : { -2, 2 }) {
             auto *button = new ui::Button(delta < 0 ? QStringLiteral("A−") : QStringLiteral("A+"),
                                           topControls);

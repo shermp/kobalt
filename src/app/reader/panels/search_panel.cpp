@@ -203,7 +203,7 @@ void SearchPanel::chooseScope()
                            "search_panel.up_to_here", "search_panel.after_here" };
     const int ids[] = { 3, 0, 1, 2 };
     int current = 0;
-    for (int i = 0; i < scopes.size(); ++i) {
+    for (int i = 0; i < (pageScopes ? scopes.size() : 2); ++i) {
         auto *option = options->add(
                 QString("rrSearchScope%1").arg(ids[i]), strings::get(keys[i]),
                 strings::get(qPrintable(QString::fromLatin1(keys[i]) + "_description")));
@@ -400,7 +400,9 @@ void SearchPanel::open(bool returnAvailable, int originalPage, const QString &in
     }
     canReturn = returnAvailable;
     clearDetails();
-    original->setCaption(strings::get("search_panel.page_number").arg(originalPage + 1));
+    original->setCaption(originalPage < 0
+                                 ? QString()
+                                 : strings::get("search_panel.page_number").arg(originalPage + 1));
     show();
     raise();
     redraw();
@@ -528,10 +530,13 @@ void SearchPanel::append(const SearchBatch &batch, int totalPages)
     scanning = !batch.done;
     hits += batch.hits;
     searched = true;
-    complete = batch.done;
-    pendingStatus = strings::get(batch.done ? (hits.isEmpty() ? "search_panel.no_matches_found"
-                                                              : "search_panel.search_complete")
-                                            : "search_panel.searching");
+    const bool limited = !pageScopes && batch.limited;
+    complete = batch.done && !limited;
+    pendingStatus =
+            strings::get(limited              ? "search_panel.search_stopped"
+                                 : batch.done ? (hits.isEmpty() ? "search_panel.no_matches_found"
+                                                                : "search_panel.search_complete")
+                                              : "search_panel.searching");
     Q_UNUSED(totalPages);
     if (batch.reset || firstResults || batch.done) {
         flush();

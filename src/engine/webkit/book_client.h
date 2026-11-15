@@ -14,6 +14,7 @@
 #  include <QImage>
 #  include <QObject>
 #  include <QSize>
+#  include <atomic>
 #  include <functional>
 
 class FramePool;
@@ -62,6 +63,8 @@ public:
                          QString *fragment = nullptr) const;
     void linkDetails(const PageLink &, std::function<void(LinkDetails)>);
     void wordAt(QPoint, std::function<void(WordSelection)>);
+    void searchText(const QString &, SearchCursor, SearchScope, bool first,
+                    std::shared_ptr<std::atomic_bool>, std::function<void(SearchBatch)>);
     // Close detaches completions immediately. The object deletes itself after
     // the process and the outstanding worker resource request have drained.
     void close();

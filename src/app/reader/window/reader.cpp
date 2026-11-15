@@ -1801,8 +1801,6 @@ void Reader::openSeek()
 
 void Reader::openSearch(const QString &query)
 {
-    if (session->usesWebKit())
-        return;
     session->cancelPendingTurn();
     if (!isVisible() || lifecycleHidden || closing || services.suspended() || session->busy()
         || appearanceEdit.panelOpen() || appearanceEdit.applying())
@@ -1815,7 +1813,7 @@ void Reader::openSearch(const QString &query)
     dismissControls(false);
     if (searchOriginal.isEmpty()) {
         searchOriginal = session->state().value("position").toString();
-        searchOriginalPage = session->page();
+        searchOriginalPage = session->usesWebKit() ? session->bookPage() : session->page();
     }
     session->prepareSearch();
     searchPanel->setExcerptFont(bookFace());

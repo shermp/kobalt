@@ -987,6 +987,8 @@ void ReaderSession::dispatchWebKit()
                     guard->turnBoundary(delta);
                 if (guard && guard->updated)
                     guard->updated();
+                if (guard && !guard->busy() && guard->revision == job)
+                    guard->startPendingSearch();
                 if (!guard || !guard->pendingTurn || guard->revision != job)
                     return;
                 QTimer::singleShot(0, guard, [guard, lease, job] {
@@ -2378,6 +2380,10 @@ void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, co
 {
     if (running || retiring || !lease_ || lease_->revoked())
         return;
+    if (usesWebKit()) {
+        finished(std::move(hits));
+        return;
+    }
     const auto engine = engine_;
     const auto lease = lease_;
     const auto job = revision;
@@ -2456,10 +2462,34 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
     const bool details = searchWithDetails;
     const auto origin = searchOrigin;
     QPointer<ReaderSession> guard(this);
+    const auto publish = [guard, query, count, job, cancelled, finished, reset,
+                          lease](SearchBatch result) {
+        if (!guard || cancelled->load() || !lease || lease->revoked() || guard->lease_ != lease
+            || guard->revision != job || guard->running)
+            return;
+        // Keep the UI subscription after completion so reflow can replace
+        // its anchors and details. Eager callers remain one-shot searches.
+        if (result.done && guard->searchWithDetails) {
+            guard->searchQuery.clear();
+            guard->searchFinished = {};
+            guard->searchCancelled.reset();
+        }
+        result.reset = reset;
+        finished(result);
+        if (guard && !cancelled->load() && !lease->revoked() && !result.done
+            && guard->searchCancelled == cancelled && guard->revision == job && !guard->running)
+            guard->searchNext(query, result.cursor, count + result.hits.size(), job, cancelled,
+                              finished, false);
+    };
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit() && webKitClient_) {
+        webKitClient_->searchText(query, cursor, scope, reset, cancelled, publish);
+        return;
+    }
+#endif
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, query, cursor, count, job, cancelled, finished, reset, lease, scope,
-             origin, details] {
+            [engine, query, cursor, count, cancelled, lease, scope, origin, details, publish] {
                 if (cancelled->load() || !lease || lease->revoked())
                     return;
                 EngineJob activity;
@@ -2468,29 +2498,8 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
                 auto result = engine->searchText(
                         query, cursor, count ? (details ? 32 : 512) : 1, scope, origin, details,
                         [cancelled, lease] { return !cancelled->load() && !lease->revoked(); });
-                result.reset = reset;
                 kobalt::qt::invoke(
-                        qApp,
-                        [guard, query, count, job, cancelled, finished, result, lease] {
-                            if (!guard || cancelled->load() || lease->revoked()
-                                || guard->lease_ != lease || guard->revision != job
-                                || guard->running)
-                                return;
-                            // Keep the UI subscription after completion so reflow can replace
-                            // its anchors and details. Eager callers remain one-shot searches.
-                            if (result.done && guard->searchWithDetails) {
-                                guard->searchQuery.clear();
-                                guard->searchFinished = {};
-                                guard->searchCancelled.reset();
-                            }
-                            finished(result);
-                            if (guard && !cancelled->load() && !lease->revoked() && !result.done
-                                && guard->searchCancelled == cancelled && guard->revision == job
-                                && !guard->running)
-                                guard->searchNext(query, result.cursor, count + result.hits.size(),
-                                                  job, cancelled, finished, false);
-                        },
-                        Qt::QueuedConnection);
+                        qApp, [publish, result] { publish(result); }, Qt::QueuedConnection);
             },
             Qt::QueuedConnection);
 }

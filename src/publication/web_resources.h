@@ -1,7 +1,9 @@
 #pragma once
 
 #include "resource_cache.h"
+#include "engine/types.h"
 #include "reading/chapter.h"
+#include <functional>
 
 namespace kobalt {
 class Publication;
@@ -33,6 +35,8 @@ public:
 
     QVector<ChapterLink> chapters();
     QString noteText(const QString &spineMember, const QString &fragment);
+    SearchBatch searchText(const QString &query, SearchCursor, int lastItem,
+                           const std::function<bool()> &current);
 
     QByteArray url(const QString &member) const;
     Resource read(const QByteArray &encodedUrl);
@@ -47,6 +51,15 @@ private:
         qint64 size;
     };
 
+    struct SearchRun
+    {
+        QString text;
+        QVector<int> path;
+        int offset;
+    };
+
+    bool indexSearchItem(int item, const std::function<bool()> &current);
+
     QByteArray origin_, fingerprint_;
     QStringList spine_;
     QString navigation_, ncx_, title_, author_;
@@ -55,5 +68,7 @@ private:
     std::shared_ptr<SourceLease> lease_;
     qint64 servedBytes_ = 0;
     int requests_ = 0;
+    int searchItem_ = -1;
+    QVector<SearchRun> searchRuns_;
 };
 } // namespace kobalt

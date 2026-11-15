@@ -243,6 +243,33 @@ void BookClient::finishWord(WordSelection word)
         finished(std::move(word));
 }
 
+void BookClient::searchText(const QString &query, SearchCursor cursor, SearchScope scope,
+                            bool first, std::shared_ptr<std::atomic_bool> cancelled,
+                            std::function<void(SearchBatch)> finished)
+{
+    const int last =
+            scope == SearchScope::Chapter ? displayed_.spineIndex : source_.spine.size() - 1;
+    if (scope == SearchScope::Chapter && first)
+        cursor.item = last;
+    qt::invoke(
+            engineWorker(),
+            [scope, source = source_.resources, lease = source_.lease, query, cursor, last,
+             cancelled, finished] {
+                const auto current = [&] { return !lease->revoked() && !cancelled->load(); };
+                if (!current())
+                    return;
+                SearchBatch result;
+                if (scope == SearchScope::Book || scope == SearchScope::Chapter)
+                    result = source->searchText(query, cursor, last, current);
+                else
+                    result.done = result.limited = true;
+                if (current())
+                    qt::invoke(
+                            qApp, [finished, result] { finished(result); }, Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done,
                         const Location &target, const QString &fragment)
 {

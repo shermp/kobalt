@@ -3,6 +3,7 @@
 #include "zip_resource.h"
 #include "web_resources.h"
 #include "source_lease.h"
+#include "source_position.h"
 #include <QXmlStreamReader>
 #include <QDir>
 #include <QFileInfo>
@@ -680,6 +681,142 @@ QString WebResources::noteText(const QString &spineMember, const QString &fragme
             return {};
     }
     return {};
+}
+
+namespace {
+int countedBetween(const QString &text, int start, int end)
+{
+    int result = 0;
+    for (int i = start; i < end; ++i) {
+        const auto unit = text.at(i);
+        if (unit.isHighSurrogate() && i + 1 < end && text.at(i + 1).isLowSurrogate())
+            ++i;
+        result += !locationUncounted(unit.unicode());
+    }
+    return result;
+}
+} // namespace
+
+bool WebResources::indexSearchItem(int item, const std::function<bool()> &current)
+{
+    if (item == searchItem_)
+        return true;
+    searchItem_ = -1;
+    searchRuns_.clear();
+    const auto member = members_.constFind(url(spine_.value(item)));
+    if (member == members_.cend() || member->size > packageLimit || !current())
+        return false;
+    const auto bytes = cache_->readBounded(member->name, member->size);
+    if (bytes.size() != member->size)
+        return false;
+
+    struct Element
+    {
+        int index;
+        int childCount = 0, counted = 0;
+        bool hidden = false;
+    };
+
+    QXmlStreamReader xml(bytes);
+    QVector<Element> elements;
+    QVector<SearchRun> runs;
+    int storedIndexes = 0;
+    bool body = false;
+    while (!xml.atEnd() && current()) {
+        xml.readNext();
+        if (!cleanXml(xml)
+            && !(xml.tokenType() == QXmlStreamReader::DTD
+                 && xml.text() == QStringLiteral("<!DOCTYPE html>")))
+            return false;
+        if (xml.isStartElement()) {
+            if (!elements.isEmpty()) {
+                auto &parent = elements.last();
+                const bool hidden = parent.hidden || xml.name() == QStringLiteral("script")
+                        || xml.name() == QStringLiteral("style")
+                        || xml.attributes().hasAttribute(QStringLiteral("hidden"));
+                const int index = parent.childCount++;
+                elements.append({ index, 0, 0, hidden });
+                if (elements.size() > 129)
+                    return false;
+            } else if (xml.name() == QStringLiteral("body")) {
+                body = true;
+                elements.append({ 0, 0, 0, false });
+            }
+        } else if (xml.isEndElement() && !elements.isEmpty()) {
+            elements.removeLast();
+            if (elements.isEmpty())
+                break;
+        } else if (xml.isCharacters() && !elements.isEmpty()) {
+            const auto text = xml.text().toString();
+            if (!elements.last().hidden && !xml.isWhitespace()) {
+                storedIndexes += elements.size();
+                if (runs.size() >= 16384 || storedIndexes > 262144)
+                    return false;
+                SearchRun run{ text, {}, elements.last().counted };
+                for (int i = 1; i < elements.size(); ++i)
+                    run.path.append(elements[i].index);
+                runs.append(std::move(run));
+            }
+            const int length = countedBetween(text, 0, int(text.size()));
+            for (auto &element : elements)
+                element.counted += length;
+        }
+    }
+    if (!body || xml.hasError() || !current())
+        return false;
+    searchItem_ = item;
+    searchRuns_ = std::move(runs);
+    return true;
+}
+
+SearchBatch WebResources::searchText(const QString &query, SearchCursor cursor, int lastItem,
+                                     const std::function<bool()> &current)
+{
+    SearchBatch batch;
+    batch.cursor = cursor;
+    const auto stopped = [&] {
+        batch.done = batch.limited = true;
+        return batch;
+    };
+    if (query.isEmpty() || !current() || cursor.item < 0 || cursor.item >= spine_.size()
+        || !indexSearchItem(cursor.item, current))
+        return stopped();
+    Location location;
+    location.href = spine_[cursor.item];
+    const auto chapter = QFileInfo(location.href).completeBaseName();
+    constexpr int batchSize = 32;
+    while (batch.cursor.block < searchRuns_.size() && current()) {
+        const auto &run = searchRuns_[batch.cursor.block];
+        const auto at = run.text.indexOf(query, batch.cursor.offset, Qt::CaseInsensitive);
+        if (at < 0) {
+            ++batch.cursor.block;
+            batch.cursor.offset = 0;
+            batch.cursor.slice = 0;
+            continue;
+        }
+        const auto begin = int(at), end = int(at + query.size());
+        location.path = run.path;
+        location.offset = run.offset + batch.cursor.slice
+                + countedBetween(run.text, batch.cursor.offset, begin);
+        location.after = true;
+        const auto start = sourcePositionToken(location, fingerprint_);
+        location.offset += countedBetween(run.text, begin, end);
+        location.after = false;
+        const auto finish = sourcePositionToken(location, fingerprint_);
+        const auto excerpt = qMax(0, begin - 36);
+        batch.hits.append({ start, finish, run.text.mid(excerpt, begin - excerpt),
+                            run.text.mid(begin, end - begin), run.text.mid(end, 36), -1, chapter });
+        batch.cursor.offset = end;
+        batch.cursor.slice = location.offset - run.offset;
+        if (batch.hits.size() >= batchSize)
+            return batch;
+    }
+    if (!current())
+        return stopped();
+    batch.cursor = {};
+    batch.cursor.item = cursor.item + 1;
+    batch.done = cursor.item >= lastItem || batch.cursor.item >= spine_.size();
+    return batch;
 }
 
 QByteArray WebResources::url(const QString &member) const

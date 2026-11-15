@@ -2559,6 +2559,41 @@ static int webKitReader(int argc, char **argv)
         require(links->error().isEmpty()
                         && links->state().value("position").toString() == noteOrigin,
                 "WPE could not return to the note reference");
+        const auto searchText = QStringLiteral("DESTINATION TEXT");
+        int batches = 0;
+        QVector<SearchHit> hits;
+        links->search(searchText, [&](SearchBatch batch) {
+            require(!batch.limited, "WPE stopped a valid whole-book search");
+            hits += batch.hits;
+            if (!batch.hits.isEmpty())
+                ++batches;
+            if (batch.done)
+                finished.quit();
+        });
+        finished.exec();
+        require(hits.size() == 40 && batches > 1
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE search missed a later chapter or changed the reading position");
+        const auto hit = hits.last();
+        const auto hitLocation = sourcePositionFromToken(hit.start, links->sourceHash());
+        require(hit.page == -1 && hit.text == "destination text"
+                        && hitLocation.href.endsWith("/second.xhtml") && links->goTo(hit.start),
+                "WPE search lost the matched text or its source location");
+        finished.exec();
+        require(links->error().isEmpty() && links->sourceLocation().href == hitLocation.href,
+                "WPE could not open the search result");
+        hits.clear();
+        links->search(
+                searchText,
+                [&](SearchBatch batch) {
+                    hits += batch.hits;
+                    links->cancelSearch();
+                    finished.quit();
+                },
+                SearchScope::Chapter);
+        finished.exec();
+        require(!hits.isEmpty() && hits.size() < 40,
+                "WPE did not deliver a bounded chapter batch before cancellation");
         links.reset();
         ReaderSession::drain([&app] { app.quit(); });
     });

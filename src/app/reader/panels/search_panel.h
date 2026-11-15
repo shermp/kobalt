@@ -23,6 +23,8 @@ public:
 
     SearchScope scope() const { return searchScope; }
 
+    void setPageScopesAvailable(bool available) { pageScopes = available; }
+
     // `originalPage` is the zero-based page that Return to original position opens.
     // A supplied lookup query replaces the field and runs the normal search.
     void open(bool canReturn, int originalPage, const QString &initialQuery = {});
@@ -50,6 +52,7 @@ private:
     QPushButton *clear;
     QLabel *status, *empty, *hint, *scopeStatus;
     SearchScope searchScope = SearchScope::Book;
+    bool pageScopes = true;
     bool restartOnOpen = false;
     QString scopeLabel() const;
     void chooseScope();
