@@ -372,6 +372,8 @@ if(BUILD_TESTING)
     add_library(kobalt-regression-runtime STATIC "${KOBALT_ROOT}/platforms/kobo/common/standby_diagnostics.cpp")
     set_target_properties(kobalt-regression-runtime PROPERTIES AUTOMOC OFF)
     target_link_libraries(kobalt-regression-runtime PUBLIC kobalt-core)
+    add_executable(kobalt-webkit-export-fixture "${KOBALT_ROOT}/platforms/webkit/retained/export-fixture.cpp")
+    target_link_libraries(kobalt-webkit-export-fixture PRIVATE kobalt-regression-runtime)
     add_custom_target(kobalt-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare)
     add_executable(kobalt-startup-recovery-tests "${KOBALT_ROOT}/tests/startup_recovery.c"
         "${KOBALT_ROOT}/platforms/kobo/common/startup_recovery.c")
