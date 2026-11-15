@@ -58,7 +58,7 @@ public:
 
     void cancelPreview() { queuedPreview_ = {}; }
 
-    void accept(const Page &);
+    void accept(Page &);
     BookClient *recover();
 
     bool contains(const Location &location) const { return source_.spine.contains(location.href); }
@@ -115,6 +115,8 @@ private:
     std::function<void(QueryReply)> query_;
     spike::BookPage candidate_;
     Page displayed_;
+    QVector<int> chapterPages_;
+    LayoutGeneration observedLayout_;
     WebResources::Resource reading_;
     quint64 next_ = 0, renderId_ = 0, resourceId_ = 0;
     quint64 queryId_ = 0;

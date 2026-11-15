@@ -15,6 +15,7 @@
 #  include <QTimer>
 #  include <algorithm>
 #  include <cerrno>
+#  include <limits>
 #  include <signal.h>
 #  include <sys/socket.h>
 
@@ -683,8 +684,34 @@ void BookClient::resourceChunk(quint64 id, unsigned offset)
     send(spike::ResourceData, data);
 }
 
-void BookClient::accept(const Page &page)
+void BookClient::accept(Page &page)
 {
+    const auto generation = page.pages.chapterPages.generation();
+    if (observedLayout_ != generation) {
+        observedLayout_ = generation;
+        chapterPages_.fill(0, source_.spine.size());
+    }
+    chapterPages_[page.spineIndex] = page.pages.chapterPages.value();
+    qint64 prefix = page.pages.chapterPage.value();
+    for (int i = 0; i < page.spineIndex; ++i) {
+        if (chapterPages_[i] == 0) {
+            prefix = -1;
+            break;
+        }
+        prefix += chapterPages_[i];
+    }
+    if (prefix >= 0 && prefix <= std::numeric_limits<int>::max())
+        page.pages.bookPage = Query<int>::exact(int(prefix), generation);
+    qint64 total = 0;
+    for (const auto count : chapterPages_) {
+        if (count == 0) {
+            total = 0;
+            break;
+        }
+        total += count;
+    }
+    if (total > 0 && total <= std::numeric_limits<int>::max())
+        page.pages.bookPages = Query<int>::exact(int(total), generation);
     displayed_ = page;
     displayed_.image = {};
 }
@@ -697,6 +724,8 @@ BookClient *BookClient::recover()
     // gets new slots and a new socket, even while the old child drains.
     auto *replacement = new BookClient(executable_, source_, capacity_);
     replacement->displayed_ = displayed_;
+    replacement->chapterPages_ = chapterPages_;
+    replacement->observedLayout_ = observedLayout_;
     close();
     return replacement;
 }

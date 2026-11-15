@@ -870,6 +870,10 @@ void applyWebKitPage(ReaderFrame &frame, const webkit::Page &page, quint64 job, 
 {
     frame.image = page.image;
     frame.pageInfo = page.pages;
+    if (page.pages.bookPages.exact() && page.pages.bookPage.exact())
+        frame.pageInfo.bookProgress = Query<double>::exact(
+                pageProgressFraction(page.pages.bookPage.value(), page.pages.bookPages.value()),
+                page.pages.bookPages.generation());
     frame.sourceLocation = page.anchor;
     frame.links = page.links;
     frame.state["position"] = sourcePositionToken(page.anchor, fingerprint);

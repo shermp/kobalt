@@ -2699,6 +2699,8 @@ static int webKitReader(int argc, char **argv)
         finished.exec();
         require(links->error().isEmpty() && links->sourceLocation().href == hitLocation.href,
                 "WPE could not open the search result");
+        require(links->bookPages() > links->pages() && links->bookPage() >= links->page(),
+                "WPE did not publish the exact total after observing the complete spine");
         QVector<QRect> match;
         links->rangeRects(hit.start, hit.end, [&](QVector<QRect> rects) {
             match = std::move(rects);
@@ -2744,6 +2746,10 @@ static int webKitReader(int argc, char **argv)
         require(!before.isEmpty() && !after.isEmpty() && before.size() + after.size() == 40
                         && before.last().start != after.first().start,
                 "WPE search scopes did not partition the long chapter at the displayed page");
+        links->resize(QSize(540, 700));
+        finished.exec();
+        require(links->error().isEmpty() && links->bookPages() == 0,
+                "WPE kept exact totals from an earlier viewport");
         links.reset();
         ReaderSession::drain([&] { finished.quit(); });
         finished.exec();

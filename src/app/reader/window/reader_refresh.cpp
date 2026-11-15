@@ -689,10 +689,11 @@ void Reader::syncReadingControls()
         QVector<int> chapterPages;
         for (const auto &chapter : chapters)
             chapterPages.append(chapter.first);
-        pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
-                                         session->chapterTitle(),
-                                         session->usesWebKit() ? -1 : session->progressPercent(),
-                                         session->bookPage(), session->bookPages(), chapterPages);
+        pageScrubber->setChapterPosition(
+                session->contentsSelection().current, chapters.size(), session->chapterTitle(),
+                session->usesWebKit() && session->bookPages() == 0 ? -1
+                                                                   : session->progressPercent(),
+                session->bookPage(), session->bookPages(), chapterPages);
     } else {
         pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
     }
