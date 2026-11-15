@@ -2,6 +2,8 @@
 
 #include <wpe/webkit.h>
 
+#include "page-model.h"
+
 #include <functional>
 #include <string>
 
@@ -10,6 +12,8 @@ struct Page
 {
     std::string uri;
     unsigned width = 0, height = 0, column = 0, fontSize = 18;
+    std::string href = {};
+    std::optional<Location> location = {};
 };
 
 class View
@@ -21,6 +25,7 @@ public:
     View(WebKitWebContext *, const char *style);
     ~View();
     void show(Page, GCancellable *, Completion);
+    std::optional<PageInfo> pageInfo() const { return confirmed; }
     bool usable() const { return healthy; }
     bool sawExternalResource() const { return externalResource; }
 
@@ -33,6 +38,8 @@ private:
 
     WebKitWebView *view = nullptr;
     Page current, candidate;
+    std::optional<PageInfo> confirmed;
+    PageInfo measured;
     Completion completion;
     GCancellable *cancellable = nullptr;
     std::string failure;

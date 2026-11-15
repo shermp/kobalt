@@ -7,10 +7,11 @@
 
 namespace {
 constexpr char origin[] = "kobalt-epub://book-retained/";
+constexpr char secondOrigin[] = "kobalt-epub://book-figure/";
 constexpr char style[] = R"CSS(
     @font-face {
         font-family: ReaderFixture;
-        src: url(kobalt-epub://book-retained/font.ttf) format("truetype");
+        src: url(font.ttf) format("truetype");
     }
     html { margin: 0 !important; overflow: hidden !important; background: white !important; }
     body {
@@ -31,6 +32,13 @@ constexpr char style[] = R"CSS(
     .blue .swatch { background: blue; }
     .swatch { width: 32px; height: 32px; }
 )CSS";
+constexpr char hebrewStyle[] = R"CSS(
+    @font-face {
+        font-family: ReaderFixture;
+        src: url(hebrew.ttf) format("truetype");
+        unicode-range: U+0590-05FF;
+    }
+)CSS";
 constexpr char fixture[] = R"HTML(<!doctype html><html><head>
 <script>document.documentElement.setAttribute('data-book-script', 'ran')</script>
 <style>@import url(https://unexpected.invalid/blocked.css);</style>
@@ -38,6 +46,8 @@ constexpr char fixture[] = R"HTML(<!doctype html><html><head>
 <section class="fixture-page red"><div class="swatch"></div><p>WPE type</p><img class="fixture-marker" src="marker.png" alt=""></section>
 <section class="fixture-page blue"><div class="swatch"></div><p>WPE type</p></section>
 </body></html>)HTML";
+constexpr char rtlFixture[] = R"HTML(<!doctype html><html dir="rtl"><head></head>
+<body><p>שלום A  <span>é עולם</span></p><p>עוד טקסט לקריאה</p></body></html>)HTML";
 constexpr char policy[] =
         "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
         "style-src 'unsafe-inline' kobalt-epub:; img-src kobalt-epub:; "
@@ -79,7 +89,7 @@ public:
     int run();
 
 private:
-    bool add(const char *name, const char *type, bool delayed = false);
+    bool add(const char *name, const char *type, bool delayed = false, const char *base = origin);
     void serve(WebKitURISchemeRequest *);
     void submit();
     void result(WebKitImage *, const char *);
@@ -91,13 +101,15 @@ private:
     GMainLoop *loop = nullptr;
     std::unique_ptr<retained::View> view;
     unsigned step = 0, denied = 0;
-    bool success = false;
-    std::string firstHash, reflowHash, chapterHash;
+    bool success = false, secondBook = false, hebrewFont = false;
+    std::string firstHash, reflowHash, chapterHash, turnedHash;
+    retained::Location chapterAnchor;
+    std::optional<retained::PageInfo> beforeFailure;
 };
 
 Fixture::Fixture(const char *directory) : directory(directory) {}
 
-bool Fixture::add(const char *name, const char *type, bool delayed)
+bool Fixture::add(const char *name, const char *type, bool delayed, const char *base)
 {
     g_autofree gchar *path = g_build_filename(directory, name, nullptr);
     g_autofree gchar *data = nullptr;
@@ -107,7 +119,8 @@ bool Fixture::add(const char *name, const char *type, bool delayed)
     Resource entry{std::string(data, size), type, 0, delayed};
     if (g_str_equal(type, "application/xhtml+xml"))
         addPolicy(entry.bytes);
-    resources.emplace(std::string(origin) + name, std::move(entry));
+    const auto *leaf = std::strrchr(name, '/');
+    resources.emplace(std::string(base) + (leaf ? leaf + 1 : name), std::move(entry));
     return true;
 }
 
@@ -138,6 +151,9 @@ int Fixture::run()
     std::string test = fixture;
     addPolicy(test);
     resources.emplace(std::string(origin) + "fixture.html", Resource{test, "text/html"});
+    std::string rtl = rtlFixture;
+    addPolicy(rtl);
+    resources.emplace(std::string(origin) + "rtl.html", Resource{rtl, "text/html"});
     // One fully opaque green pixel. A delayed response must be visible in
     // the first snapshot, rather than passing on image.decode() alone.
     gsize markerSize = 0;
@@ -146,12 +162,23 @@ int Fixture::run()
     resources.emplace(std::string(origin) + "marker.png",
                       Resource{std::string(reinterpret_cast<const char *>(marker), markerSize),
                                "image/png", 0, true});
+    g_autofree gchar *figure = g_build_filename(directory, "figure", nullptr);
+    secondBook = g_file_test(figure, G_FILE_TEST_IS_DIR);
     if (!add("chapter1.xhtml", "application/xhtml+xml") || !add("chapter2.xhtml", "application/xhtml+xml")
         || !add("styles.css", "text/css") || !add("ornament.png", "image/png", true)
-        || !add("font.ttf", "font/ttf", true)) {
+        || !add("font.ttf", "font/ttf", true)
+        || (secondBook && (!add("font.ttf", "font/ttf", false, secondOrigin)
+                           || !add("figure/chapter.xhtml", "application/xhtml+xml", false, secondOrigin)
+                           || !add("figure/bridge.png", "image/png", false, secondOrigin)))) {
         g_printerr("Missing fixture inputs\n");
         return 1;
     }
+
+    g_autofree gchar *hebrew = g_build_filename(directory, "hebrew.ttf", nullptr);
+    hebrewFont = g_file_test(hebrew, G_FILE_TEST_IS_REGULAR);
+    if (hebrewFont && !add("hebrew.ttf", "font/ttf", true))
+        return 1;
+    const auto styleSheet = std::string(style) + (hebrewFont ? hebrewStyle : "");
 
     g_autoptr(WebKitWebContext) context = webkit_web_context_new();
     auto *security = webkit_web_context_get_security_manager(context);
@@ -162,7 +189,7 @@ int Fixture::run()
     }, this, nullptr);
     g_autoptr(GMainLoop) owner = g_main_loop_new(nullptr, FALSE);
     loop = owner;
-    view = std::make_unique<retained::View>(context, style);
+    view = std::make_unique<retained::View>(context, styleSheet.c_str());
     // A watchdog is a failure bound only. It never decides a frame is fresh.
     const auto timeout = g_timeout_add_seconds(40, +[](gpointer) -> gboolean {
         g_error("Retained view fixture timed out");
@@ -180,14 +207,41 @@ int Fixture::run()
 
 void Fixture::submit()
 {
-    const char *name = step < 9 ? "fixture.html" : step < 11 ? "chapter1.xhtml" : "chapter2.xhtml";
-    const bool resized = step >= 7;
-    retained::Page page{std::string(origin) + name, resized ? 208u : 160u,
-                        resized ? 136u : 120u, 0, step >= 3 ? 26u : 18u};
-    if (step == 1 || step == 5 || step == 8 || step == 10)
+    const char *name = step < 9 ? "fixture.html" : step < 11 ? "chapter1.xhtml"
+            : step == 11 ? "chapter2.xhtml" : step < 16 ? "chapter1.xhtml"
+            : step < 18 ? "rtl.html" : "chapter.xhtml";
+    const bool resized = step >= 7 && step < 13;
+    retained::Page page{std::string(step < 18 ? origin : secondOrigin) + name,
+                        resized ? 208u : 160u, resized ? 136u : 120u,
+                        0, step >= 3 && step < 13 ? 26u : 18u};
+    page.href = step >= 9 && step < 16 ? std::string("OEBPS/") + name : name;
+    if (step == 1 || step == 5 || step == 8)
         page.column = 1;
+    if (step == 10)
+        page.column = 2;
     if (step == 4)
-        page.column = 8; // fails after applying the candidate layout
+        page.column = 8;
+    if (step == 12)
+        page.location = chapterAnchor;
+    if (step == 14 || step == 15) {
+        beforeFailure = view->pageInfo();
+        if (!beforeFailure)
+            return fail("Missing source checkpoint");
+        page.location = chapterAnchor;
+        if (step == 14)
+            page.location->path = {9999};
+        else
+            page.location->offset = 2 * 1024 * 1024;
+    }
+    if (step == 16 || step == 17) {
+        page.location = retained::Location{1, "rtl.html", {0}, 2, true};
+        if (step == 17)
+            page.fontSize = 26;
+    }
+    if (step == 19) {
+        beforeFailure = view->pageInfo();
+        page.location = chapterAnchor; // chapter1 of the other publication
+    }
     g_autoptr(GCancellable) operation = g_cancellable_new();
     view->show(page, operation, [this](WebKitImage *image, const char *error) { result(image, error); });
     if (step == 5)
@@ -230,9 +284,15 @@ bool Fixture::pixels(WebKitImage *image, bool blue, bool controlled, std::string
 
 void Fixture::result(WebKitImage *image, const char *error)
 {
-    if (step == 4 || step == 5) {
+    if (step == 4 || step == 5 || step == 14 || step == 19) {
         if (image || !error || !view->usable())
             return fail("Failed or cancelled operation did not restore the active view");
+        if (step == 14 || step == 19) {
+            const auto after = view->pageInfo();
+            if (!after || !beforeFailure || after->anchor != beforeFailure->anchor
+                || after->column != beforeFailure->column)
+                return fail("Unresolved restore changed the confirmed page");
+        }
         g_print("retained step=%u rolled back: %s\n", step, error);
     } else {
         if (!image || error)
@@ -253,18 +313,44 @@ void Fixture::result(WebKitImage *image, const char *error)
             return fail("Recovery did not reproduce the frame preceding the failed operations");
         if (step == 9)
             chapterHash = hash;
-        if (step == 10 && hash == chapterHash)
-            return fail("Real chapter turn did not change pixels");
+        const auto info = view->pageInfo();
+        if (!info || !info->chapterPages || info->column >= info->chapterPages)
+            return fail("Missing committed chapter page information");
+        g_print("location step=%u chapter=%s column=%u/%u offset=%d precision=%d restore=%d\n",
+                step, info->anchor.href.c_str(), info->column, info->chapterPages, info->anchor.offset,
+                int(info->precision), int(info->restoration));
+        if (step == 10) {
+            if (hash == chapterHash || info->chapterPages < 2 || info->column != 2
+                || info->anchor.href != "OEBPS/chapter1.xhtml" || info->anchor.offset < 0)
+                return fail("Real chapter turn did not produce a source anchor");
+            chapterAnchor = info->anchor;
+            turnedHash = hash;
+        }
+        if (step == 12 && (hash != turnedHash || info->column != 2
+                           || info->restoration != retained::Restoration::Exact))
+            return fail("Reopening a chapter did not restore its original column");
+        if (step == 13 && (info->restoration != retained::Restoration::Exact
+                           || info->anchor.href != chapterAnchor.href))
+            return fail("Reflow did not resolve the previous source anchor");
+        if (step == 15 && info->restoration != retained::Restoration::Approximate)
+            return fail("An out-of-range text offset did not report approximate restoration");
+        if ((step == 16 || step == 17) && (info->restoration != retained::Restoration::Exact
+                                         || info->anchor.href != "rtl.html"))
+            return fail("RTL source restoration failed");
+        if (step == 18 && info->anchor.href != "chapter.xhtml")
+            return fail("The second publication returned the wrong chapter anchor");
     }
     if (resources.at(std::string(origin) + "fixture.html").requests != 1
-        || resources.at(std::string(origin) + "chapter1.xhtml").requests != unsigned(step >= 9)
+        || resources.at(std::string(origin) + "chapter1.xhtml").requests
+                   != unsigned(step >= 9) + unsigned(step >= 12)
         || resources.at(std::string(origin) + "chapter2.xhtml").requests != unsigned(step >= 11))
         return fail("Column operation reloaded the active document or fetched a later chapter");
-    if (++step == 12) {
+    if (++step == (secondBook ? 20u : 18u)) {
         success = resources.at(std::string(origin) + "font.ttf").requests > 0
                 && resources.at(std::string(origin) + "marker.png").requests == 1
                 && resources.at(std::string(origin) + "ornament.png").requests > 0 && !denied
-                && !view->sawExternalResource();
+                && !view->sawExternalResource()
+                && (!hebrewFont || resources.at(std::string(origin) + "hebrew.ttf").requests > 0);
         if (!success)
             return fail("Expected resource delivery or offline restriction failed");
         g_print("retained fixture passed: delayed resources, same-view rollback, and lazy chapters\n");

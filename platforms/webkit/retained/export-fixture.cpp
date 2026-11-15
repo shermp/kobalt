@@ -9,8 +9,8 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
-    if (args.size() != 4) {
-        qCritical("usage: kobalt-webkit-export-fixture TYPE_TESTER_EPUB FIXTURE_FONT OUTPUT_DIRECTORY");
+    if (args.size() != 4 && args.size() != 5) {
+        qCritical("usage: kobalt-webkit-export-fixture TYPE_TESTER_EPUB FIXTURE_FONT OUTPUT_DIRECTORY [FIGURE_EPUB]");
         return 2;
     }
     const QDir output(args[3]);
@@ -45,6 +45,22 @@ int main(int argc, char **argv)
     if (!QFile::copy(args[2], output.filePath(QStringLiteral("font.ttf")))) {
         qCritical("Unable to stage the licensed fixture font");
         return 1;
+    }
+    if (args.size() == 5) {
+        auto figure = kobalt::openLocalWebResources(args[4], std::make_shared<kobalt::SourceLease>(),
+                                                    &error);
+        if (!figure || !figure->spine().contains(QStringLiteral("chapter.xhtml"))
+            || !output.mkdir(QStringLiteral("figure"))) {
+            qCritical() << "Unable to stage second publication" << error;
+            return 1;
+        }
+        for (const auto &member : {QStringLiteral("chapter.xhtml"), QStringLiteral("bridge.png")}) {
+            const auto bytes = figure->read(figure->url(member)).bytes;
+            QFile file(output.filePath(QStringLiteral("figure/") + member));
+            if (bytes.isEmpty() || !file.open(QIODevice::WriteOnly | QIODevice::NewOnly)
+                || file.write(bytes) != bytes.size())
+                return 1;
+        }
     }
     qInfo() << "Staged authorized Type Tester resources, fingerprint" << book->fingerprint();
 }

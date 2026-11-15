@@ -1,7 +1,9 @@
 #include "view.h"
+#include "location-script.h"
 
 #include <wpe/headless/wpe-headless.h>
 
+#include <cmath>
 #include <utility>
 
 namespace retained {
@@ -24,21 +26,85 @@ constexpr char layoutScript[] = R"JS(
     }
     document.documentElement.style.setProperty('--reader-font-size', fontSize + 'px');
     document.body.getBoundingClientRect();
-    const faces = await document.fonts.load(fontSize + 'px ReaderFixture');
+    const rtl = getComputedStyle(document.documentElement).direction === 'rtl';
+    const faces = await document.fonts.load(fontSize + 'px ReaderFixture', rtl ? 'שלום WPE' : 'WPE');
     await document.fonts.ready;
     await Promise.all(Array.from(document.images, image => image.decode()));
     if (!faces.length)
         throw new Error('Expected fixture font did not load');
     const columns = Math.max(1, Math.ceil(document.documentElement.scrollWidth / width));
-    if (column >= columns)
+    let actual = column, quality = 2;
+    if (restore) {
+        const indexes = path ? path.split(",").map(Number) : [];
+        const resolved = resolveSource(indexes, offset, after);
+        if (!resolved)
+            return [column, columns, 2, [], -1, true, 2];
+        quality = resolved[2];
+        if (indexes.length || offset >= 0) {
+            const rect = positionRect(resolved[0], resolved[1], after);
+            if (rect) {
+                const position = rtl ? width - rect.right - window.scrollX : rect.left + window.scrollX;
+                actual = Math.max(0, Math.min(columns - 1, Math.floor(position / width)));
+            } else {
+                quality = 1;
+            }
+        } else {
+            actual = 0;
+        }
+    }
+    if (actual >= columns)
         throw new Error('Column is out of range');
-    window.scrollTo(column * width, 0);
+    const scroll = actual * width * (rtl ? -1 : 1);
+    window.scrollTo(scroll, 0);
     await tick();
     await tick();
-    if (window.scrollX !== column * width || document.documentElement.hasAttribute('data-book-script'))
+    if (window.scrollX !== scroll || document.documentElement.hasAttribute('data-book-script'))
         throw new Error('Scroll position or script policy mismatch');
-    return globalThis.retainedOperations;
+    const anchor = visibleSource(width, height);
+    return [actual, columns, quality, ...anchor];
 )JS";
+
+bool integer(JSCValue *array, unsigned index, int min, int max, int &out)
+{
+    g_autoptr(JSCValue) value = jsc_value_object_get_property_at_index(array, index);
+    if (!value || !jsc_value_is_number(value))
+        return false;
+    const double number = jsc_value_to_double(value);
+    if (!std::isfinite(number) || std::trunc(number) != number || number < min || number > max)
+        return false;
+    out = int(number);
+    return true;
+}
+
+bool readPageInfo(JSCValue *value, const std::string &href, PageInfo &info)
+{
+    int column, count, quality, offset, precision;
+    if (!value || !jsc_value_is_array(value) || !integer(value, 0, 0, 65535, column)
+        || !integer(value, 1, 1, 65536, count) || !integer(value, 2, 0, 2, quality)
+        || !integer(value, 4, -1, 2 * 1024 * 1024, offset) || !integer(value, 6, 0, 2, precision))
+        return false;
+    g_autoptr(JSCValue) path = jsc_value_object_get_property_at_index(value, 3);
+    g_autoptr(JSCValue) affinity = jsc_value_object_get_property_at_index(value, 5);
+    if (!path || !jsc_value_is_array(path) || !affinity || !jsc_value_is_boolean(affinity))
+        return false;
+    g_autoptr(JSCValue) length = jsc_value_object_get_property(path, "length");
+    const int size = length ? jsc_value_to_int32(length) : -1;
+    if (size < 0 || size > 128)
+        return false;
+    Location anchor;
+    anchor.href = href;
+    anchor.offset = offset;
+    anchor.after = jsc_value_to_boolean(affinity);
+    for (int i = 0; i < size; ++i) {
+        int index;
+        if (!integer(path, i, 0, 2 * 1024 * 1024, index))
+            return false;
+        anchor.path.push_back(unsigned(index));
+    }
+    info = {unsigned(column), unsigned(count), std::move(anchor), Restoration(precision),
+            Restoration(quality)};
+    return column < count;
+}
 
 bool software(WebKitSettings *settings)
 {
@@ -153,6 +219,17 @@ void View::show(Page page, GCancellable *cancel, Completion done)
         done(nullptr, "Invalid retained view request");
         return;
     }
+    if (page.href.empty())
+        page.href = page.uri.substr(page.uri.find('/', sizeof("kobalt-epub://") - 1) + 1);
+    if (page.location && (page.location->version != 1 || page.location->href != page.href
+                          || page.location->path.size() > 128 || page.location->offset < -1
+                          || page.location->offset > 2 * 1024 * 1024)) {
+        done(nullptr, "Unresolved source location");
+        return;
+    }
+    if (!page.location && confirmed && page.uri == current.uri
+        && (page.width != current.width || page.height != current.height || page.fontSize != current.fontSize))
+        page.location = confirmed->anchor;
     candidate = std::move(page);
     completion = std::move(done);
     cancellable = G_CANCELLABLE(g_object_ref(cancel));
@@ -180,18 +257,32 @@ void View::layout()
     g_variant_builder_add(&args, "{sv}", "height", g_variant_new_uint32(candidate.height));
     g_variant_builder_add(&args, "{sv}", "column", g_variant_new_uint32(candidate.column));
     g_variant_builder_add(&args, "{sv}", "fontSize", g_variant_new_uint32(candidate.fontSize));
+    const auto location = candidate.location.value_or(Location{});
+    std::string path;
+    for (auto index : location.path) {
+        if (!path.empty())
+            path += ',';
+        path += std::to_string(index);
+    }
+    g_variant_builder_add(&args, "{sv}", "path", g_variant_new_string(path.c_str()));
+    g_variant_builder_add(&args, "{sv}", "restore", g_variant_new_uint32(candidate.location.has_value()));
+    g_variant_builder_add(&args, "{sv}", "offset", g_variant_new_int32(location.offset));
+    g_variant_builder_add(&args, "{sv}", "after", g_variant_new_uint32(location.after));
     g_autoptr(GVariant) parameters = g_variant_ref_sink(g_variant_builder_end(&args));
     // Drain DOM mutations before rollback. Cancelling the client-side GLib
     // task alone would not prove the page-side script has stopped.
+    static const std::string script = std::string(sourceLocationScript) + layoutScript;
     webkit_web_view_call_async_javascript_function(
-            view, layoutScript, -1, parameters, world, nullptr, nullptr,
+            view, script.c_str(), script.size(), parameters, world, nullptr, nullptr,
             +[](GObject *source, GAsyncResult *result, gpointer data) {
                 auto &self = *static_cast<View *>(data);
                 g_autoptr(GError) error = nullptr;
                 g_autoptr(JSCValue) value = webkit_web_view_call_async_javascript_function_finish(
                         WEBKIT_WEB_VIEW(source), result, &error);
-                if (!value || !jsc_value_is_number(value))
+                if (!readPageInfo(value, self.candidate.href, self.measured))
                     return self.failed(error ? error->message : "Layout bridge did not complete");
+                if (self.candidate.location && self.measured.restoration == Restoration::Unresolved)
+                    return self.failed("Unresolved source location");
                 if (!self.restoring && g_cancellable_is_cancelled(self.cancellable))
                     return self.failed("Cancelled");
                 webkit_web_view_get_snapshot(
@@ -215,6 +306,9 @@ void View::snapshot(GAsyncResult *result)
     if (g_cancellable_is_cancelled(cancellable))
         return failed("Cancelled");
     current = candidate;
+    current.column = measured.column;
+    current.location.reset();
+    confirmed = measured;
     complete(image, nullptr);
 }
 
