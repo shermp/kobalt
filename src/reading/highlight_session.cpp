@@ -502,7 +502,9 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                                 || guard->session_.layoutRevision() != revision
                                 || !hits.isEmpty()) {
                                 if (!hits.isEmpty()) {
-                                    guard->error_ = QStringLiteral("overlap");
+                                    guard->error_ = hits.first() < 0
+                                            ? QStringLiteral("unresolved-range")
+                                            : QStringLiteral("overlap");
                                     ++guard->errors_;
                                     if (guard->failed)
                                         guard->failed();

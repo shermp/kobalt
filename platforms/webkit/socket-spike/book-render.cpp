@@ -170,9 +170,15 @@ bool BookRender::query(const Message &message)
     }
     view->rangeRects(retained::Location{ 1, {}, std::move(first.path), first.offset, first.after },
                      retained::Location{ 1, {}, std::move(last.path), last.offset, last.after },
-                     [this, revision, type](const std::vector<retained::Rect> &rects) {
+                     [this, revision, type](const retained::RangeGeometry &geometry) {
                          std::string payload;
-                         for (const auto &rect : rects) {
+                         for (const auto &edge : { geometry.start, geometry.end }) {
+                             put(payload, edge.fixed, 2);
+                             put(payload, edge.first, 2);
+                             put(payload, edge.last, 2);
+                             put(payload, edge.direction, 1);
+                         }
+                         for (const auto &rect : geometry.rects) {
                              put(payload, rect.x, 2);
                              put(payload, rect.y, 2);
                              put(payload, rect.width, 2);

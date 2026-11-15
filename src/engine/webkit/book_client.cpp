@@ -225,11 +225,20 @@ void BookClient::wordAt(QPoint point, std::function<void(WordSelection)> finishe
     std::string data;
     spike::put(data, unsigned(point.x()), 2);
     spike::put(data, unsigned(point.y()), 2);
-    startQuery(spike::BookWordAt, std::move(data), std::move(finished));
+    startQuery(spike::BookWordAt, std::move(data),
+               [finished](QueryReply reply) { finished(std::move(reply.word)); });
 }
 
 void BookClient::rangeRects(const QString &start, const QString &end,
                             std::function<void(QVector<QRect>)> finished)
+{
+    rangeGeometry(start, end, [finished](AnnotationGeometry geometry) {
+        finished(std::move(geometry.rectangles));
+    });
+}
+
+void BookClient::rangeGeometry(const QString &start, const QString &end,
+                               std::function<void(AnnotationGeometry)> finished)
 {
     const auto &digest = source_.resources->fingerprint();
     const auto first = sourcePositionFromToken(start, digest);
@@ -252,14 +261,25 @@ void BookClient::rangeRects(const QString &start, const QString &end,
     data += firstBytes;
     encode(last, data);
     startQuery(spike::BookRangeRects, std::move(data),
-               [finished](WordSelection result) { finished(std::move(result.rectangles)); });
+               [finished](QueryReply reply) { finished(std::move(reply.range)); });
 }
 
 void BookClient::startQuery(spike::Type type, std::string payload,
-                            std::function<void(WordSelection)> finished)
+                            std::function<void(QueryReply)> finished)
 {
-    if (!ready_ || failed_ || closing_ || complete_ || query_ || !displayed_.revision.frame) {
+    if (!ready_ || failed_ || closing_ || complete_ || !displayed_.revision.frame
+        || queuedQueries_.size() >= 8) {
         finished({});
+        return;
+    }
+    if (query_) {
+        const auto revision = displayed_.revision;
+        queuedQueries_.append([this, revision, type, payload = std::move(payload), finished] {
+            if (!(revision == displayed_.revision))
+                finished({});
+            else
+                startQuery(type, std::move(payload), finished);
+        });
         return;
     }
     query_ = std::move(finished);
@@ -271,13 +291,16 @@ void BookClient::startQuery(spike::Type type, std::string payload,
     send(type, queryRevision_.encode() + payload);
 }
 
-void BookClient::finishQuery(WordSelection word)
+void BookClient::finishQuery(QueryReply reply)
 {
     transport_->queryDeadline.stop();
     auto finished = std::move(query_);
     query_ = {};
+    auto queued = std::exchange(queuedQueries_, {});
+    for (const auto &next : queued)
+        next();
     if (finished)
-        finished(std::move(word));
+        finished(std::move(reply));
 }
 
 void BookClient::searchText(const QString &query, SearchCursor cursor, SearchScope scope,
@@ -480,17 +503,45 @@ bool BookClient::handle(const spike::Message &message)
                          { QRect(result.x, result.y, result.width, result.height) } };
             }
         }
-        finishQuery(std::move(word));
+        finishQuery({ std::move(word), {} });
         return true;
     }
     if (message.type == spike::BookRangeReply) {
         const auto size = message.payload.size();
-        if (!query_ || message.id != queryId_ || message.type != queryReply_ || size > 64 * 8
-            || size % 8)
+        constexpr size_t header = 14;
+        if (!query_ || message.id != queryId_ || message.type != queryReply_
+            || (size && (size < header || size > header + 64 * 8 || (size - header) % 8)))
             return false;
-        WordSelection result;
+        AnnotationGeometry result;
         const QRect viewport(QPoint(), querySize_);
-        for (size_t i = 0; i < size; i += 8) {
+        if (size) {
+            const auto decodeEdge = [&](const char *p, SelectionEndpoint &edge) {
+                const auto fixed = int(spike::read(p, 2)), first = int(spike::read(p + 2, 2)),
+                           last = int(spike::read(p + 4, 2)),
+                           direction = int(spike::read(p + 6, 1));
+                if (!direction)
+                    return !fixed && !first && !last;
+                const bool vertical = direction > 2;
+                if (direction > 4 || first >= last
+                    || fixed > (vertical ? querySize_.height() : querySize_.width())
+                    || last > (vertical ? querySize_.width() : querySize_.height()))
+                    return false;
+                const int outward = direction % 2 ? -1 : 1;
+                edge = vertical ? SelectionEndpoint{ { first, fixed },
+                                                     { last, fixed },
+                                                     { 0, outward },
+                                                     true }
+                                : SelectionEndpoint{
+                                      { fixed, first }, { fixed, last }, { outward, 0 }, true
+                                  };
+                result.vertical |= vertical;
+                return true;
+            };
+            const auto *p = message.payload.data();
+            if (!decodeEdge(p, result.start) || !decodeEdge(p + 7, result.end))
+                return false;
+        }
+        for (size_t i = header; i < size; i += 8) {
             const auto *p = message.payload.data() + i;
             const QRect rect(int(spike::read(p, 2)), int(spike::read(p + 2, 2)),
                              int(spike::read(p + 4, 2)), int(spike::read(p + 6, 2)));
@@ -499,8 +550,8 @@ bool BookClient::handle(const spike::Message &message)
             result.rectangles.append(rect);
         }
         if (complete_ || !(queryRevision_ == displayed_.revision))
-            result.rectangles.clear();
-        finishQuery(std::move(result));
+            result = {};
+        finishQuery({ {}, std::move(result) });
         return true;
     }
     if (!reserved_ || message.id != renderId_)
@@ -692,6 +743,7 @@ void BookClient::close()
     queuedRender_ = {};
     cancelPreview();
     query_ = {};
+    queuedQueries_.clear();
     transport_->queryDeadline.stop();
     ++closingBooks().active;
     transport_->retry.stop();

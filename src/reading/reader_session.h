@@ -15,6 +15,8 @@
 namespace kobalt {
 struct OpeningOutput;
 
+class WebResources;
+
 namespace webkit {
 class BookClient;
 }
@@ -533,6 +535,7 @@ private:
     void scaleWebKitPreview(QImage, QSize, quint64 request, quint64 job,
                             std::function<void(QImage)>);
 #endif
+    std::shared_ptr<WebResources> webResources() const;
     void completeOpening(OpeningOutput, const QString &, std::function<void(OpeningResult)>,
                          const std::shared_ptr<SourceLease> &, quint64);
     // Background pagination only offers a document. A foreground render

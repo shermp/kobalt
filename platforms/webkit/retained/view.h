@@ -29,6 +29,17 @@ struct Rect
     unsigned x, y, width, height;
 };
 
+struct RangeGeometry
+{
+    struct Edge
+    {
+        unsigned fixed = 0, first = 0, last = 0, direction = 0;
+    };
+
+    std::vector<Rect> rects;
+    Edge start, end;
+};
+
 class View
 {
 public:
@@ -40,8 +51,7 @@ public:
     ~View();
     void show(Page, GCancellable *, Completion, bool preview = false);
     void wordAt(unsigned x, unsigned y, std::function<void(Word)>);
-    void rangeRects(const Location &start, const Location &end,
-                    std::function<void(std::vector<Rect>)>);
+    void rangeRects(const Location &start, const Location &end, std::function<void(RangeGeometry)>);
 
     std::optional<PageInfo> pageInfo() const { return confirmed; }
 

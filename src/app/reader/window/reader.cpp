@@ -2198,7 +2198,7 @@ void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
     using Nav = kobalt::NavigationDestination;
     if (session->usesWebKit() && destination != Nav::Chapters && destination != Nav::Bookmarks
-        && destination != Nav::Light && destination != Nav::Seek)
+        && destination != Nav::Light && destination != Nav::Seek && destination != Nav::Annotate)
         return;
     session->cancelPendingTurn();
     if (destination == Nav::Bookmarks) {

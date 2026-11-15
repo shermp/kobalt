@@ -751,11 +751,10 @@ void Reader::syncReadingControls()
                       ui::IconRendition::Action });
     }
     toolbarComposition.annotate->setVisible(
-            standardActions && !settingsOpen && !zen
-            && features::enabled(preferences, features::Annotations) && !quickAnnotations());
-    toolbarComposition.bookmarks->setVisible(
             !settingsOpen && (!zen || !standardActions)
-            && (bookmarksShown || (standardActions && (annotationsShown || wordsShown))));
+            && features::enabled(preferences, features::Annotations) && !quickAnnotations());
+    toolbarComposition.bookmarks->setVisible(!settingsOpen && (!zen || !standardActions)
+                                             && (bookmarksShown || annotationsShown || wordsShown));
     toolbarComposition.formattingWarning->setVisible(standardActions && !settingsOpen && !zen
                                                      && session->formattingWarning());
     toolbarButtons.graph->setEnabled(standardActions && !session->busy()

@@ -695,6 +695,34 @@ int countedBetween(const QString &text, int start, int end)
     }
     return result;
 }
+
+QByteArray elementKey(const QVector<int> &path)
+{
+    QByteArray key;
+    for (const auto index : path) {
+        key += '/';
+        key += QByteArray::number(index);
+    }
+    return key;
+}
+
+int sourceUnit(const QString &text, int offset, bool after)
+{
+    if (!after && !offset)
+        return 0;
+    for (int i = 0; i < text.size();) {
+        const auto begin = i;
+        const auto unit = text.at(i++);
+        if (unit.isHighSurrogate() && i < text.size() && text.at(i).isLowSurrogate())
+            ++i;
+        if (locationUncounted(unit.unicode()))
+            continue;
+        if ((after && offset == 0) || (!after && offset == 1))
+            return after ? begin : i;
+        --offset;
+    }
+    return offset == 0 ? int(text.size()) : -1;
+}
 } // namespace
 
 bool WebResources::indexSearchItem(int item, const std::function<bool()> &current)
@@ -703,6 +731,8 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
         return true;
     searchItem_ = -1;
     searchRuns_.clear();
+    indexedElements_.clear();
+    indexedText_.clear();
     const auto member = members_.constFind(url(spine_.value(item)));
     if (member == members_.cend() || member->size > packageLimit || !current())
         return false;
@@ -712,7 +742,8 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
 
     struct Element
     {
-        int index;
+        QByteArray key;
+        int index, begin;
         int childCount = 0, counted = 0;
         bool hidden = false;
     };
@@ -720,7 +751,10 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
     QXmlStreamReader xml(bytes);
     QVector<Element> elements;
     QVector<SearchRun> runs;
-    int storedIndexes = 0;
+    QMap<QByteArray, QPair<int, int>> positions;
+    QString textInOrder;
+    int counted = 0;
+    int storedIndexes = 0, storedKeyBytes = 0;
     bool body = false;
     while (!xml.atEnd() && current()) {
         xml.readNext();
@@ -735,19 +769,24 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
                         || xml.name() == QStringLiteral("style")
                         || xml.attributes().hasAttribute(QStringLiteral("hidden"));
                 const int index = parent.childCount++;
-                elements.append({ index, 0, 0, hidden });
-                if (elements.size() > 129)
+                const auto key = parent.key + '/' + QByteArray::number(index);
+                storedKeyBytes += int(key.size());
+                elements.append({ key, index, counted, 0, 0, hidden });
+                if (elements.size() > 129 || positions.size() >= 32768
+                    || storedKeyBytes > 1024 * 1024)
                     return false;
             } else if (xml.name() == QStringLiteral("body")) {
                 body = true;
-                elements.append({ 0, 0, 0, false });
+                elements.append({ {}, 0, 0, 0, 0, false });
             }
         } else if (xml.isEndElement() && !elements.isEmpty()) {
-            elements.removeLast();
+            const auto element = elements.takeLast();
+            positions.insert(element.key, { element.begin, element.counted });
             if (elements.isEmpty())
                 break;
         } else if (xml.isCharacters() && !elements.isEmpty()) {
             const auto text = xml.text().toString();
+            textInOrder += text;
             if (!elements.last().hidden && !xml.isWhitespace()) {
                 storedIndexes += elements.size();
                 if (runs.size() >= 16384 || storedIndexes > 262144)
@@ -758,6 +797,7 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
                 runs.append(std::move(run));
             }
             const int length = countedBetween(text, 0, int(text.size()));
+            counted += length;
             for (auto &element : elements)
                 element.counted += length;
         }
@@ -766,7 +806,95 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
         return false;
     searchItem_ = item;
     searchRuns_ = std::move(runs);
+    indexedElements_ = std::move(positions);
+    indexedText_ = std::move(textInOrder);
     return true;
+}
+
+int WebResources::countedPosition(const Location &location) const
+{
+    const auto at = indexedElements_.constFind(elementKey(location.path));
+    return at == indexedElements_.cend() || location.offset < 0 || location.offset > at->second
+            ? -1
+            : at->first + location.offset;
+}
+
+TextRange WebResources::textRange(const QString &start, const QString &end, bool withContext)
+{
+    const auto first = sourcePositionFromToken(start, fingerprint_);
+    const auto last = sourcePositionFromToken(end, fingerprint_);
+    const int item = spine_.indexOf(first.href);
+    if (item < 0 || first.href != last.href
+        || !indexSearchItem(item, [this] { return !lease_->revoked(); }))
+        return {};
+    int before = countedPosition(first), after = countedPosition(last);
+    if (before < 0 || after < 0 || before == after)
+        return {};
+    if (before > after)
+        return textRange(end, start, withContext);
+    const int begin = sourceUnit(indexedText_, before, first.after);
+    const int finish = sourceUnit(indexedText_, after, last.after);
+    if (begin < 0 || finish <= begin || finish - begin > 8192 || lease_->revoked())
+        return {};
+    TextRange range{ start, end, indexedText_.mid(begin, finish - begin).simplified() };
+    if (withContext) {
+        const auto left = qMax(0, begin - 100);
+        range.context = indexedText_.mid(left, finish - left + 100).simplified();
+    }
+    return range;
+}
+
+TextRange WebResources::selectionRange(const QStringList &tokens)
+{
+    if (tokens.size() != 4)
+        return {};
+    const auto first = sourcePositionFromToken(tokens[0], fingerprint_);
+    const auto last = sourcePositionFromToken(tokens[2], fingerprint_);
+    const int item = spine_.indexOf(first.href);
+    if (item < 0 || first.href != last.href
+        || !indexSearchItem(item, [this] { return !lease_->revoked(); }))
+        return {};
+    const int a = countedPosition(first), b = countedPosition(last);
+    if (a < 0 || b < 0)
+        return {};
+    const bool reverse = b < a;
+    auto range = textRange(tokens[reverse ? 2 : 0], tokens[reverse ? 1 : 3], false);
+    range.chosenStart = range.start;
+    range.chosenEnd = range.end;
+    return range;
+}
+
+QVector<int> WebResources::intersectingRanges(const QString &start, const QString &end,
+                                              const QVector<QPair<QString, QString>> &ranges)
+{
+    const auto first = sourcePositionFromToken(start, fingerprint_);
+    const auto last = sourcePositionFromToken(end, fingerprint_);
+    const int item = spine_.indexOf(first.href);
+    if (item < 0 || first.href != last.href
+        || !indexSearchItem(item, [this] { return !lease_->revoked(); }))
+        return { -1 };
+    const int a = countedPosition(first), b = countedPosition(last);
+    if (a < 0 || b < 0 || a >= b)
+        return { -1 };
+    QVector<int> hits;
+    for (int i = 0; i < ranges.size(); ++i) {
+        const auto left = sourcePositionFromToken(ranges[i].first, fingerprint_);
+        const auto right = sourcePositionFromToken(ranges[i].second, fingerprint_);
+        if (!left.valid() || !right.valid())
+            return { -1 };
+        const int from = spine_.indexOf(left.href), to = spine_.indexOf(right.href);
+        if (from < 0 || to < from)
+            return { -1 };
+        if (item < from || item > to)
+            continue;
+        const int low = from == item ? countedPosition(left) : 0;
+        const int high = to == item ? countedPosition(right) : indexedElements_.value({}).second;
+        if (low < 0 || high < low)
+            return { -1 };
+        if (a < high && low < b)
+            hits.append(i);
+    }
+    return lease_->revoked() ? QVector<int>{ -1 } : hits;
 }
 
 SearchBatch WebResources::searchText(const QString &query, SearchCursor cursor, int lastItem,

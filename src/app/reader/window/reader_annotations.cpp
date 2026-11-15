@@ -217,8 +217,6 @@ void Reader::buildAnnotations()
 
 void Reader::enterAnnotations(bool notice)
 {
-    if (session->usesWebKit())
-        return;
     if (!features::enabled(preferences, features::Annotations))
         return;
     if (session->busy() || !highlights->writable() || appearanceEdit.panelOpen()
@@ -522,8 +520,6 @@ void Reader::annotationTap(QPoint point)
 
 bool Reader::beginAnnotationDrag(QPoint point, int boundary)
 {
-    if (session->usesWebKit())
-        return false;
     if (annotationSaving || session->busy() || lifecycleHidden || closing || services.suspended()
         || (boundary >= 0 && !annotationMode
             && (annotationDraft->range().start.isEmpty() || annotationDraft->range().end.isEmpty()))
@@ -542,7 +538,7 @@ bool Reader::beginAnnotationDrag(QPoint point, int boundary)
     annotationDraft->invalidate();
     annotationPopover->hide();
     annotationDrag.begin(AnnotationDrag::Boundary(boundary), point);
-    if (annotationDrag.handle)
+    if (annotationDrag.handle && !session->usesWebKit())
         loadAnnotationDragEdges();
     else
         requestAnnotationDrag();
@@ -818,6 +814,10 @@ void Reader::requestAnnotationDrag()
                                     || !guard->annotationDrag.active())
                                     return;
                                 if (!hits.isEmpty()) {
+                                    if (hits.first() < 0) {
+                                        reject();
+                                        return;
+                                    }
                                     guard->annotationDrag.end();
                                     guard->showSavedAnnotation(
                                             ids[hits.first()],
@@ -1131,17 +1131,14 @@ void Reader::syncAnnotationControls()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible()
             && !lightPopup->isVisible();
     const bool selectionEnabled = annotationMenuSelectionEnabled();
-    page->setAnnotationInputEnabled(
-            !session->usesWebKit()
-            && (readingOnly || dictionaryPanel->isVisible() || selectionEnabled));
+    page->setAnnotationInputEnabled(readingOnly || dictionaryPanel->isVisible()
+                                    || selectionEnabled);
     page->setAnnotationHandles(annotationDraft->geometry());
     syncPopoverExclusions();
 }
 
 void Reader::syncMarkupRequest()
 {
-    if (session->usesWebKit())
-        return;
     ReaderMarkupRequest request;
     for (const auto &item : highlights->highlights()) {
         if (item.id != annotationDraft->editingId()) {
@@ -1322,6 +1319,23 @@ void Reader::syncAnnotations()
     }
     annotationImageKey = imageKey;
     if (annotationPresentationReady) {
+        return;
+    }
+    if (session->usesWebKit()) {
+        if (annotationFrame == tintFrame || annotationPresentationCapture)
+            return;
+        savedHighlightRects.clear();
+        page->setSavedHighlights({});
+        const auto epoch = ++savedHighlightEpoch;
+        annotationPresentationCapture = true;
+        QPointer<Reader> guard(this);
+        session->captureMarkup([guard, epoch](bool ready) {
+            if (!guard)
+                return;
+            guard->annotationPresentationCapture = false;
+            if (ready && guard->savedHighlightEpoch == epoch)
+                guard->syncAnnotations();
+        });
         return;
     }
     if (annotationFrame == tintFrame) {

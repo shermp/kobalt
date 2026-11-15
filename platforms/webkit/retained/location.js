@@ -242,12 +242,12 @@ function rangeRects(first, last) {
         value[0] ? value[0].split(',').map(Number) : [], value[1], Boolean(value[2]));
     const start = resolve(first), end = resolve(last);
     if (!start || start[2] || !end || end[2])
-        return [];
+        return null;
     const range = document.createRange();
     range.setStart(start[0], start[1]);
     range.setEnd(end[0], end[1]);
     if (range.collapsed)
-        return [];
+        return null;
     const visible = [];
     for (const rect of range.getClientRects()) {
         const x = Math.max(0, Math.floor(rect.left));
@@ -259,5 +259,24 @@ function rangeRects(first, last) {
         if (visible.length === 64)
             break;
     }
-    return visible;
+    const endpoint = (position, leading) => {
+        const [node, offset] = position;
+        if (node.nodeType !== Node.TEXT_NODE)
+            return [];
+        const rect = positionRect(node, offset, leading);
+        if (!rect)
+            return [];
+        const style = getComputedStyle(node.parentElement);
+        const vertical = style.writingMode.startsWith('vertical');
+        const backwards = leading !== (style.direction === 'rtl');
+        const fixed = Math.round(vertical
+            ? (backwards ? rect.top : rect.bottom) : (backwards ? rect.left : rect.right));
+        const first = Math.round(vertical ? rect.left : rect.top);
+        const last = Math.round(vertical ? rect.right : rect.bottom);
+        if (fixed < 0 || fixed > (vertical ? innerHeight : innerWidth) || first < 0
+            || last > (vertical ? innerWidth : innerHeight) || first >= last)
+            return [];
+        return [fixed, first, last, (vertical ? 3 : 1) + Number(!backwards)];
+    };
+    return [visible, endpoint(start, true), endpoint(end, false)];
 }

@@ -341,7 +341,7 @@ void View::wordAt(unsigned x, unsigned y, std::function<void(Word)> done)
 }
 
 void View::rangeRects(const Location &start, const Location &end,
-                      std::function<void(std::vector<Rect>)> done)
+                      std::function<void(RangeGeometry)> done)
 {
     if (!confirmed || completion)
         return done({});
@@ -365,7 +365,7 @@ void View::rangeRects(const Location &start, const Location &end,
     static const std::string script = std::string(sourceLocationScript)
             + "\nreturn rangeRects([firstPath, firstOffset, firstAfter],"
               " [lastPath, lastOffset, lastAfter]);";
-    using Completion = std::function<void(std::vector<Rect>)>;
+    using Completion = std::function<void(RangeGeometry)>;
     webkit_web_view_call_async_javascript_function(
             view, script.c_str(), script.size(), parameters, world, nullptr, nullptr,
             +[](GObject *source, GAsyncResult *result, gpointer data) {
@@ -374,23 +374,39 @@ void View::rangeRects(const Location &start, const Location &end,
                         WEBKIT_WEB_VIEW(source), result, nullptr);
                 if (!value || !jsc_value_is_array(value))
                     return (*finish)({});
-                g_autoptr(JSCValue) length = jsc_value_object_get_property(value, "length");
+                g_autoptr(JSCValue) rows = jsc_value_object_get_property_at_index(value, 0);
+                if (!rows || !jsc_value_is_array(rows))
+                    return (*finish)({});
+                g_autoptr(JSCValue) length = jsc_value_object_get_property(rows, "length");
                 const auto count = length ? jsc_value_to_int32(length) : -1;
                 if (count < 0 || count > 64)
                     return (*finish)({});
-                std::vector<Rect> rects;
+                RangeGeometry geometry;
+                const auto edge = [value](unsigned index) {
+                    g_autoptr(JSCValue) row = jsc_value_object_get_property_at_index(value, index);
+                    int fixed, first, last, direction;
+                    if (!row || !jsc_value_is_array(row) || !integer(row, 0, 0, 2048, fixed)
+                        || !integer(row, 1, 0, 2048, first)
+                        || !integer(row, 2, first + 1, 2048, last)
+                        || !integer(row, 3, 1, 4, direction))
+                        return RangeGeometry::Edge{};
+                    return RangeGeometry::Edge{ unsigned(fixed), unsigned(first), unsigned(last),
+                                                unsigned(direction) };
+                };
+                geometry.start = edge(1);
+                geometry.end = edge(2);
                 for (int i = 0; i < count; ++i) {
-                    g_autoptr(JSCValue) rect = jsc_value_object_get_property_at_index(value, i);
+                    g_autoptr(JSCValue) rect = jsc_value_object_get_property_at_index(rows, i);
                     int x, y, width, height;
                     if (!rect || !jsc_value_is_array(rect) || !integer(rect, 0, 0, 2048, x)
                         || !integer(rect, 1, 0, 2048, y) || !integer(rect, 2, 1, 2048, width)
                         || !integer(rect, 3, 1, 2048, height) || x + width > 2048
                         || y + height > 2048)
                         return (*finish)({});
-                    rects.push_back(
+                    geometry.rects.push_back(
                             { unsigned(x), unsigned(y), unsigned(width), unsigned(height) });
                 }
-                (*finish)(std::move(rects));
+                (*finish)(std::move(geometry));
             },
             new Completion(std::move(done)));
 }

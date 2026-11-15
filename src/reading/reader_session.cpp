@@ -4,6 +4,7 @@
 #include "reader_session.h"
 #include "opening_job.h"
 #include "publication/source_position.h"
+#include "publication/web_resources.h"
 #include "sync/kosync.h"
 #include "engine/engine_worker.h"
 #include "render/highlight_paint.h"
@@ -1726,19 +1727,32 @@ void ReaderSession::bookmarkLocations(QStringList positions,
 {
     if (usesWebKit()) {
         const auto anchor = sourcePositionToken(frame.sourceLocation, fingerprint);
+        const auto href = frame.sourceLocation.href;
+        const auto chapter = chapterTitle();
         const auto current = page();
         const auto render = renderId();
-        QTimer::singleShot(0, this, [this, positions, finished, anchor, current, render] {
-            BookmarkLocations locations;
-            if (render == renderId() && lease_ && !lease_->revoked()) {
-                for (const auto &position : positions) {
-                    locations.pages.append(!anchor.isEmpty() && position == anchor ? current : -1);
-                    locations.bookPages.append(-1);
-                    locations.chapters.append(QString());
-                }
-            }
-            finished(std::move(locations));
-        });
+        QTimer::singleShot(
+                0, this,
+                [this, positions, finished, anchor, current, render, href, chapter, rangeEndpoints,
+                 cancelled] {
+                    BookmarkLocations locations;
+                    if (render == renderId() && lease_ && !lease_->revoked()
+                        && (!cancelled || !cancelled->load())) {
+                        for (const auto &position : positions) {
+                            const auto location = sourcePositionFromToken(position, fingerprint);
+                            const bool sameItem = location.valid() && location.href == href;
+                            locations.pages.append(
+                                    (rangeEndpoints && sameItem)
+                                                    || (!anchor.isEmpty() && position == anchor)
+                                            ? current
+                                            : -1);
+                            locations.order.append(-1);
+                            locations.bookPages.append(-1);
+                            locations.chapters.append(sameItem ? chapter : QString());
+                        }
+                    }
+                    finished(std::move(locations));
+                });
         return;
     }
     const auto digest = fingerprint;
@@ -2117,6 +2131,15 @@ void ReaderSession::nativePosition(std::function<void(QString, QString)> finishe
             Qt::QueuedConnection);
 }
 
+std::shared_ptr<WebResources> ReaderSession::webResources() const
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (webKitClient_)
+        return webKitClient_->resources();
+#endif
+    return {};
+}
+
 void ReaderSession::intersectingRanges(const QString &start, const QString &end,
                                        QVector<QPair<QString, QString>> ranges,
                                        std::function<void(QVector<int>)> finished)
@@ -2127,22 +2150,24 @@ void ReaderSession::intersectingRanges(const QString &start, const QString &end,
     const auto job = latest->load();
     const auto lease = lease_;
     const bool ready = layoutReady_;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, latest, lease, ready, start, end, ranges = std::move(ranges),
+            [engine, web, guard, job, latest, lease, ready, start, end, ranges = std::move(ranges),
              finished] {
                 EngineJob activity;
                 const auto result = ready && latest->load() == job && lease && !lease->revoked()
-                        ? engine->intersectingRanges(start, end, ranges)
+                        ? (web ? web->intersectingRanges(start, end, ranges)
+                               : engine->intersectingRanges(start, end, ranges))
                         : QVector<int>();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, job, lease, result, finished] {
+                        [guard, job, lease, result, finished, web] {
                             if (guard) {
                                 finished(guard->layoutRevision() == job && guard->lease_ == lease
                                                          && lease && !lease->revoked()
                                                  ? result
-                                                 : QVector<int>());
+                                                 : (web ? QVector<int>{ -1 } : QVector<int>()));
                             }
                         },
                         Qt::QueuedConnection);
@@ -2157,6 +2182,10 @@ bool ReaderSession::currentSourceFrame(quint64 job) const
 
 void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)> finished)
 {
+    if (usesWebKit()) {
+        finished({});
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2181,6 +2210,14 @@ void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)>
 void ReaderSession::annotationTokenAt(QPoint point, std::function<void(AnnotationToken)> finished,
                                       const QString &boundary, bool start)
 {
+    if (usesWebKit()) {
+        wordAt(point, [finished](WordSelection word) {
+            AnnotationToken token;
+            static_cast<WordSelection &>(token) = std::move(word);
+            finished(std::move(token));
+        });
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2214,14 +2251,20 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     const auto latest = newest;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, startTokenStart, startTokenEnd, endTokenStart, endTokenEnd,
+            [engine, web, guard, job, startTokenStart, startTokenEnd, endTokenStart, endTokenEnd,
              finished, endTokenPolicy, startTokenPolicy, latest] {
                 EngineJob activity;
-                const auto result = engine->annotationRange(
-                        startTokenStart, startTokenEnd, endTokenStart, endTokenEnd, endTokenPolicy,
-                        startTokenPolicy, [latest, job] { return latest->load() == job; });
+                const auto result = web
+                        ? (latest->load() == job
+                                   ? web->selectionRange({ startTokenStart, startTokenEnd,
+                                                           endTokenStart, endTokenEnd })
+                                   : TextRange{})
+                        : engine->annotationRange(startTokenStart, startTokenEnd, endTokenStart,
+                                                  endTokenEnd, endTokenPolicy, startTokenPolicy,
+                                                  [latest, job] { return latest->load() == job; });
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, result, finished] {
@@ -2237,6 +2280,10 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
 void ReaderSession::annotationRange(const QString &start, const QString &end,
                                     std::function<void(TextRange)> finished)
 {
+    if (usesWebKit()) {
+        textRange(start, end, std::move(finished), false);
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2266,12 +2313,14 @@ void ReaderSession::textRange(const QString &start, const QString &end,
     const auto job = latest->load();
     const auto lease = lease_;
     const bool ready = layoutReady_;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, latest, lease, ready, start, end, finished, withContext] {
+            [engine, web, guard, job, latest, lease, ready, start, end, finished, withContext] {
                 EngineJob activity;
                 const auto result = ready && latest->load() == job && lease && !lease->revoked()
-                        ? engine->textRange(start, end, withContext)
+                        ? (web ? web->textRange(start, end, withContext)
+                               : engine->textRange(start, end, withContext))
                         : TextRange();
                 kobalt::qt::invoke(
                         qApp,
@@ -2667,6 +2716,51 @@ void ReaderSession::captureMarkup(std::function<void(bool)> finished)
         finished(true);
         return;
     }
+    if (usesWebKit()) {
+        QPointer<ReaderSession> guard(this);
+        const auto job = revision;
+        QVector<QPair<QString, QString>> ranges;
+        for (const auto &item : request.saved)
+            ranges.append({ item.start, item.end });
+        rangeRectGroups(std::move(ranges),
+                        [guard, request, generation, imageKey, job,
+                         finished](QVector<QVector<QRect>> groups) {
+                            if (!guard)
+                                return;
+                            if (!guard->currentSourceFrame(job) || guard->busy()
+                                || guard->markupGeneration_ != generation
+                                || groups.size() != request.saved.size()) {
+                                finished(false);
+                                return;
+                            }
+                            ReaderMarkupFrame markup;
+                            markup.request = request;
+                            markup.generation = generation;
+                            markup.imageKey = imageKey;
+                            for (int i = 0; i < groups.size(); ++i)
+                                markup.saved.append({ std::move(groups[i]), request.saved[i].color,
+                                                      request.saved[i].style });
+                            if (request.draftStart.isEmpty()) {
+                                guard->frame.markup = std::move(markup);
+                                finished(true);
+                                return;
+                            }
+                            guard->annotationGeometry(
+                                    request.draftStart, request.draftEnd,
+                                    [guard, generation, job, markup = std::move(markup),
+                                     finished](AnnotationGeometry draft) mutable {
+                                        const bool current = guard && guard->currentSourceFrame(job)
+                                                && !guard->busy()
+                                                && guard->markupGeneration_ == generation;
+                                        if (current) {
+                                            markup.draft = std::move(draft);
+                                            guard->frame.markup = std::move(markup);
+                                        }
+                                        finished(current);
+                                    });
+                        });
+        return;
+    }
     const auto engine = engine_;
     const auto job = revision;
     const auto lease = lease_;
@@ -2703,6 +2797,23 @@ void ReaderSession::captureMarkup(std::function<void(bool)> finished)
 void ReaderSession::annotationGeometry(const QString &start, const QString &end,
                                        std::function<void(AnnotationGeometry)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->rangeGeometry(
+                start, end, [guard, job = revision, finished](AnnotationGeometry geometry) {
+                    if (guard)
+                        finished(guard->currentSourceFrame(job) && !guard->busy()
+                                         ? std::move(geometry)
+                                         : AnnotationGeometry{});
+                });
+        return;
+    }
+#endif
     if (running) {
         return;
     }
@@ -2804,6 +2915,43 @@ void ReaderSession::rangeRectGroups(QVector<QPair<QString, QString>> ranges,
     }
     if (ranges.size() > 2000) {
         finished({});
+        return;
+    }
+    if (usesWebKit()) {
+        struct Batch
+        {
+            QVector<QPair<QString, QString>> ranges;
+            QVector<QVector<QRect>> groups;
+        };
+
+        auto batch = std::make_shared<Batch>();
+        batch->ranges = std::move(ranges);
+        batch->groups.reserve(batch->ranges.size());
+        auto step = std::make_shared<std::function<void()>>();
+        QPointer<ReaderSession> guard(this);
+        *step = [guard, job = revision, batch, finished,
+                 again = std::weak_ptr<std::function<void()>>(step)] {
+            if (!guard)
+                return;
+            if (!guard->currentSourceFrame(job) || guard->busy()) {
+                finished({});
+                return;
+            }
+            const auto index = batch->groups.size();
+            if (index == batch->ranges.size()) {
+                finished(std::move(batch->groups));
+                return;
+            }
+            const auto &range = batch->ranges[index];
+            guard->rangeRects(range.first, range.second,
+                              [guard, batch, next = again.lock()](QVector<QRect> rects) {
+                                  if (!guard)
+                                      return;
+                                  batch->groups.append(std::move(rects));
+                                  QTimer::singleShot(0, guard, [next] { (*next)(); });
+                              });
+        };
+        (*step)();
         return;
     }
     auto engine = engine_;

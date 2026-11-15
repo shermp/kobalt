@@ -871,10 +871,11 @@ void Reader::buildToolbar()
     if (session->usesWebKit()) {
         for (auto *action :
              { toolbarButtons.typography, toolbarButtons.layout, toolbarButtons.graph,
-               toolbarComposition.sync, toolbarComposition.annotate, toolbarComposition.settings })
+               toolbarComposition.sync, toolbarComposition.settings })
             action->setEnabled(false);
         toolbarComposition.readingActions.append(toolbarComposition.bookmarks);
         toolbarComposition.readingActions.append(toolbarComposition.search);
+        toolbarComposition.readingActions.append(toolbarComposition.annotate);
         for (const int delta : { -2, 2 }) {
             auto *button = new ui::Button(delta < 0 ? QStringLiteral("A−") : QStringLiteral("A+"),
                                           topControls);
@@ -2131,7 +2132,7 @@ void Reader::connectPageInput()
     page->annotationDragMoved = [this](QPoint point) { moveAnnotationDrag(point); };
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
-        if (session->usesWebKit() || !features::enabled(preferences, features::Annotations) || annotationMode
+        if (!features::enabled(preferences, features::Annotations) || annotationMode
             || quickAnnotations() || !isEnabled() || !isVisible() || lifecycleHidden || closing
             || exitPending || exportRunning || services.suspended() || book->deviceTransition()
             || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()

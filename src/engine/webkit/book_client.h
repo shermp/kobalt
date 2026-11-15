@@ -62,11 +62,15 @@ public:
 
     bool contains(const Location &location) const { return source_.spine.contains(location.href); }
 
+    std::shared_ptr<WebResources> resources() const { return source_.resources; }
+
     Location destination(const QString &token, const QByteArray &fingerprint,
                          QString *fragment = nullptr) const;
     void linkDetails(const PageLink &, std::function<void(LinkDetails)>);
     void wordAt(QPoint, std::function<void(WordSelection)>);
     void rangeRects(const QString &start, const QString &end, std::function<void(QVector<QRect>)>);
+    void rangeGeometry(const QString &start, const QString &end,
+                       std::function<void(AnnotationGeometry)>);
     void searchText(const QString &, SearchCursor, SearchScope, bool first,
                     std::shared_ptr<std::atomic_bool>, std::function<void(SearchBatch)>);
     // Close detaches completions immediately. The object deletes itself after
@@ -87,8 +91,15 @@ private:
     void settled();
     void finish(Page);
     void stopProcess();
-    void startQuery(spike::Type, std::string, std::function<void(WordSelection)>);
-    void finishQuery(WordSelection = {});
+
+    struct QueryReply
+    {
+        WordSelection word;
+        AnnotationGeometry range;
+    };
+
+    void startQuery(spike::Type, std::string, std::function<void(QueryReply)>);
+    void finishQuery(QueryReply = {});
 
     std::unique_ptr<Transport> transport_;
     QString executable_;
@@ -97,7 +108,8 @@ private:
     std::unique_ptr<FramePool> pool_;
     Completion complete_;
     Post queuedRender_, queuedPreview_;
-    std::function<void(WordSelection)> query_;
+    QVector<Post> queuedQueries_;
+    std::function<void(QueryReply)> query_;
     spike::BookPage candidate_;
     Page displayed_;
     WebResources::Resource reading_;

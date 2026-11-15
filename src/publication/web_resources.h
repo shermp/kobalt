@@ -2,6 +2,7 @@
 
 #include "resource_cache.h"
 #include "engine/types.h"
+#include "location.h"
 #include "reading/chapter.h"
 #include <functional>
 
@@ -37,6 +38,10 @@ public:
     QString noteText(const QString &spineMember, const QString &fragment);
     SearchBatch searchText(const QString &query, SearchCursor, int lastItem,
                            const std::function<bool()> &current);
+    TextRange textRange(const QString &start, const QString &end, bool withContext);
+    TextRange selectionRange(const QStringList &tokens);
+    QVector<int> intersectingRanges(const QString &start, const QString &end,
+                                    const QVector<QPair<QString, QString>> &ranges);
 
     QByteArray url(const QString &member) const;
     Resource read(const QByteArray &encodedUrl);
@@ -59,6 +64,7 @@ private:
     };
 
     bool indexSearchItem(int item, const std::function<bool()> &current);
+    int countedPosition(const Location &) const;
 
     QByteArray origin_, fingerprint_;
     QStringList spine_;
@@ -70,5 +76,7 @@ private:
     int requests_ = 0;
     int searchItem_ = -1;
     QVector<SearchRun> searchRuns_;
+    QMap<QByteArray, QPair<int, int>> indexedElements_;
+    QString indexedText_;
 };
 } // namespace kobalt

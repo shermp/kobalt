@@ -2,6 +2,7 @@
 #include "book_fixtures.h"
 #include "reading/reading_book.h"
 #include "reading/bookmark_session.h"
+#include "reading/highlight_session.h"
 #include "publication/source_position.h"
 #include "reading/reader_session.h"
 #include "reading/rendering_mode.h"
@@ -2547,6 +2548,95 @@ static int webKitReader(int argc, char **argv)
                         && end.href == begin.href
                         && end.offset - begin.offset == selected.text.size(),
                 "WPE word query did not return visible geometry and counted source boundaries");
+        WordSelection lastWord;
+        links->wordAt(QPoint(reference.right() - 3, reference.center().y()),
+                      [&](WordSelection word) {
+                          lastWord = std::move(word);
+                          QTimer::singleShot(0, &queried, &QEventLoop::quit);
+                      });
+        queried.exec();
+        require(lastWord.text == "note", "WPE did not hit the second word");
+        TextRange selection;
+        links->annotationRange(lastWord.start, lastWord.end, selected.start, selected.end,
+                               [&](TextRange range) {
+                                   selection = std::move(range);
+                                   queried.quit();
+                               });
+        queried.exec();
+        require(selection.text == "short note" && selection.start == selected.start
+                        && selection.end == lastWord.end,
+                "WPE lost a token when reversing a multiword selection");
+        AnnotationGeometry selectionGeometry;
+        links->annotationGeometry(selection.start, selection.end, [&](AnnotationGeometry geometry) {
+            selectionGeometry = std::move(geometry);
+            queried.quit();
+        });
+        queried.exec();
+        require(!selectionGeometry.rectangles.isEmpty() && selectionGeometry.start.visible
+                        && selectionGeometry.end.visible
+                        && selectionGeometry.start.outward == QPoint(-1, 0)
+                        && selectionGeometry.end.outward == QPoint(1, 0),
+                "WPE did not return the visible selection endpoints");
+        QTemporaryDir annotationRoot;
+        const auto annotationIdentity = QStringLiteral("file:///webkit-annotations.epub");
+        const auto highlightLayout = [] { return QStringLiteral("webkit-range"); };
+        require(annotationRoot.isValid(), "Could not create isolated annotation storage");
+        {
+            HighlightSession annotations(*links, highlightLayout, annotationRoot.path(),
+                                         annotationIdentity, links->sourceHash(), links->title());
+            bool saved = false;
+            annotations.save(selection.start, selection.end, {}, [&](bool accepted) {
+                saved = accepted;
+                queried.quit();
+            });
+            queried.exec();
+            require(saved && annotations.highlights().size() == 1,
+                    "WPE did not persist the multiword selection");
+            const auto waitForWriter = [&] {
+                if (!annotations.saving())
+                    return;
+                QTimer poll;
+                QObject::connect(&poll, &QTimer::timeout, &queried, [&] {
+                    if (!annotations.saving())
+                        queried.quit();
+                });
+                poll.start(5);
+                queried.exec();
+            };
+            waitForWriter();
+            require(annotations.recolor(annotations.highlights().first().id, "pink"),
+                    "WPE could not recolor the saved highlight");
+            waitForWriter();
+            bool overlap = true;
+            annotations.save(lastWord.start, lastWord.end, {}, [&](bool accepted) {
+                overlap = accepted;
+                queried.quit();
+            });
+            queried.exec();
+            require(!overlap && annotations.error() == "overlap",
+                    "WPE allowed overlapping persistent highlights");
+        }
+        {
+            HighlightSession reopened(*links, highlightLayout, annotationRoot.path(),
+                                      annotationIdentity, links->sourceHash(), links->title());
+            require(reopened.highlights().size() == 1
+                            && reopened.highlights()[0].start == selection.start
+                            && reopened.highlights()[0].end == selection.end
+                            && reopened.highlights()[0].color == "pink",
+                    "WPE did not restore the saved range from storage");
+            ReaderMarkupRequest markup;
+            markup.saved.append({ selection.start, selection.end, QStringLiteral("gray") });
+            links->setMarkup(markup);
+            bool drawn = false;
+            links->captureMarkup([&](bool ready) {
+                drawn = ready;
+                queried.quit();
+            });
+            queried.exec();
+            require(drawn && links->markup().imageKey == links->image().cacheKey()
+                            && !links->markup().saved.first().rectangles.isEmpty(),
+                    "WPE did not redraw the reopened highlight on its current frame");
+        }
         const auto passage = findLink(QStringLiteral("destination"));
         require(passage.kind == LinkKind::Passage && !passage.tappable("footnotes")
                         && detailsFor(passage.source).kind == LinkKind::Passage,
