@@ -2265,16 +2265,23 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished)
 
 void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     if (usesWebKit()) {
-        const auto result = !busy()
-                        && std::any_of(
-                                frame.links.cbegin(), frame.links.cend(),
-                                [&source](const PageLink &link) { return source == link.source; })
-                ? LinkDetails{ LinkKind::Passage, {}, source, {}, {}, {} }
-                : LinkDetails{};
-        QTimer::singleShot(0, this, [finished, result] { finished(result); });
+        const auto link =
+                std::find_if(frame.links.cbegin(), frame.links.cend(),
+                             [&source](const PageLink &entry) { return source == entry.source; });
+        if (!webKitClient_ || busy() || link == frame.links.cend()) {
+            QTimer::singleShot(0, this, [finished] { finished({}); });
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->linkDetails(*link, [guard, job = revision, finished](LinkDetails result) {
+            if (guard && guard->currentSourceFrame(job) && !guard->busy())
+                finished(std::move(result));
+        });
         return;
     }
+#endif
     if (running)
         return;
     auto engine = engine_;

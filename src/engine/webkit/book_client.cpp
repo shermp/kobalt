@@ -13,6 +13,7 @@
 #  include <QLocalSocket>
 #  include <QPointer>
 #  include <QTimer>
+#  include <algorithm>
 #  include <cerrno>
 #  include <signal.h>
 #  include <sys/socket.h>
@@ -184,6 +185,33 @@ Location BookClient::destination(const QString &token, const QByteArray &fingerp
     return location;
 }
 
+void BookClient::linkDetails(const PageLink &link, std::function<void(LinkDetails)> finished)
+{
+    LinkDetails details{ LinkKind::Passage, {}, link.source, {}, {}, {} };
+    QString fragment;
+    const auto location = destination(link.source, {}, &fragment);
+    if (link.kind != LinkKind::Footnote || !location.valid() || fragment.isEmpty()) {
+        QTimer::singleShot(0, this, [finished, details] { finished(details); });
+        return;
+    }
+    qt::invoke(
+            engineWorker(),
+            [scope = source_.resources, member = location.href, fragment, finished,
+             details]() mutable {
+                const auto text = scope->noteText(member, fragment);
+                for (const auto &line : text.split(QLatin1Char('\n'))) {
+                    const auto paragraph = line.simplified();
+                    if (!paragraph.isEmpty())
+                        details.html += QStringLiteral("<p>") + paragraph.toHtmlEscaped()
+                                + QStringLiteral("</p>");
+                }
+                if (!details.html.isEmpty())
+                    details.kind = LinkKind::Footnote;
+                qt::invoke(qApp, [finished, details] { finished(details); }, Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done,
                         const Location &target, const QString &fragment)
 {
@@ -351,11 +379,23 @@ bool BookClient::handle(const spike::Message &message)
     page.restoration = Restoration(packet.restoration);
     for (const auto &link : packet.links) {
         const auto token = QString::fromUtf8(link.uri.data(), int(link.uri.size()));
-        if (destination(token, {}).valid() && link.x + link.width <= candidate_.frame.width
-            && link.y + link.height <= candidate_.frame.height)
-            page.links.append({ token,
-                                { QRect(link.x, link.y, link.width, link.height) },
-                                LinkKind::Passage });
+        QString fragment;
+        if (!destination(token, {}, &fragment).valid()
+            || link.x + link.width > candidate_.frame.width
+            || link.y + link.height > candidate_.frame.height)
+            continue;
+        const QRect rect(link.x, link.y, link.width, link.height);
+        const auto kind = link.note && !fragment.isEmpty() ? LinkKind::Footnote : LinkKind::Passage;
+        const auto existing =
+                std::find_if(page.links.begin(), page.links.end(),
+                             [&token](const PageLink &entry) { return entry.source == token; });
+        if (existing == page.links.end()) {
+            page.links.append({ token, { rect }, kind });
+        } else {
+            existing->rectangles.append(rect);
+            if (kind == LinkKind::Footnote)
+                existing->kind = kind;
+        }
     }
     finish(std::move(page));
     return true;

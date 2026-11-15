@@ -624,6 +624,64 @@ QVector<ChapterLink> WebResources::chapters()
     return xml.hasError() || lease_->revoked() ? QVector<ChapterLink>{} : result;
 }
 
+QString WebResources::noteText(const QString &spineMember, const QString &fragment)
+{
+    constexpr int textLimit = 8192;
+    const auto uri = url(spineMember);
+    const auto member = members_.constFind(uri);
+    if (fragment.isEmpty() || !spine_.contains(spineMember) || member == members_.cend()
+        || member->size > packageLimit)
+        return {};
+    const auto data = read(uri);
+    if (data.mediaType != "application/xhtml+xml")
+        return {};
+    QXmlStreamReader xml(data.bytes);
+    QString text;
+    int depth = 0, body = 0, note = 0, skipped = 0;
+    while (!xml.atEnd() && !lease_->revoked()) {
+        xml.readNext();
+        if (!cleanXml(xml)
+            && !(xml.tokenType() == QXmlStreamReader::DTD
+                 && xml.text() == QStringLiteral("<!DOCTYPE html>")))
+            return {};
+        if (xml.isStartElement()) {
+            if (++depth > 128)
+                return {};
+            if (skipped)
+                continue;
+            const auto tag = xml.name();
+            if (tag == QStringLiteral("script") || tag == QStringLiteral("style")) {
+                skipped = depth;
+                continue;
+            }
+            if (!body && tag == QStringLiteral("body"))
+                body = depth;
+            if (body && !note && depth > body
+                && xml.attributes().value(QStringLiteral("id")) == fragment)
+                note = depth;
+            if (note
+                && (tag == QStringLiteral("p") || tag == QStringLiteral("li")
+                    || tag == QStringLiteral("br")))
+                text += QLatin1Char('\n');
+        } else if (xml.isEndElement()) {
+            if (depth == note)
+                return lease_->revoked() ? QString() : text.trimmed();
+            if (depth == body)
+                return {};
+            if (depth == skipped)
+                skipped = 0;
+            --depth;
+        } else if (xml.isCharacters() && note && !skipped) {
+            if (xml.text().size() > textLimit - text.size())
+                return {};
+            text += xml.text();
+        }
+        if (text.size() > textLimit)
+            return {};
+    }
+    return {};
+}
+
 QByteArray WebResources::url(const QString &member) const
 {
     const auto encoded = memberUrl(origin_, member);

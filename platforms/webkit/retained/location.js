@@ -157,6 +157,11 @@ function visibleSource(width, height) {
 function visibleLinks(width, height) {
     const links = [];
     const anchors = document.getElementsByTagName('a');
+    const source = new URL(document.URL);
+    source.hash = '';
+    const epub = 'http://www.idpf.org/2007/ops';
+    const tokens = (element, name) => (element.getAttribute(name) || '').split(/\s+/);
+    const epubTypes = element => (element.getAttributeNS(epub, 'type') || '').split(/\s+/);
     for (let i = 0; i < Math.min(anchors.length, 65536) && links.length < 24; ++i) {
         const element = anchors[i];
         const value = element.getAttribute('href');
@@ -168,17 +173,30 @@ function visibleLinks(width, height) {
         } catch {
             continue;
         }
-        const source = new URL(document.URL);
         if (uri.protocol !== 'kobalt-epub:' || uri.host !== source.host || uri.search
             || uri.username || uri.password || uri.href.length > 1800)
             continue;
+        // A cross-chapter reference must identify itself. A same-chapter
+        // reference can also identify the note through its destination.
+        let note = uri.hash && (epubTypes(element).includes('noteref')
+            || tokens(element, 'role').includes('doc-noteref')
+            || tokens(element, 'rel').includes('footnote'));
+        if (!note && uri.hash && uri.href.slice(0, -uri.hash.length) === source.href) {
+            try {
+                const target = document.getElementById(decodeURIComponent(uri.hash.slice(1)));
+                note = target && (epubTypes(target).some(type => ['footnote', 'endnote'].includes(type))
+                    || tokens(target, 'role').some(role => ['doc-footnote', 'doc-endnote'].includes(role)));
+            } catch {
+                // An invalid escape cannot identify an element.
+            }
+        }
         for (const rect of element.getClientRects()) {
             const x = Math.max(0, Math.floor(rect.left));
             const y = Math.max(0, Math.floor(rect.top));
             const right = Math.min(width, Math.ceil(rect.right));
             const bottom = Math.min(height, Math.ceil(rect.bottom));
             if (right > x && bottom > y)
-                links.push([uri.href, x, y, right - x, bottom - y]);
+                links.push([uri.href, x, y, right - x, bottom - y, Boolean(note)]);
             if (links.length === 24)
                 break;
         }

@@ -28,6 +28,7 @@ struct PageLink
 {
     std::string uri;
     unsigned x = 0, y = 0, width = 0, height = 0;
+    bool note = false;
 };
 
 struct PageInfo

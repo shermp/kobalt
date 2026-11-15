@@ -2423,6 +2423,79 @@ static int webKitReader(int argc, char **argv)
                         && songs->state().value("position").toString() == returnAnchor,
                 "WPE did not return to the recorded source location");
         songs.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+
+        auto files = test::linkBook();
+        files["OEBPS/first.xhtml"].replace(
+                "</body>",
+                "<p><a href='#inline-note'>Inline reference</a>"
+                "<a epub:type='noteref' href='second.xhtml#absent-note'>Missing note</a></p>"
+                "<aside id='inline-note' role='doc-footnote'>Fish &lt; Chips</aside></body>");
+        require(test::writeBook(fixture.path(), "links.epub", files),
+                "Could not stage the WPE footnote fixture");
+        auto links = openAgain(fixture.filePath("links.epub"), {}, QSize(540, 760));
+        require(links->usesWebKit() && links->goToChapter(0),
+                "WPE could not open the links chapter");
+        finished.exec();
+        const auto shown = links->pageLinks();
+        const auto findLink = [&shown](const QString &fragment) {
+            for (const auto &link : shown)
+                if (QUrl(link.source).fragment() == fragment)
+                    return link;
+            return PageLink{};
+        };
+        const auto detailsFor = [&](const QString &source) {
+            LinkDetails result;
+            links->linkDetails(source, [&](LinkDetails details) {
+                result = std::move(details);
+                finished.quit();
+            });
+            finished.exec();
+            return result;
+        };
+        const auto note = findLink(QStringLiteral("short"));
+        require(note.kind == LinkKind::Footnote && note.tappable("footnotes")
+                        && !note.rectangles.isEmpty(),
+                "WPE did not classify an explicit cross-chapter note");
+        const auto passage = findLink(QStringLiteral("destination"));
+        require(passage.kind == LinkKind::Passage && !passage.tappable("footnotes")
+                        && detailsFor(passage.source).kind == LinkKind::Passage,
+                "WPE treated a regular passage as a note");
+        const auto noteOrigin = links->state().value("position").toString();
+        const auto shortNote = detailsFor(note.source);
+        require(shortNote.kind == LinkKind::Footnote
+                        && shortNote.html.contains(QString::fromUtf8("café &amp; tea"))
+                        && shortNote.html.contains("</p><p>Second paragraph")
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE did not preview the cross-chapter note without moving");
+        const auto inlineNote = findLink(QStringLiteral("inline-note"));
+        require(inlineNote.kind == LinkKind::Footnote
+                        && detailsFor(inlineNote.source).html == "<p>Fish &lt; Chips</p>",
+                "WPE did not classify and escape a same-chapter note");
+        const auto oversized = detailsFor(findLink(QStringLiteral("oversize")).source);
+        const auto absent = detailsFor(findLink(QStringLiteral("absent-note")).source);
+        require(oversized.kind == LinkKind::Passage && oversized.html.isEmpty()
+                        && absent.kind == LinkKind::Passage && absent.html.isEmpty(),
+                "WPE produced a popup for an oversized or missing note");
+        require(std::none_of(shown.cbegin(), shown.cend(),
+                             [](const PageLink &link) {
+                                 return !link.source.startsWith("kobalt-epub:");
+                             }),
+                "WPE exposed an external or executable book link");
+        bool stalePreview = false;
+        links->linkDetails(note.source, [&](const LinkDetails &) { stalePreview = true; });
+        require(links->goTo(shortNote.target), "WPE could not show the note in the book");
+        finished.exec();
+        require(!stalePreview && links->error().isEmpty()
+                        && links->sourceLocation().href.endsWith("/foot notes.xhtml")
+                        && links->goTo(noteOrigin),
+                "WPE showed a stale note preview or missed its destination");
+        finished.exec();
+        require(links->error().isEmpty()
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE could not return to the note reference");
+        links.reset();
         ReaderSession::drain([&app] { app.quit(); });
     });
     return app.exec();

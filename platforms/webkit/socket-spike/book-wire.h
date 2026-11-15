@@ -111,10 +111,13 @@ struct BookLink
 {
     std::string uri;
     unsigned x = 0, y = 0, width = 0, height = 0;
+    bool note = false;
+
+    static constexpr unsigned noteFlag = 0x8000;
 
     void append(std::string &output) const
     {
-        put(output, uri.size(), 2);
+        put(output, uri.size() | (note ? noteFlag : 0), 2);
         put(output, x, 2);
         put(output, y, 2);
         put(output, width, 2);
@@ -127,7 +130,8 @@ struct BookLink
         if (offset > data.size() || data.size() - offset < 10)
             return false;
         const auto *p = data.data() + offset;
-        const auto size = read(p, 2);
+        const auto flags = read(p, 2);
+        const auto size = flags & ~uint64_t(noteFlag);
         x = unsigned(read(p + 2, 2));
         y = unsigned(read(p + 4, 2));
         width = unsigned(read(p + 6, 2));
@@ -137,6 +141,7 @@ struct BookLink
             return false;
         uri = data.substr(offset + 10, size);
         offset += 10 + size;
+        note = (flags & noteFlag) != 0;
         return uri.find('\0') == std::string::npos;
     }
 };

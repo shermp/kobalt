@@ -57,6 +57,7 @@ public:
 
     Location destination(const QString &token, const QByteArray &fingerprint,
                          QString *fragment = nullptr) const;
+    void linkDetails(const PageLink &, std::function<void(LinkDetails)>);
     // Close detaches completions immediately. The object deletes itself after
     // the process and the outstanding worker resource request have drained.
     void close();

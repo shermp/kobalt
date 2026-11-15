@@ -32,6 +32,7 @@ public:
     QString author() const { return author_; }
 
     QVector<ChapterLink> chapters();
+    QString noteText(const QString &spineMember, const QString &fragment);
 
     QByteArray url(const QString &member) const;
     Resource read(const QByteArray &encodedUrl);

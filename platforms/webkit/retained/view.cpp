@@ -142,12 +142,14 @@ bool readPageInfo(JSCValue *value, const std::string &href, PageInfo &info)
                 g_autofree char *uri = target && jsc_value_is_string(target)
                         ? jsc_value_to_string(target)
                         : nullptr;
+                g_autoptr(JSCValue) note = jsc_value_object_get_property_at_index(row, 5);
                 int x, y, width, height;
-                if (uri && std::string_view(uri).size() <= 1800 && integer(row, 1, 0, 2048, x)
+                if (uri && note && jsc_value_is_boolean(note)
+                    && std::string_view(uri).size() <= 1800 && integer(row, 1, 0, 2048, x)
                     && integer(row, 2, 0, 2048, y) && integer(row, 3, 1, 2048, width)
                     && integer(row, 4, 1, 2048, height))
-                    info.links.push_back(
-                            { uri, unsigned(x), unsigned(y), unsigned(width), unsigned(height) });
+                    info.links.push_back({ uri, unsigned(x), unsigned(y), unsigned(width),
+                                           unsigned(height), bool(jsc_value_to_boolean(note)) });
             }
         }
     }

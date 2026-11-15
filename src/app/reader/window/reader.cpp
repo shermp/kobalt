@@ -1915,9 +1915,8 @@ bool Reader::openLink(QPoint point, bool direct)
         || point.y() >= page->height() - page->topHeight() - page->bottomHeight())
         return false;
     const auto links = session->pageLinks();
-    auto mode = direct ? preferences.value("tappable_links").toString("footnotes") : QString("all");
-    if (session->usesWebKit() && mode != "off")
-        mode = QStringLiteral("all");
+    const auto mode =
+            direct ? preferences.value("tappable_links").toString("footnotes") : QString("all");
     const auto hit = linkAtPoint(links, point, mode, int(metrics::links::revealPadding),
                                  direct ? 0 : ui::px(6));
     if (hit.index >= 0) {
