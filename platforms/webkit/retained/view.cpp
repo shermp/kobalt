@@ -340,6 +340,61 @@ void View::wordAt(unsigned x, unsigned y, std::function<void(Word)> done)
             new std::function<void(Word)>(std::move(done)));
 }
 
+void View::rangeRects(const Location &start, const Location &end,
+                      std::function<void(std::vector<Rect>)> done)
+{
+    if (!confirmed || completion)
+        return done({});
+    GVariantBuilder args;
+    g_variant_builder_init(&args, G_VARIANT_TYPE_VARDICT);
+    const auto add = [&](const char *pathName, const char *offsetName, const char *afterName,
+                         const Location &position) {
+        std::string path;
+        for (const auto index : position.path) {
+            if (!path.empty())
+                path += ',';
+            path += std::to_string(index);
+        }
+        g_variant_builder_add(&args, "{sv}", pathName, g_variant_new_string(path.c_str()));
+        g_variant_builder_add(&args, "{sv}", offsetName, g_variant_new_int32(position.offset));
+        g_variant_builder_add(&args, "{sv}", afterName, g_variant_new_uint32(position.after));
+    };
+    add("firstPath", "firstOffset", "firstAfter", start);
+    add("lastPath", "lastOffset", "lastAfter", end);
+    g_autoptr(GVariant) parameters = g_variant_ref_sink(g_variant_builder_end(&args));
+    static const std::string script = std::string(sourceLocationScript)
+            + "\nreturn rangeRects([firstPath, firstOffset, firstAfter],"
+              " [lastPath, lastOffset, lastAfter]);";
+    using Completion = std::function<void(std::vector<Rect>)>;
+    webkit_web_view_call_async_javascript_function(
+            view, script.c_str(), script.size(), parameters, world, nullptr, nullptr,
+            +[](GObject *source, GAsyncResult *result, gpointer data) {
+                const std::unique_ptr<Completion> finish(static_cast<Completion *>(data));
+                g_autoptr(JSCValue) value = webkit_web_view_call_async_javascript_function_finish(
+                        WEBKIT_WEB_VIEW(source), result, nullptr);
+                if (!value || !jsc_value_is_array(value))
+                    return (*finish)({});
+                g_autoptr(JSCValue) length = jsc_value_object_get_property(value, "length");
+                const auto count = length ? jsc_value_to_int32(length) : -1;
+                if (count < 0 || count > 64)
+                    return (*finish)({});
+                std::vector<Rect> rects;
+                for (int i = 0; i < count; ++i) {
+                    g_autoptr(JSCValue) rect = jsc_value_object_get_property_at_index(value, i);
+                    int x, y, width, height;
+                    if (!rect || !jsc_value_is_array(rect) || !integer(rect, 0, 0, 2048, x)
+                        || !integer(rect, 1, 0, 2048, y) || !integer(rect, 2, 1, 2048, width)
+                        || !integer(rect, 3, 1, 2048, height) || x + width > 2048
+                        || y + height > 2048)
+                        return (*finish)({});
+                    rects.push_back(
+                            { unsigned(x), unsigned(y), unsigned(width), unsigned(height) });
+                }
+                (*finish)(std::move(rects));
+            },
+            new Completion(std::move(done)));
+}
+
 void View::show(Page page, GCancellable *cancel, Completion done)
 {
     if (!healthy || completion || page.uri.compare(0, 19, "kobalt-epub://book-") != 0 || !page.width

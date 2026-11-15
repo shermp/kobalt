@@ -45,7 +45,7 @@ struct BookClient::Transport
 {
     InheritedProcess child;
     QLocalSocket socket;
-    QTimer deadline, retry, wordDeadline;
+    QTimer deadline, retry, queryDeadline;
     std::string input;
     int inherited = -1;
     pid_t group = 0;
@@ -62,8 +62,8 @@ BookClient::BookClient(QString executable, Source source, QSize capacity)
     auto &io = *transport_;
     io.deadline.setSingleShot(true);
     io.retry.setSingleShot(true);
-    io.wordDeadline.setSingleShot(true);
-    connect(&io.wordDeadline, &QTimer::timeout, this,
+    io.queryDeadline.setSingleShot(true);
+    connect(&io.queryDeadline, &QTimer::timeout, this,
             [this] { fail(QStringLiteral("WebKit word lookup timed out")); });
     connect(&io.retry, &QTimer::timeout, this, [this] { submit(); });
     connect(&io.deadline, &QTimer::timeout, this, [this] {
@@ -218,27 +218,64 @@ void BookClient::linkDetails(const PageLink &link, std::function<void(LinkDetail
 
 void BookClient::wordAt(QPoint point, std::function<void(WordSelection)> finished)
 {
-    if (!ready_ || failed_ || closing_ || complete_ || word_
-        || !QRect(QPoint(), size_).contains(point) || !displayed_.revision.frame) {
+    if (!QRect(QPoint(), size_).contains(point)) {
         finished({});
         return;
     }
-    word_ = std::move(finished);
-    wordId_ = next_ + 1;
-    wordRevision_ = displayed_.revision;
-    wordSize_ = size_;
-    auto data = wordRevision_.encode();
+    std::string data;
     spike::put(data, unsigned(point.x()), 2);
     spike::put(data, unsigned(point.y()), 2);
-    transport_->wordDeadline.start(3000);
-    send(spike::BookWordAt, data);
+    startQuery(spike::BookWordAt, std::move(data), std::move(finished));
 }
 
-void BookClient::finishWord(WordSelection word)
+void BookClient::rangeRects(const QString &start, const QString &end,
+                            std::function<void(QVector<QRect>)> finished)
 {
-    transport_->wordDeadline.stop();
-    auto finished = std::move(word_);
-    word_ = {};
+    const auto &digest = source_.resources->fingerprint();
+    const auto first = sourcePositionFromToken(start, digest);
+    const auto last = sourcePositionFromToken(end, digest);
+    if (!first.valid() || first.href != displayed_.anchor.href || first.href != last.href
+        || first.offset < 0 || last.offset < 0) {
+        finished({});
+        return;
+    }
+    const auto encode = [](const Location &location, std::string &bytes) {
+        spike::BookAnchor anchor;
+        anchor.path.assign(location.path.begin(), location.path.end());
+        anchor.offset = location.offset;
+        anchor.after = location.after;
+        anchor.append(bytes);
+    };
+    std::string data, firstBytes;
+    encode(first, firstBytes);
+    spike::put(data, firstBytes.size(), 2);
+    data += firstBytes;
+    encode(last, data);
+    startQuery(spike::BookRangeRects, std::move(data),
+               [finished](WordSelection result) { finished(std::move(result.rectangles)); });
+}
+
+void BookClient::startQuery(spike::Type type, std::string payload,
+                            std::function<void(WordSelection)> finished)
+{
+    if (!ready_ || failed_ || closing_ || complete_ || query_ || !displayed_.revision.frame) {
+        finished({});
+        return;
+    }
+    query_ = std::move(finished);
+    queryId_ = next_ + 1;
+    queryReply_ = type == spike::BookWordAt ? spike::BookWordReply : spike::BookRangeReply;
+    queryRevision_ = displayed_.revision;
+    querySize_ = size_;
+    transport_->queryDeadline.start(3000);
+    send(type, queryRevision_.encode() + payload);
+}
+
+void BookClient::finishQuery(WordSelection word)
+{
+    transport_->queryDeadline.stop();
+    auto finished = std::move(query_);
+    query_ = {};
     if (finished)
         finished(std::move(word));
 }
@@ -406,16 +443,16 @@ bool BookClient::handle(const spike::Message &message)
         return true;
     }
     if (message.type == spike::BookWordReply) {
-        if (!word_ || message.id != wordId_)
+        if (!query_ || message.id != queryId_ || message.type != queryReply_)
             return false;
         spike::BookWord result;
         WordSelection word;
         if (!message.payload.empty()) {
             if (!result.decode(message.payload)
-                || result.x + result.width > unsigned(wordSize_.width())
-                || result.y + result.height > unsigned(wordSize_.height()))
+                || result.x + result.width > unsigned(querySize_.width())
+                || result.y + result.height > unsigned(querySize_.height()))
                 return false;
-            if (!complete_ && wordRevision_ == displayed_.revision) {
+            if (!complete_ && queryRevision_ == displayed_.revision) {
                 const auto position = [this](const spike::BookAnchor &anchor) {
                     Location location;
                     location.href = displayed_.anchor.href;
@@ -431,7 +468,27 @@ bool BookClient::handle(const spike::Message &message)
                          { QRect(result.x, result.y, result.width, result.height) } };
             }
         }
-        finishWord(std::move(word));
+        finishQuery(std::move(word));
+        return true;
+    }
+    if (message.type == spike::BookRangeReply) {
+        const auto size = message.payload.size();
+        if (!query_ || message.id != queryId_ || message.type != queryReply_ || size > 64 * 8
+            || size % 8)
+            return false;
+        WordSelection result;
+        const QRect viewport(QPoint(), querySize_);
+        for (size_t i = 0; i < size; i += 8) {
+            const auto *p = message.payload.data() + i;
+            const QRect rect(int(spike::read(p, 2)), int(spike::read(p + 2, 2)),
+                             int(spike::read(p + 4, 2)), int(spike::read(p + 6, 2)));
+            if (rect.isEmpty() || !viewport.contains(rect))
+                return false;
+            result.rectangles.append(rect);
+        }
+        if (complete_ || !(queryRevision_ == displayed_.revision))
+            result.rectangles.clear();
+        finishQuery(std::move(result));
         return true;
     }
     if (!reserved_ || message.id != renderId_)
@@ -603,7 +660,7 @@ void BookClient::fail(QString message)
     // On a protocol failure a reserved slot stays unpublished until the
     // renderer has been stopped. The failed client cannot submit again.
     stopProcess();
-    finishWord();
+    finishQuery();
     finish(errorPage(message));
 }
 
@@ -613,8 +670,8 @@ void BookClient::close()
         return;
     closing_ = true;
     complete_ = {};
-    word_ = {};
-    transport_->wordDeadline.stop();
+    query_ = {};
+    transport_->queryDeadline.stop();
     ++closingBooks().active;
     transport_->retry.stop();
     if (transport_->child.state() != QProcess::NotRunning) {

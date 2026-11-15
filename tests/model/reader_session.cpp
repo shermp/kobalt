@@ -2582,6 +2582,14 @@ static int webKitReader(int argc, char **argv)
         finished.exec();
         require(links->error().isEmpty() && links->sourceLocation().href == hitLocation.href,
                 "WPE could not open the search result");
+        QVector<QRect> match;
+        links->rangeRects(hit.start, hit.end, [&](QVector<QRect> rects) {
+            match = std::move(rects);
+            QTimer::singleShot(0, &queried, &QEventLoop::quit);
+        });
+        queried.exec();
+        require(!match.isEmpty() && QRect(QPoint(), links->image().size()).contains(match.first()),
+                "WPE could not draw a visible search range");
         hits.clear();
         links->search(
                 searchText,

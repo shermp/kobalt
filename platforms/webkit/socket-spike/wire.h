@@ -28,6 +28,7 @@ enum Type : uint16_t {
     RenderBookPage,
     ResourceData,
     BookWordAt,
+    BookRangeRects,
     Ready = 101,
     Pending,
     Cancelled,
@@ -40,7 +41,8 @@ enum Type : uint16_t {
     Closed,
     BookFrameReady,
     ResourceRequest,
-    BookWordReply
+    BookWordReply,
+    BookRangeReply
 };
 
 struct Message

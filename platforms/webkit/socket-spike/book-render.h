@@ -32,7 +32,8 @@ private:
     void requestResource();
     bool resourceData(const std::string &);
     void refuseResources();
-    bool wordAt(const spike::Message &);
+    bool query(const spike::Message &);
+    void finishQuery(spike::Type, spike::Revision, const std::string &);
     void render(uint64_t, spike::BookPage);
     void snapshot(WebKitImage *);
     void finish(bool);
@@ -50,5 +51,5 @@ private:
     std::deque<std::unique_ptr<Resource>> resources;
     spike::BookPage page;
     spike::Revision committed;
-    uint64_t generation = 0, renderId = 0, wordId = 0, shutdownId = 0, nextResource = 0;
+    uint64_t generation = 0, renderId = 0, queryId = 0, shutdownId = 0, nextResource = 0;
 };

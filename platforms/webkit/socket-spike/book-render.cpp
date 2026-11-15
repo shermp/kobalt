@@ -87,7 +87,7 @@ bool BookRender::receive(const Message &message)
             cancel();
         else {
             refuseResources();
-            if (!wordId)
+            if (!queryId)
                 reply(Bye, shutdownId, {});
         }
         return true;
@@ -103,8 +103,8 @@ bool BookRender::receive(const Message &message)
     }
     if (message.type == ResourceData)
         return resourceData(message.payload);
-    if (message.type == BookWordAt)
-        return wordAt(message);
+    if (message.type == BookWordAt || message.type == BookRangeRects)
+        return query(message);
     if (message.type != spike::RenderBookPage)
         return false;
     if (renderId) {
@@ -128,45 +128,75 @@ bool BookRender::receive(const Message &message)
     return true;
 }
 
-bool BookRender::wordAt(const Message &message)
+bool BookRender::query(const Message &message)
 {
-    if (message.payload.size() != 28 || wordId)
+    const bool word = message.type == BookWordAt;
+    const auto type = word ? BookWordReply : BookRangeReply;
+    if (queryId || (word ? message.payload.size() != 28 : message.payload.size() < 40))
         return false;
     const auto *data = message.payload.data();
     const auto revision = Revision::decode(data);
     if (!view || renderId || !committed.frame || !(revision == committed)) {
-        reply(BookWordReply, message.id, {});
+        reply(type, message.id, {});
         return true;
     }
-    wordId = message.id;
-    view->wordAt(unsigned(read(data + 24, 2)), unsigned(read(data + 26, 2)),
-                 [this, revision](retained::Word word) {
-                     const auto id = std::exchange(wordId, 0);
-                     if (drained) {
-                         if (!renderId)
-                             drainHelpers();
-                         return;
-                     }
-                     if (shutdownId) {
-                         if (!renderId)
-                             reply(Bye, shutdownId, {});
-                         return;
-                     }
-                     std::string payload;
-                     if (!renderId && revision == committed && !word.text.empty()) {
-                         payload =
-                                 BookWord{ { word.start.path, word.start.offset, word.start.after },
-                                           { word.end.path, word.end.offset, word.end.after },
-                                           std::move(word.text),
-                                           word.x,
-                                           word.y,
-                                           word.width,
-                                           word.height }
-                                         .encode();
-                     }
-                     reply(BookWordReply, id, payload);
-                 });
+    queryId = message.id;
+    if (word) {
+        view->wordAt(unsigned(read(data + 24, 2)), unsigned(read(data + 26, 2)),
+                     [this, revision, type](retained::Word word) {
+                         std::string payload;
+                         if (!word.text.empty()) {
+                             payload = BookWord{ { word.start.path, word.start.offset,
+                                                   word.start.after },
+                                                 { word.end.path, word.end.offset, word.end.after },
+                                                 std::move(word.text),
+                                                 word.x,
+                                                 word.y,
+                                                 word.width,
+                                                 word.height }
+                                               .encode();
+                         }
+                         finishQuery(type, revision, payload);
+                     });
+        return true;
+    }
+    const auto size = size_t(read(data + 24, 2));
+    const auto second = 26 + size;
+    BookAnchor first, last;
+    if (second > message.payload.size() || !first.decode(message.payload.substr(26, size), 0)
+        || !last.decode(message.payload.substr(second), 0) || first.offset < 0 || last.offset < 0) {
+        queryId = 0;
+        return false;
+    }
+    view->rangeRects(retained::Location{ 1, {}, std::move(first.path), first.offset, first.after },
+                     retained::Location{ 1, {}, std::move(last.path), last.offset, last.after },
+                     [this, revision, type](const std::vector<retained::Rect> &rects) {
+                         std::string payload;
+                         for (const auto &rect : rects) {
+                             put(payload, rect.x, 2);
+                             put(payload, rect.y, 2);
+                             put(payload, rect.width, 2);
+                             put(payload, rect.height, 2);
+                         }
+                         finishQuery(type, revision, payload);
+                     });
     return true;
+}
+
+void BookRender::finishQuery(Type type, Revision revision, const std::string &payload)
+{
+    const auto id = std::exchange(queryId, 0);
+    if (drained) {
+        if (!renderId)
+            drainHelpers();
+        return;
+    }
+    if (shutdownId) {
+        if (!renderId)
+            reply(Bye, shutdownId, {});
+        return;
+    }
+    reply(type, id, !renderId && revision == committed ? payload : std::string());
 }
 
 void BookRender::enqueue(WebKitURISchemeRequest *request)
@@ -333,7 +363,7 @@ void BookRender::finish(bool success)
     g_clear_object(&cancellable);
     const auto id = std::exchange(renderId, 0);
     if (drained) {
-        if (!wordId)
+        if (!queryId)
             drainHelpers();
         return;
     }
@@ -354,7 +384,7 @@ void BookRender::finish(bool success)
             frame.links.push_back({ link.uri, link.x, link.y, link.width, link.height, link.note });
         reply(BookFrameReady, id, frame.encode(page.frame));
     }
-    if (shutdownId && !wordId)
+    if (shutdownId && !queryId)
         reply(Bye, shutdownId, {});
 }
 
@@ -372,7 +402,7 @@ void BookRender::disconnect(std::function<void()> done)
         cancel();
     else {
         refuseResources();
-        if (!wordId)
+        if (!queryId)
             drainHelpers();
     }
 }

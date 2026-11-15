@@ -236,3 +236,28 @@ function wordAtPoint(x, y) {
     }
     return null;
 }
+
+function rangeRects(first, last) {
+    const resolve = value => resolveSource(
+        value[0] ? value[0].split(',').map(Number) : [], value[1], Boolean(value[2]));
+    const start = resolve(first), end = resolve(last);
+    if (!start || start[2] || !end || end[2])
+        return [];
+    const range = document.createRange();
+    range.setStart(start[0], start[1]);
+    range.setEnd(end[0], end[1]);
+    if (range.collapsed)
+        return [];
+    const visible = [];
+    for (const rect of range.getClientRects()) {
+        const x = Math.max(0, Math.floor(rect.left));
+        const y = Math.max(0, Math.floor(rect.top));
+        const right = Math.min(innerWidth, Math.ceil(rect.right));
+        const bottom = Math.min(innerHeight, Math.ceil(rect.bottom));
+        if (right > x && bottom > y)
+            visible.push([x, y, right - x, bottom - y]);
+        if (visible.length === 64)
+            break;
+    }
+    return visible;
+}

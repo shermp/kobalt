@@ -24,6 +24,11 @@ struct Word
     unsigned x = 0, y = 0, width = 0, height = 0;
 };
 
+struct Rect
+{
+    unsigned x, y, width, height;
+};
+
 class View
 {
 public:
@@ -35,6 +40,8 @@ public:
     ~View();
     void show(Page, GCancellable *, Completion);
     void wordAt(unsigned x, unsigned y, std::function<void(Word)>);
+    void rangeRects(const Location &start, const Location &end,
+                    std::function<void(std::vector<Rect>)>);
 
     std::optional<PageInfo> pageInfo() const { return confirmed; }
 

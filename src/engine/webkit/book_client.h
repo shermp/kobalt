@@ -63,6 +63,7 @@ public:
                          QString *fragment = nullptr) const;
     void linkDetails(const PageLink &, std::function<void(LinkDetails)>);
     void wordAt(QPoint, std::function<void(WordSelection)>);
+    void rangeRects(const QString &start, const QString &end, std::function<void(QVector<QRect>)>);
     void searchText(const QString &, SearchCursor, SearchScope, bool first,
                     std::shared_ptr<std::atomic_bool>, std::function<void(SearchBatch)>);
     // Close detaches completions immediately. The object deletes itself after
@@ -83,7 +84,8 @@ private:
     void settled();
     void finish(Page);
     void stopProcess();
-    void finishWord(WordSelection = {});
+    void startQuery(spike::Type, std::string, std::function<void(WordSelection)>);
+    void finishQuery(WordSelection = {});
 
     std::unique_ptr<Transport> transport_;
     QString executable_;
@@ -91,14 +93,15 @@ private:
     QSize capacity_;
     std::unique_ptr<FramePool> pool_;
     Completion complete_;
-    std::function<void(WordSelection)> word_;
+    std::function<void(WordSelection)> query_;
     spike::BookPage candidate_;
     Page displayed_;
     WebResources::Resource reading_;
     quint64 next_ = 0, renderId_ = 0, resourceId_ = 0;
-    quint64 wordId_ = 0;
-    spike::Revision wordRevision_{};
-    QSize wordSize_;
+    quint64 queryId_ = 0;
+    spike::Type queryReply_ = spike::BookWordReply;
+    spike::Revision queryRevision_{};
+    QSize querySize_;
     unsigned resourceOffset_ = 0;
     QSize size_;
     int fontPixels_ = 18, index_ = 0;

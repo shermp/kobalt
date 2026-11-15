@@ -2659,6 +2659,23 @@ void ReaderSession::annotationGeometry(const QString &start, const QString &end,
 void ReaderSession::rangeRects(const QString &start, const QString &end,
                                std::function<void(QVector<QRect>)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->rangeRects(start, end,
+                                  [guard, job = revision, finished](QVector<QRect> rects) {
+                                      if (guard)
+                                          finished(guard->currentSourceFrame(job) && !guard->busy()
+                                                           ? std::move(rects)
+                                                           : QVector<QRect>{});
+                                  });
+        return;
+    }
+#endif
     if (running)
         return;
     auto engine = engine_;
