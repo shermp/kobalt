@@ -102,7 +102,7 @@ function positionRect(node, offset, after) {
     return range.getClientRects()[0];
 }
 
-function visibleSource(width, height) {
+function visibleSource(width, height, trailing = false) {
     // Find the first visible text range in source order. Hit testing alone
     // can return a caret from an adjacent column in a fragmented paragraph.
     const walker = sourceText(document.body);
@@ -111,7 +111,8 @@ function visibleSource(width, height) {
         rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < width
         && rect.bottom > 0 && rect.top < height);
     let visited = 0, units = 0;
-    for (let node; (node = walker.nextNode());) {
+    for (let node = trailing ? walker.lastChild() : walker.nextNode(); node;
+         node = trailing ? walker.previousNode() : walker.nextNode()) {
         units += node.length;
         if (++visited > 65536 || units > maxText)
             break;
@@ -122,23 +123,42 @@ function visibleSource(width, height) {
             continue;
         // The prefix begins intersecting the viewport at the first visible
         // character. Search in UTF-16 and round back from any split pair.
-        let lo = 1, hi = node.length;
-        while (lo < hi) {
-            const mid = Math.floor((lo + hi) / 2);
-            range.setEnd(node, mid);
-            if (visible())
-                hi = mid;
-            else
-                lo = mid + 1;
+        let offset;
+        if (trailing) {
+            let lo = 0, hi = node.length - 1;
+            while (lo < hi) {
+                const mid = Math.ceil((lo + hi) / 2);
+                range.setStart(node, mid);
+                if (visible())
+                    lo = mid;
+                else
+                    hi = mid - 1;
+            }
+            const low = node.data.charCodeAt(lo);
+            if (lo > 0 && low >= 0xdc00 && low <= 0xdfff)
+                --lo;
+            offset = lo + (node.data.codePointAt(lo) > 0xffff ? 2 : 1);
+        } else {
+            let lo = 1, hi = node.length;
+            while (lo < hi) {
+                const mid = Math.floor((lo + hi) / 2);
+                range.setEnd(node, mid);
+                if (visible())
+                    hi = mid;
+                else
+                    lo = mid + 1;
+            }
+            offset = lo - 1;
+            const unit = node.data.charCodeAt(offset);
+            if (offset > 0 && unit >= 0xdc00 && unit <= 0xdfff)
+                --offset;
         }
-        let offset = lo - 1;
-        const unit = node.data.charCodeAt(offset);
-        if (offset > 0 && unit >= 0xdc00 && unit <= 0xdfff)
-            --offset;
         const position = sourcePosition(node, offset);
         if (position)
             return position;
     }
+    if (trailing)
+        return null;
     const elements = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
     for (let node, checked = 0; checked < 65536 && (node = elements.nextNode()); ++checked) {
         if (!['IMG', 'SVG', 'VIDEO', 'CANVAS', 'HR'].includes(node.tagName.toUpperCase()))

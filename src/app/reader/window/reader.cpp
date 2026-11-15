@@ -1814,6 +1814,7 @@ void Reader::openSearch(const QString &query)
         searchOriginalPage = session->usesWebKit() ? session->bookPage() : session->page();
     }
     session->prepareSearch();
+    searchPanel->setPageScopesAvailable(session->hasPageSearchBoundary());
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(session->chapters());
     const auto safe = safeArea();

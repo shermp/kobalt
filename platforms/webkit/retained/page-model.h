@@ -38,6 +38,7 @@ struct PageInfo
     Restoration precision = Restoration::Unresolved;
     Restoration restoration = Restoration::Unresolved;
     std::vector<PageLink> links = {};
+    Location pageEnd = {};
 };
 
 // In-memory page model for one publication and layout. Exact totals require

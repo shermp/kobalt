@@ -550,7 +550,6 @@ void Reader::buildReadingPage()
         refresh();
     });
     searchPanel = new kobalt::SearchPanel(this, services.keyboard);
-    searchPanel->setPageScopesAvailable(!session->usesWebKit());
     searchPanel->requested = [this](const QString &query) {
         const auto epoch = ++searchEpoch;
         QPointer<Reader> guard(this);

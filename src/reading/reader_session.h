@@ -296,6 +296,7 @@ public:
     void searchDetails(QVector<SearchHit> hits, SearchScope scope, const QString &origin,
                        std::function<void(QVector<SearchHit>)> finished);
     void prepareSearch();
+    bool hasPageSearchBoundary() const;
     void cancelSearch();
     void annotationGeometry(const QString &start, const QString &end,
                             std::function<void(AnnotationGeometry)> finished);

@@ -154,6 +154,7 @@ struct BookFrame
     unsigned precision = 2, restoration = 2;
     BookAnchor anchor;
     std::vector<BookLink> links = {};
+    BookAnchor pageEnd = {};
 
     std::string encode(const FrameSpec &frame) const
     {
@@ -163,6 +164,7 @@ struct BookFrame
         put(data, precision, 1);
         put(data, restoration, 1);
         anchor.append(data);
+        pageEnd.append(data);
         const auto count = data.size();
         data.push_back(0);
         for (const auto &link : links) {
@@ -187,12 +189,15 @@ struct BookFrame
         restoration = unsigned(read(p + 69, 1));
         const auto end = header + 7 + 4 * read(p + header, 2);
         if (column >= columns || columns > 65536 || precision > 2 || restoration > 2
-            || end >= data.size() || !anchor.decode(data.substr(0, end), header))
+            || end + 7 >= data.size() || !anchor.decode(data.substr(0, end), header))
             return false;
-        const auto count = read(p + end, 1);
+        const auto boundary = end + 7 + 4 * read(p + end, 2);
+        if (boundary >= data.size() || !pageEnd.decode(data.substr(end, boundary - end), 0))
+            return false;
+        const auto count = read(p + boundary, 1);
         if (count > 24)
             return false;
-        size_t offset = end + 1;
+        size_t offset = boundary + 1;
         links.clear();
         for (unsigned i = 0; i < count; ++i) {
             BookLink link;

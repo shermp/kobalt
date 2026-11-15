@@ -88,7 +88,8 @@ constexpr char layoutScript[] = R"JS(
     if (window.scrollX !== scroll || (requireFixtureFont && document.documentElement.hasAttribute('data-book-script')))
         throw new Error('Scroll position or script policy mismatch: expected ' + scroll + ' got ' + window.scrollX + ' extent ' + document.documentElement.scrollWidth);
     const anchor = visibleSource(width, height);
-    return [actual, columns, quality, ...anchor, visibleLinks(width, height)];
+    return [actual, columns, quality, ...anchor, visibleLinks(width, height),
+            visibleSource(width, height, true)];
 )JS";
 
 bool integer(JSCValue *array, unsigned index, int min, int max, int &out)
@@ -152,6 +153,15 @@ bool readPageInfo(JSCValue *value, const std::string &href, PageInfo &info)
     }
     info = { unsigned(column), unsigned(count), std::move(anchor), Restoration(precision),
              Restoration(quality) };
+    {
+        g_autoptr(JSCValue) last = jsc_value_object_get_property_at_index(value, 8);
+        int exact;
+        if (last && jsc_value_is_array(last) && integer(last, 3, 0, 0, exact)
+            && readWordAnchor(last, info.pageEnd))
+            info.pageEnd.href = href;
+        else
+            info.pageEnd = {};
+    }
     {
         g_autoptr(JSCValue) links = jsc_value_object_get_property_at_index(value, 7);
         if (links && jsc_value_is_array(links)) {

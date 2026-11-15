@@ -2540,6 +2540,15 @@ void ReaderSession::prepareSearch()
     prepareSearchNext(revision, searchCancelled);
 }
 
+bool ReaderSession::hasPageSearchBoundary() const
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit())
+        return webKitClient_ && webKitClient_->hasPageSearchBoundary();
+#endif
+    return true;
+}
+
 void ReaderSession::prepareSearchNext(quint64 job, std::shared_ptr<std::atomic_bool> cancelled)
 {
     const auto engine = engine_;

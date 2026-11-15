@@ -307,20 +307,24 @@ void BookClient::searchText(const QString &query, SearchCursor cursor, SearchSco
                             bool first, std::shared_ptr<std::atomic_bool> cancelled,
                             std::function<void(SearchBatch)> finished)
 {
-    const int last =
-            scope == SearchScope::Chapter ? displayed_.spineIndex : source_.spine.size() - 1;
-    if (scope == SearchScope::Chapter && first)
-        cursor.item = last;
+    const bool pageScope = scope == SearchScope::Before || scope == SearchScope::After;
+    const int currentItem = displayed_.spineIndex;
+    const auto pageEnd = displayed_.pageEnd;
+    const int last = scope == SearchScope::Chapter || scope == SearchScope::Before
+            ? currentItem
+            : source_.spine.size() - 1;
+    if ((scope == SearchScope::Chapter || scope == SearchScope::After) && first)
+        cursor.item = currentItem;
     qt::invoke(
             engineWorker(),
-            [scope, source = source_.resources, lease = source_.lease, query, cursor, last,
-             cancelled, finished] {
+            [scope, pageScope, pageEnd, source = source_.resources, lease = source_.lease, query,
+             cursor, last, cancelled, finished] {
                 const auto current = [&] { return !lease->revoked() && !cancelled->load(); };
                 if (!current())
                     return;
                 SearchBatch result;
-                if (scope == SearchScope::Book || scope == SearchScope::Chapter)
-                    result = source->searchText(query, cursor, last, current);
+                if (!pageScope || pageEnd.valid())
+                    result = source->searchText(query, cursor, last, scope, pageEnd, current);
                 else
                     result.done = result.limited = true;
                 if (current())
@@ -584,6 +588,13 @@ bool BookClient::handle(const spike::Message &message)
         page.anchor.path.push_back(int(index));
     page.anchor.offset = packet.anchor.offset;
     page.anchor.after = packet.anchor.after;
+    if (packet.pageEnd.offset >= 0) {
+        page.pageEnd.href = page.anchor.href;
+        for (const auto index : packet.pageEnd.path)
+            page.pageEnd.path.append(int(index));
+        page.pageEnd.offset = packet.pageEnd.offset;
+        page.pageEnd.after = packet.pageEnd.after;
+    }
     page.restoration = Restoration(packet.restoration);
     for (const auto &link : packet.links) {
         const auto token = QString::fromUtf8(link.uri.data(), int(link.uri.size()));

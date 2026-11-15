@@ -392,6 +392,7 @@ void BookRender::finish(bool success)
                          { info.anchor.path, info.anchor.offset, info.anchor.after } };
         for (const auto &link : info.links)
             frame.links.push_back({ link.uri, link.x, link.y, link.width, link.height, link.note });
+        frame.pageEnd = { info.pageEnd.path, info.pageEnd.offset, info.pageEnd.after };
         reply(BookFrameReady, id, frame.encode(page.frame));
     }
     if (shutdownId && !queryId)

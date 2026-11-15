@@ -23,7 +23,12 @@ public:
 
     SearchScope scope() const { return searchScope; }
 
-    void setPageScopesAvailable(bool available) { pageScopes = available; }
+    void setPageScopesAvailable(bool available)
+    {
+        pageScopes = available;
+        if (!available && (searchScope == SearchScope::Before || searchScope == SearchScope::After))
+            searchScope = SearchScope::Book;
+    }
 
     // `originalPage` is the zero-based page that Return to original position opens.
     // A supplied lookup query replaces the field and runs the normal search.

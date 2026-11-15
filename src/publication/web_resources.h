@@ -36,8 +36,8 @@ public:
 
     QVector<ChapterLink> chapters();
     QString noteText(const QString &spineMember, const QString &fragment);
-    SearchBatch searchText(const QString &query, SearchCursor, int lastItem,
-                           const std::function<bool()> &current);
+    SearchBatch searchText(const QString &query, SearchCursor, int lastItem, SearchScope,
+                           const Location &pageEnd, const std::function<bool()> &current);
     TextRange textRange(const QString &start, const QString &end, bool withContext);
     TextRange selectionRange(const QStringList &tokens);
     QVector<int> intersectingRanges(const QString &start, const QString &end,
@@ -56,11 +56,18 @@ private:
         qint64 size;
     };
 
-    struct SearchRun
+    struct SearchSpan
     {
-        QString text;
+        int unit, counted;
         QVector<int> path;
         int offset;
+    };
+
+    struct SearchBlock
+    {
+        QString text;
+        QVector<SearchSpan> spans;
+        int counted = 0;
     };
 
     bool indexSearchItem(int item, const std::function<bool()> &current);
@@ -75,7 +82,7 @@ private:
     qint64 servedBytes_ = 0;
     int requests_ = 0;
     int searchItem_ = -1;
-    QVector<SearchRun> searchRuns_;
+    QVector<SearchBlock> searchBlocks_;
     QMap<QByteArray, QPair<int, int>> indexedElements_;
     QString indexedText_;
 };

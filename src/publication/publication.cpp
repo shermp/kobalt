@@ -706,6 +706,17 @@ QByteArray elementKey(const QVector<int> &path)
     return key;
 }
 
+bool separatesSearchText(const QString &tag)
+{
+    static const QStringList elements{
+        "address", "article",    "aside",   "blockquote", "br", "dd",   "div", "dl",
+        "dt",      "figcaption", "figure",  "footer",     "h1", "h2",   "h3",  "h4",
+        "h5",      "h6",         "header",  "hr",         "li", "main", "nav", "ol",
+        "p",       "pre",        "section", "table",      "td", "th",   "tr",  "ul"
+    };
+    return elements.contains(tag);
+}
+
 int sourceUnit(const QString &text, int offset, bool after)
 {
     if (!after && !offset)
@@ -730,7 +741,7 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
     if (item == searchItem_)
         return true;
     searchItem_ = -1;
-    searchRuns_.clear();
+    searchBlocks_.clear();
     indexedElements_.clear();
     indexedText_.clear();
     const auto member = members_.constFind(url(spine_.value(item)));
@@ -745,17 +756,17 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
         QByteArray key;
         int index, begin;
         int childCount = 0, counted = 0;
-        bool hidden = false;
+        bool hidden = false, separates = false;
     };
 
     QXmlStreamReader xml(bytes);
     QVector<Element> elements;
-    QVector<SearchRun> runs;
+    QVector<SearchBlock> blocks;
     QMap<QByteArray, QPair<int, int>> positions;
     QString textInOrder;
     int counted = 0;
-    int storedIndexes = 0, storedKeyBytes = 0;
-    bool body = false;
+    int storedIndexes = 0, storedKeyBytes = 0, spans = 0;
+    bool body = false, nextBlock = true;
     while (!xml.atEnd() && current()) {
         xml.readNext();
         if (!cleanXml(xml)
@@ -771,32 +782,51 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
                 const int index = parent.childCount++;
                 const auto key = parent.key + '/' + QByteArray::number(index);
                 storedKeyBytes += int(key.size());
-                elements.append({ key, index, counted, 0, 0, hidden });
+                const bool separates =
+                        separatesSearchText(xml.name().toString()) || hidden != parent.hidden;
+                if (separates) {
+                    nextBlock = true;
+                    textInOrder += QLatin1Char(' ');
+                }
+                elements.append({ key, index, counted, 0, 0, hidden, separates });
                 if (elements.size() > 129 || positions.size() >= 32768
                     || storedKeyBytes > 1024 * 1024)
                     return false;
             } else if (xml.name() == QStringLiteral("body")) {
                 body = true;
-                elements.append({ {}, 0, 0, 0, 0, false });
+                elements.append({ {}, 0, 0, 0, 0, false, false });
             }
         } else if (xml.isEndElement() && !elements.isEmpty()) {
             const auto element = elements.takeLast();
             positions.insert(element.key, { element.begin, element.counted });
+            if (element.separates) {
+                nextBlock = true;
+                textInOrder += QLatin1Char(' ');
+            }
             if (elements.isEmpty())
                 break;
         } else if (xml.isCharacters() && !elements.isEmpty()) {
             const auto text = xml.text().toString();
-            textInOrder += text;
-            if (!elements.last().hidden && !xml.isWhitespace()) {
-                storedIndexes += elements.size();
-                if (runs.size() >= 16384 || storedIndexes > 262144)
-                    return false;
-                SearchRun run{ text, {}, elements.last().counted };
-                for (int i = 1; i < elements.size(); ++i)
-                    run.path.append(elements[i].index);
-                runs.append(std::move(run));
-            }
             const int length = countedBetween(text, 0, int(text.size()));
+            textInOrder += text;
+            if (!elements.last().hidden && (!nextBlock || !xml.isWhitespace())) {
+                storedIndexes += elements.size();
+                if (++spans > 16384 || storedIndexes > 262144)
+                    return false;
+                if (nextBlock) {
+                    blocks.append(SearchBlock{});
+                    nextBlock = false;
+                }
+                auto &block = blocks.last();
+                SearchSpan span{
+                    int(block.text.size()), block.counted, {}, elements.last().counted
+                };
+                for (int i = 1; i < elements.size(); ++i)
+                    span.path.append(elements[i].index);
+                block.spans.append(std::move(span));
+                block.text += text;
+                block.counted += length;
+            }
             counted += length;
             for (auto &element : elements)
                 element.counted += length;
@@ -805,7 +835,7 @@ bool WebResources::indexSearchItem(int item, const std::function<bool()> &curren
     if (!body || xml.hasError() || !current())
         return false;
     searchItem_ = item;
-    searchRuns_ = std::move(runs);
+    searchBlocks_ = std::move(blocks);
     indexedElements_ = std::move(positions);
     indexedText_ = std::move(textInOrder);
     return true;
@@ -898,6 +928,7 @@ QVector<int> WebResources::intersectingRanges(const QString &start, const QStrin
 }
 
 SearchBatch WebResources::searchText(const QString &query, SearchCursor cursor, int lastItem,
+                                     SearchScope scope, const Location &pageEnd,
                                      const std::function<bool()> &current)
 {
     SearchBatch batch;
@@ -911,11 +942,16 @@ SearchBatch WebResources::searchText(const QString &query, SearchCursor cursor, 
         return stopped();
     Location location;
     location.href = spine_[cursor.item];
+    const bool bounded = location.href == pageEnd.href
+            && (scope == SearchScope::Before || scope == SearchScope::After);
+    const int stopAt = bounded ? countedPosition(pageEnd) : -1;
+    if (bounded && stopAt < 0)
+        return stopped();
     const auto chapter = QFileInfo(location.href).completeBaseName();
     constexpr int batchSize = 32;
-    while (batch.cursor.block < searchRuns_.size() && current()) {
-        const auto &run = searchRuns_[batch.cursor.block];
-        const auto at = run.text.indexOf(query, batch.cursor.offset, Qt::CaseInsensitive);
+    while (batch.cursor.block < searchBlocks_.size() && current()) {
+        const auto &block = searchBlocks_[batch.cursor.block];
+        const auto at = block.text.indexOf(query, batch.cursor.offset, Qt::CaseInsensitive);
         if (at < 0) {
             ++batch.cursor.block;
             batch.cursor.offset = 0;
@@ -923,19 +959,34 @@ SearchBatch WebResources::searchText(const QString &query, SearchCursor cursor, 
             continue;
         }
         const auto begin = int(at), end = int(at + query.size());
-        location.path = run.path;
-        location.offset = run.offset + batch.cursor.slice
-                + countedBetween(run.text, batch.cursor.offset, begin);
-        location.after = true;
-        const auto start = sourcePositionToken(location, fingerprint_);
-        location.offset += countedBetween(run.text, begin, end);
-        location.after = false;
-        const auto finish = sourcePositionToken(location, fingerprint_);
-        const auto excerpt = qMax(0, begin - 36);
-        batch.hits.append({ start, finish, run.text.mid(excerpt, begin - excerpt),
-                            run.text.mid(begin, end - begin), run.text.mid(end, 36), -1, chapter });
+        const auto anchor = [&](int unit, int counted, bool leading) {
+            const auto found = std::upper_bound(
+                    block.spans.cbegin(), block.spans.cend(), leading ? unit : unit - 1,
+                    [](int unit, const SearchSpan &span) { return unit < span.unit; });
+            const auto &span = *std::prev(found);
+            Location result = location;
+            result.path = span.path;
+            result.offset = span.offset + counted - span.counted;
+            result.after = leading;
+            return result;
+        };
+        const int firstCount =
+                batch.cursor.slice + countedBetween(block.text, batch.cursor.offset, begin);
+        const int lastCount = firstCount + countedBetween(block.text, begin, end);
+        const auto first = anchor(begin, firstCount, true), last = anchor(end, lastCount, false);
+        const bool inScope = !bounded
+                || (scope == SearchScope::Before ? countedPosition(last) <= stopAt
+                                                 : countedPosition(first) >= stopAt);
+        if (inScope) {
+            const auto excerpt = qMax(0, begin - 36);
+            batch.hits.append({ sourcePositionToken(first, fingerprint_),
+                                sourcePositionToken(last, fingerprint_),
+                                block.text.mid(excerpt, begin - excerpt),
+                                block.text.mid(begin, end - begin), block.text.mid(end, 36), -1,
+                                chapter });
+        }
         batch.cursor.offset = end;
-        batch.cursor.slice = location.offset - run.offset;
+        batch.cursor.slice = lastCount;
         if (batch.hits.size() >= batchSize)
             return batch;
     }

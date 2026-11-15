@@ -2505,6 +2505,8 @@ static int webKitReader(int argc, char **argv)
                 "<p><a href='#inline-note'>Inline reference</a>"
                 "<a epub:type='noteref' href='second.xhtml#absent-note'>Missing note</a></p>"
                 "<aside id='inline-note' role='doc-footnote'>Fish &lt; Chips</aside></body>");
+        files["OEBPS/second.xhtml"].replace("</body>",
+                                            "<p>needle <em>through</em> markup</p></body>");
         require(test::writeBook(fixture.path(), "links.epub", files),
                 "Could not stage the WPE footnote fixture");
         auto links = openAgain(fixture.filePath("links.epub"), {}, QSize(540, 760));
@@ -2717,6 +2719,31 @@ static int webKitReader(int argc, char **argv)
         finished.exec();
         require(!hits.isEmpty() && hits.size() < 40,
                 "WPE did not deliver a bounded chapter batch before cancellation");
+        require(links->goToChapter(1), "WPE could not reset the page search boundary");
+        finished.exec();
+        require(links->hasPageSearchBoundary(), "WPE missed the last visible position");
+        const auto scan = [&](const QString &query, SearchScope scope) {
+            QVector<SearchHit> result;
+            links->search(
+                    query,
+                    [&](SearchBatch batch) {
+                        require(!batch.limited, "WPE did not resolve the page search boundary");
+                        result += batch.hits;
+                        if (batch.done)
+                            finished.quit();
+                    },
+                    scope);
+            finished.exec();
+            return result;
+        };
+        const auto inlineMatch = scan("needle through markup", SearchScope::Book);
+        require(inlineMatch.size() == 1 && inlineMatch.first().text == "needle through markup",
+                "WPE could not search across inline EPUB markup");
+        const auto before = scan(searchText, SearchScope::Before);
+        const auto after = scan(searchText, SearchScope::After);
+        require(!before.isEmpty() && !after.isEmpty() && before.size() + after.size() == 40
+                        && before.last().start != after.first().start,
+                "WPE search scopes did not partition the long chapter at the displayed page");
         links.reset();
         ReaderSession::drain([&] { finished.quit(); });
         finished.exec();

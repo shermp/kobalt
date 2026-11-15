@@ -36,6 +36,7 @@ struct Page
     QImage image;
     PageInfo pages;
     Location anchor;
+    Location pageEnd;
     QVector<PageLink> links;
     spike::Revision revision;
     Restoration restoration = Restoration::Unresolved;
@@ -63,6 +64,8 @@ public:
     bool contains(const Location &location) const { return source_.spine.contains(location.href); }
 
     std::shared_ptr<WebResources> resources() const { return source_.resources; }
+
+    bool hasPageSearchBoundary() const { return displayed_.pageEnd.valid(); }
 
     Location destination(const QString &token, const QByteArray &fingerprint,
                          QString *fragment = nullptr) const;

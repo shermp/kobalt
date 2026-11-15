@@ -530,7 +530,7 @@ void SearchPanel::append(const SearchBatch &batch, int totalPages)
     scanning = !batch.done;
     hits += batch.hits;
     searched = true;
-    const bool limited = !pageScopes && batch.limited;
+    const bool limited = batch.limited;
     complete = batch.done && !limited;
     pendingStatus =
             strings::get(limited              ? "search_panel.search_stopped"
