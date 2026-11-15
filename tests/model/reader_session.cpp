@@ -2628,6 +2628,47 @@ static int webKitReader(int argc, char **argv)
         require(!hits.isEmpty() && hits.size() < 40,
                 "WPE did not deliver a bounded chapter batch before cancellation");
         links.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        qputenv("KOBALT_WPE_RENDERER", QFile::encodeName(recorder.fileName()));
+        const auto descriptors = [] {
+            return QDir("/proc/self/fd")
+                    .entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot)
+                    .size();
+        };
+        const auto initialDescriptors = descriptors();
+        const auto longBook = fixture.filePath("long-book.epub");
+        require(test::writeBook(fixture.path(), "long-book.epub", test::songbook(180)),
+                "Could not stage the long WPE fixture");
+        for (int open = 0; open < 3; ++open) {
+            auto longReader = openAgain(longBook, {}, firstSize);
+            const auto pid = rendererPid();
+            require(longReader->chapters().size() == 180 && longReader->goToChapter(140),
+                    "WPE could not navigate deep into a long book");
+            finished.exec();
+            const auto start = longReader->state().value("position");
+            const auto pixels = longReader->image().copy();
+            for (const int direction : { 1, -1 }) {
+                for (int page = 0; page < 8; ++page) {
+                    require(longReader->turn(direction), "WPE declined a long-book stress turn");
+                    finished.exec();
+                    require(longReader->error().isEmpty(), "WPE failed a long-book stress turn");
+                }
+            }
+            require(longReader->state().value("position") == start && longReader->image() == pixels,
+                    "Repeated WPE turns changed the restored page");
+            longReader->previewAdjacentPage(1, thumbnailBounds, {}, [](QImage, bool) {
+                require(false, "A WPE preview callback escaped session close");
+            });
+            longReader.reset();
+            ReaderSession::drain([&] { finished.quit(); });
+            finished.exec();
+            require(::kill(pid, 0) == -1 && errno == ESRCH,
+                    "The WPE renderer remained after the session drained");
+        }
+        require(descriptors() <= initialDescriptors, "WPE sessions leaked parent descriptors");
+#endif
         ReaderSession::drain([&app] { app.quit(); });
     });
     return app.exec();
