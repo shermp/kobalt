@@ -14,6 +14,7 @@ struct Page
     unsigned width = 0, height = 0, column = 0, fontSize = 18;
     std::string href = {};
     std::optional<Location> location = {};
+    std::string fragment = {};
 };
 
 class View
@@ -26,8 +27,11 @@ public:
          const char *securityPolicy = nullptr);
     ~View();
     void show(Page, GCancellable *, Completion);
+
     std::optional<PageInfo> pageInfo() const { return confirmed; }
+
     bool usable() const { return healthy; }
+
     bool sawExternalResource() const { return externalResource; }
 
 private:

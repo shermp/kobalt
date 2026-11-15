@@ -747,11 +747,12 @@ void Reader::syncReadingControls()
                     { bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
                       ui::IconRendition::Action });
     }
-    toolbarComposition.annotate->setVisible(standardActions && !settingsOpen && !zen
-                                            && features::enabled(preferences, features::Annotations)
-                                            && !quickAnnotations());
-    toolbarComposition.bookmarks->setVisible(standardActions && !settingsOpen && !zen
-                                             && (bookmarksShown || annotationsShown || wordsShown));
+    toolbarComposition.annotate->setVisible(
+            standardActions && !settingsOpen && !zen
+            && features::enabled(preferences, features::Annotations) && !quickAnnotations());
+    toolbarComposition.bookmarks->setVisible(
+            !settingsOpen && (!zen || !standardActions)
+            && (bookmarksShown || (standardActions && (annotationsShown || wordsShown))));
     toolbarComposition.formattingWarning->setVisible(standardActions && !settingsOpen && !zen
                                                      && session->formattingWarning());
     toolbarButtons.graph->setEnabled(standardActions && !session->busy()

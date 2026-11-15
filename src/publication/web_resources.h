@@ -1,6 +1,7 @@
 #pragma once
 
 #include "resource_cache.h"
+#include "reading/chapter.h"
 
 namespace kobalt {
 class Publication;
@@ -19,9 +20,18 @@ public:
 
     static std::unique_ptr<WebResources> open(const Publication &, std::shared_ptr<ResourceCache>,
                                               std::shared_ptr<SourceLease>, QString *error);
+
     const QByteArray &fingerprint() const { return fingerprint_; }
+
     const QStringList &spine() const { return spine_; }
+
     QString navigation() const { return navigation_; }
+
+    QString title() const { return title_; }
+
+    QString author() const { return author_; }
+
+    QVector<ChapterLink> chapters();
 
     QByteArray url(const QString &member) const;
     Resource read(const QByteArray &encodedUrl);
@@ -38,7 +48,7 @@ private:
 
     QByteArray origin_, fingerprint_;
     QStringList spine_;
-    QString navigation_;
+    QString navigation_, ncx_, title_, author_;
     QMap<QByteArray, Member> members_;
     std::shared_ptr<ResourceCache> cache_;
     std::shared_ptr<SourceLease> lease_;

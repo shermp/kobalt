@@ -12,6 +12,8 @@ The Reader and the standalone Library share `reader-settings.json`. Each applies
 
 Native position mapping accepts collapsed XML whitespace for unique IDs only when the normalized source text matches the engine text. Import translates source UTF-16 offsets to engine offsets; export chooses the last source boundary for a collapsed run. Existing exact mappings, duplicate-ID checks and structural fallbacks retain their behavior. This changes no saved-data or parsed-book format, and requires no cache invalidation.
 
+Book records can carry an optional `source_location` for switching between koblaze and WPE. It stores the publication fingerprint and Blaze Location version 1, including the spine href, element path, counted code-point offset and affinity. It also records the unchanged XPointer and `dom_version` from that checkpoint. If an older reader moves the native position, the original and recorded values diverge and the companion is ignored. WPE updates the companion after a reading move and copies matching observed Nickel progress into the Kobalt record for reconciliation. Koblaze still writes its XPointer and DOM version. Unknown source-location records remain in place. Book-record format and database schema stay unchanged.
+
 `page_animations` retains the user’s configured preference in both themes. On the older i.MX display backend, dark mode suppresses the animation at runtime without saving a different value. Returning to light mode restores the preference. Settings schema 1 and reading-data and cache formats stay unchanged.
 
 The optional global `activity_welcome_seen` Boolean records that Activity's first-opening alert was shown; it is written through the profile writer and defaults to false. The graph button and Settings share the existing global `dense_stats_chart` Boolean. The graph button writes it through the profile writer and restores the saved mode if the write fails. No saved-data or cache format changes.
@@ -64,7 +66,7 @@ Book state now lives in `kobalt.sqlite`. Legacy book state uses a host-selected 
 
 Legacy JSON bookmarks and annotations share `annotations/<book-key>/`. `book.json` has `version: 1`, `identity`, `title` and `fingerprint`. Book keys come from `BookmarkStore::bookKey`: native book identities remain stable across downloads; sideloaded books use their content fingerprint. A changed file can adopt annotations from the previous record of the same path.
 
-`bookmarks.json` has `version: 1` and a `bookmarks` array. Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Positions are canonical CREngine XPointers, not page numbers. Dates are UTC ISO 8601 strings.
+`bookmarks.json` has `version: 1` and a `bookmarks` array. Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Koblaze bookmarks store their CREngine XPointers. WPE bookmarks store fingerprint-bound version 1 source locations in the same position field. Older readers can retain those bookmarks as unresolved entries. Dates are UTC ISO 8601 strings.
 
 Bookmarks support optional `name` and `icon` strings, limited to 128 and 64 UTF-16 code units. Missing fields mean an ordinary bookmark. A nonempty icon pins the bookmark; each book permits eight pins. Unknown icon tokens retain their stored value and display a star. Pinned bookmarks retain their exact anchors when reflow places several bookmarks on one page. Ordinary bookmarks still merge.
 

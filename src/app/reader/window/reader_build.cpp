@@ -868,9 +868,10 @@ void Reader::buildToolbar()
     if (session->usesWebKit()) {
         for (auto *action :
              { toolbarButtons.typography, toolbarButtons.layout, toolbarButtons.graph,
-               toolbarComposition.search, toolbarComposition.sync, toolbarComposition.bookmarks,
-               toolbarComposition.annotate, toolbarComposition.settings })
+               toolbarComposition.search, toolbarComposition.sync, toolbarComposition.annotate,
+               toolbarComposition.settings })
             action->setEnabled(false);
+        toolbarComposition.readingActions.append(toolbarComposition.bookmarks);
         for (const int delta : { -2, 2 }) {
             auto *button = new ui::Button(delta < 0 ? QStringLiteral("A−") : QStringLiteral("A+"),
                                           topControls);
@@ -2216,8 +2217,8 @@ void Reader::connectPageInput()
         if (!annotationMode && point.y() >= page->topHeight()
             && point.y() < page->height() - page->bottomHeight() && openLink(bodyPoint, true))
             return;
-        if (!session->usesWebKit() && features::enabled(preferences, features::Bookmarks)
-            && bookmarks->available() && page->bookmarkCorner().contains(point)) {
+        if (features::enabled(preferences, features::Bookmarks) && bookmarks->available()
+            && page->bookmarkCorner().contains(point)) {
             toggleBookmark();
             return;
         }

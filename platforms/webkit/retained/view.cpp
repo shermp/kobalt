@@ -4,6 +4,7 @@
 #include <wpe/headless/wpe-headless.h>
 
 #include <cmath>
+#include <string_view>
 #include <utility>
 
 namespace retained {
@@ -57,13 +58,15 @@ constexpr char layoutScript[] = R"JS(
         globalThis.retainedTail = tail;
     }
     let actual = column === 0xffffffff ? columns - 1 : column, quality = 2;
-    if (restore) {
-        const indexes = path ? path.split(",").map(Number) : [];
-        const resolved = resolveSource(indexes, offset, after);
+    if (restore || fragment) {
+        const element = fragment ? document.getElementById(fragment) : null;
+        const indexes = fragment ? (element ? elementPath(element) : null)
+                                 : (path ? path.split(",").map(Number) : []);
+        const resolved = indexes ? resolveSource(indexes, fragment ? -1 : offset, after) : null;
         if (!resolved)
             return [column, columns, 2, [], -1, true, 2];
         quality = resolved[2];
-        if (indexes.length || offset >= 0) {
+        if (fragment || indexes.length || offset >= 0) {
             const rect = positionRect(resolved[0], resolved[1], after);
             if (rect) {
                 const position = rtl ? width - rect.right - window.scrollX : rect.left + window.scrollX;
@@ -84,7 +87,7 @@ constexpr char layoutScript[] = R"JS(
     if (window.scrollX !== scroll || (requireFixtureFont && document.documentElement.hasAttribute('data-book-script')))
         throw new Error('Scroll position or script policy mismatch: expected ' + scroll + ' got ' + window.scrollX + ' extent ' + document.documentElement.scrollWidth);
     const anchor = visibleSource(width, height);
-    return [actual, columns, quality, ...anchor];
+    return [actual, columns, quality, ...anchor, visibleLinks(width, height)];
 )JS";
 
 bool integer(JSCValue *array, unsigned index, int min, int max, int &out)
@@ -124,8 +127,30 @@ bool readPageInfo(JSCValue *value, const std::string &href, PageInfo &info)
             return false;
         anchor.path.push_back(unsigned(index));
     }
-    info = {unsigned(column), unsigned(count), std::move(anchor), Restoration(precision),
-            Restoration(quality)};
+    info = { unsigned(column), unsigned(count), std::move(anchor), Restoration(precision),
+             Restoration(quality) };
+    {
+        g_autoptr(JSCValue) links = jsc_value_object_get_property_at_index(value, 7);
+        if (links && jsc_value_is_array(links)) {
+            g_autoptr(JSCValue) length = jsc_value_object_get_property(links, "length");
+            const auto count = length ? jsc_value_to_int32(length) : 0;
+            for (int i = 0; i < count && i < 24; ++i) {
+                g_autoptr(JSCValue) row = jsc_value_object_get_property_at_index(links, i);
+                if (!row || !jsc_value_is_array(row))
+                    continue;
+                g_autoptr(JSCValue) target = jsc_value_object_get_property_at_index(row, 0);
+                g_autofree char *uri = target && jsc_value_is_string(target)
+                        ? jsc_value_to_string(target)
+                        : nullptr;
+                int x, y, width, height;
+                if (uri && std::string_view(uri).size() <= 1800 && integer(row, 1, 0, 2048, x)
+                    && integer(row, 2, 0, 2048, y) && integer(row, 3, 1, 2048, width)
+                    && integer(row, 4, 1, 2048, height))
+                    info.links.push_back(
+                            { uri, unsigned(x), unsigned(y), unsigned(width), unsigned(height) });
+            }
+        }
+    }
     return column < count;
 }
 
@@ -157,9 +182,8 @@ View::View(WebKitWebContext *context, const char *style, bool fixtureFont,
     webkit_settings_set_javascript_can_open_windows_automatically(settings, FALSE);
     g_autoptr(WebKitNetworkSession) network = webkit_network_session_new_ephemeral();
     g_autoptr(WebKitUserContentManager) content = webkit_user_content_manager_new();
-    auto *sheet =
-            webkit_user_style_sheet_new(style, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,
-                                       WEBKIT_USER_STYLE_LEVEL_USER, nullptr, nullptr);
+    auto *sheet = webkit_user_style_sheet_new(style, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,
+                                              WEBKIT_USER_STYLE_LEVEL_USER, nullptr, nullptr);
     webkit_user_content_manager_add_style_sheet(content, sheet);
     webkit_user_style_sheet_unref(sheet);
     auto *display = wpe_display_headless_new();
@@ -172,60 +196,71 @@ View::View(WebKitWebContext *context, const char *style, bool fixtureFont,
     g_signal_connect(view, "resource-load-started",
                      G_CALLBACK(+[](WebKitWebView *, WebKitWebResource *, WebKitURIRequest *request,
                                     gpointer data) {
-        auto &self = *static_cast<View *>(data);
-        const auto *uri = webkit_uri_request_get_uri(request);
-        if (!uri || !g_str_has_prefix(uri, "kobalt-epub://book-"))
-            self.externalResource = true;
-    }), this);
+                         auto &self = *static_cast<View *>(data);
+                         const auto *uri = webkit_uri_request_get_uri(request);
+                         if (!uri || !g_str_has_prefix(uri, "kobalt-epub://book-"))
+                             self.externalResource = true;
+                     }),
+                     this);
     g_signal_connect(view, "decide-policy",
                      G_CALLBACK(+[](WebKitWebView *, WebKitPolicyDecision *decision,
                                     WebKitPolicyDecisionType type, gpointer data) -> gboolean {
-        auto &self = *static_cast<View *>(data);
-        if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION && self.loading) {
-            auto *action = webkit_navigation_policy_decision_get_navigation_action(
-                    WEBKIT_NAVIGATION_POLICY_DECISION(decision));
-            auto *request = webkit_navigation_action_get_request(action);
-            if (self.candidate.uri == webkit_uri_request_get_uri(request))
-                return FALSE;
-        }
-        if (type == WEBKIT_POLICY_DECISION_TYPE_RESPONSE && self.loading) {
-            auto *response = WEBKIT_RESPONSE_POLICY_DECISION(decision);
-            auto *request = webkit_response_policy_decision_get_request(response);
-            if (self.candidate.uri == webkit_uri_request_get_uri(request))
-                return FALSE;
-        }
-        webkit_policy_decision_ignore(decision);
-        return TRUE;
-    }), this);
+                         auto &self = *static_cast<View *>(data);
+                         if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION
+                             && self.loading) {
+                             auto *action = webkit_navigation_policy_decision_get_navigation_action(
+                                     WEBKIT_NAVIGATION_POLICY_DECISION(decision));
+                             auto *request = webkit_navigation_action_get_request(action);
+                             if (self.candidate.uri == webkit_uri_request_get_uri(request))
+                                 return FALSE;
+                         }
+                         if (type == WEBKIT_POLICY_DECISION_TYPE_RESPONSE && self.loading) {
+                             auto *response = WEBKIT_RESPONSE_POLICY_DECISION(decision);
+                             auto *request = webkit_response_policy_decision_get_request(response);
+                             if (self.candidate.uri == webkit_uri_request_get_uri(request))
+                                 return FALSE;
+                         }
+                         webkit_policy_decision_ignore(decision);
+                         return TRUE;
+                     }),
+                     this);
     g_signal_connect(view, "load-changed",
                      G_CALLBACK(+[](WebKitWebView *, WebKitLoadEvent event, gpointer data) {
-        auto &self = *static_cast<View *>(data);
-        if (event == WEBKIT_LOAD_FINISHED && self.loading && self.completion) {
-            self.loading = false;
-            self.layout();
-        }
-    }), this);
+                         auto &self = *static_cast<View *>(data);
+                         if (event == WEBKIT_LOAD_FINISHED && self.loading && self.completion) {
+                             self.loading = false;
+                             self.layout();
+                         }
+                     }),
+                     this);
     g_signal_connect(view, "load-failed",
                      G_CALLBACK(+[](WebKitWebView *, WebKitLoadEvent, const char *, GError *error,
                                     gpointer data) -> gboolean {
-        auto &self = *static_cast<View *>(data);
-        if (self.loading && self.completion) {
-            self.loading = false;
-            // A provisional failure can still be followed by LOAD_FINISHED.
-            // Settle it outside this emission before attempting a rollback.
-            const auto reason = g_strdup(error->message);
-            g_idle_add_full(G_PRIORITY_DEFAULT, +[](gpointer opaque) -> gboolean {
-                auto *failure = static_cast<std::pair<View *, gchar *> *>(opaque);
-                failure->first->failed(failure->second);
-                return G_SOURCE_REMOVE;
-            }, new std::pair<View *, gchar *>(&self, reason), +[](gpointer opaque) {
-                auto *failure = static_cast<std::pair<View *, gchar *> *>(opaque);
-                g_free(failure->second);
-                delete failure;
-            });
-        }
-        return TRUE;
-    }), this);
+                         auto &self = *static_cast<View *>(data);
+                         if (self.loading && self.completion) {
+                             self.loading = false;
+                             // A provisional failure can still be followed by LOAD_FINISHED.
+                             // Settle it outside this emission before attempting a rollback.
+                             const auto reason = g_strdup(error->message);
+                             g_idle_add_full(
+                                     G_PRIORITY_DEFAULT,
+                                     +[](gpointer opaque) -> gboolean {
+                                         auto *failure =
+                                                 static_cast<std::pair<View *, gchar *> *>(opaque);
+                                         failure->first->failed(failure->second);
+                                         return G_SOURCE_REMOVE;
+                                     },
+                                     new std::pair<View *, gchar *>(&self, reason),
+                                     +[](gpointer opaque) {
+                                         auto *failure =
+                                                 static_cast<std::pair<View *, gchar *> *>(opaque);
+                                         g_free(failure->second);
+                                         delete failure;
+                                     });
+                         }
+                         return TRUE;
+                     }),
+                     this);
 }
 
 View::~View()
@@ -239,22 +274,24 @@ View::~View()
 
 void View::show(Page page, GCancellable *cancel, Completion done)
 {
-    if (!healthy || completion || page.uri.compare(0, 19, "kobalt-epub://book-") != 0
-        || !page.width || !page.height || page.width > 2048 || page.height > 2048
-        || page.fontSize < 8 || page.fontSize > 96) {
+    if (!healthy || completion || page.uri.compare(0, 19, "kobalt-epub://book-") != 0 || !page.width
+        || !page.height || page.width > 2048 || page.height > 2048 || page.fontSize < 8
+        || page.fontSize > 96) {
         done(nullptr, "Invalid retained view request");
         return;
     }
     if (page.href.empty())
         page.href = page.uri.substr(page.uri.find('/', sizeof("kobalt-epub://") - 1) + 1);
-    if (page.location && (page.location->version != 1 || page.location->href != page.href
-                          || page.location->path.size() > 128 || page.location->offset < -1
-                          || page.location->offset > 2 * 1024 * 1024)) {
+    if (page.location
+        && (page.location->version != 1 || page.location->href != page.href
+            || page.location->path.size() > 128 || page.location->offset < -1
+            || page.location->offset > 2 * 1024 * 1024)) {
         done(nullptr, "Unresolved source location");
         return;
     }
-    if (!page.location && confirmed && page.uri == current.uri
-        && (page.width != current.width || page.height != current.height || page.fontSize != current.fontSize))
+    if (!page.location && page.fragment.empty() && confirmed && page.uri == current.uri
+        && (page.width != current.width || page.height != current.height
+            || page.fontSize != current.fontSize))
         page.location = confirmed->anchor;
     candidate = std::move(page);
     completion = std::move(done);
@@ -293,7 +330,10 @@ void View::layout()
         path += std::to_string(index);
     }
     g_variant_builder_add(&args, "{sv}", "path", g_variant_new_string(path.c_str()));
-    g_variant_builder_add(&args, "{sv}", "restore", g_variant_new_uint32(candidate.location.has_value()));
+    g_variant_builder_add(&args, "{sv}", "fragment",
+                          g_variant_new_string(candidate.fragment.c_str()));
+    g_variant_builder_add(&args, "{sv}", "restore",
+                          g_variant_new_uint32(candidate.location.has_value()));
     g_variant_builder_add(&args, "{sv}", "offset", g_variant_new_int32(location.offset));
     g_variant_builder_add(&args, "{sv}", "after", g_variant_new_uint32(location.after));
     g_autoptr(GVariant) parameters = g_variant_ref_sink(g_variant_builder_end(&args));
@@ -309,7 +349,8 @@ void View::layout()
                         WEBKIT_WEB_VIEW(source), result, &error);
                 if (!readPageInfo(value, self.candidate.href, self.measured))
                     return self.failed(error ? error->message : "Layout bridge did not complete");
-                if (self.candidate.location && self.measured.restoration == Restoration::Unresolved)
+                if ((self.candidate.location || !self.candidate.fragment.empty())
+                    && self.measured.restoration == Restoration::Unresolved)
                     return self.failed("Unresolved source location");
                 if (!self.restoring && g_cancellable_is_cancelled(self.cancellable))
                     return self.failed("Cancelled");
@@ -318,8 +359,10 @@ void View::layout()
                         self.restoring ? nullptr : self.cancellable,
                         +[](GObject *, GAsyncResult *snapshot, gpointer data) {
                             static_cast<View *>(data)->snapshot(snapshot);
-                        }, data);
-            }, this);
+                        },
+                        data);
+            },
+            this);
 }
 
 void View::snapshot(GAsyncResult *result)
@@ -336,6 +379,7 @@ void View::snapshot(GAsyncResult *result)
     current = candidate;
     current.column = measured.column;
     current.location.reset();
+    current.fragment.clear();
     confirmed = measured;
     complete(image, nullptr);
 }

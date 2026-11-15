@@ -62,6 +62,7 @@ struct OpeningOutput
     bool savedMatches = false;
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     webkit::Source webSource;
+    Location webStart;
 #endif
 };
 
@@ -77,6 +78,7 @@ struct OpeningState
     bool savedMatches = false;
     // Set by mergeSavedState. `initial` is the host position to open at, if any.
     bool restart = false;
+    Location sourceLocation;
     QString initial;
     std::shared_ptr<ResourceCache> resources;
     std::shared_ptr<std::atomic_bool> contentRejected = std::make_shared<std::atomic_bool>(false);

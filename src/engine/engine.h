@@ -124,6 +124,9 @@ public:
     // The engine position of a shared location, or empty when unresolved.
     virtual QString positionOf(const Location &location,
                                Restoration *restoration = nullptr) const = 0;
+
+    virtual bool goToLocation(const Location &location) { return goTo(positionOf(location)); }
+
     // The page of each position in the current layout, or -1 where a
     // position no longer resolves.
     virtual QVector<int> pagesOf(const QStringList &positions, bool rangeEndpoints = false,

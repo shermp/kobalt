@@ -152,6 +152,8 @@ bool BookmarkSession::sync()
 // at the page start with the oldest date.
 void BookmarkSession::merge()
 {
+    if (session.usesWebKit())
+        return;
     QMap<int, int> counts;
     for (int p : pages_)
         if (p >= 0)

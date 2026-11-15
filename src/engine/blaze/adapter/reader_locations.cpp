@@ -293,4 +293,27 @@ QString EngineDocument::positionOf(const Location &location, Restoration *restor
     const auto end = ldomXPointer(nodes.last(), nodes.last()->getText().length());
     return finish(location.offset == counted ? Restoration::Exact : Restoration::Approximate, end);
 }
+
+bool EngineDocument::goToLocation(const Location &location)
+{
+    if (!location.valid())
+        return false;
+    const auto original = position();
+    const auto first = windowFirst_, last = windowLast_;
+    const auto item = spineItems().indexOf(location.href);
+    if (item < 0)
+        return false;
+    const bool moved = windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_);
+    if (moved) {
+        const auto unit = unitFrom(item);
+        if (!showSpineItems(unit.first, unit.second))
+            return false;
+    }
+    const auto anchor = positionOf(location);
+    if (!anchor.isEmpty() && goTo(anchor))
+        return true;
+    if (moved && showSpineItems(first, last))
+        goTo(original);
+    return false;
+}
 } // namespace kobalt

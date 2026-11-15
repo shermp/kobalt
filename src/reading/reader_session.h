@@ -18,6 +18,7 @@ struct OpeningOutput;
 namespace webkit {
 class BookClient;
 }
+
 struct BookmarkLocations
 {
     QVector<int> pages, order;
@@ -202,6 +203,8 @@ public:
     bool canTurn() const;
 
     bool usesWebKit() const { return webKit_; }
+
+    bool webKitPositionChanged() const { return webKitPositionChanged_; }
 
     const Location &sourceLocation() const { return frame.sourceLocation; }
 
@@ -521,6 +524,7 @@ public:
 private:
     friend struct ReaderLocationProbe;
     bool webKit_ = false;
+    bool webKitPositionChanged_ = false;
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     webkit::BookClient *webKitClient_ = nullptr;
     void openWebKit(const QString &, OpeningOutput, const QString &,

@@ -1,4 +1,6 @@
 #include "book_client.h"
+#include "publication/source_position.h"
+#include <QUrl>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 #  include "engine/engine_worker.h"
@@ -156,7 +158,34 @@ void BookClient::start()
     ::close(sentinel);
 }
 
-void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done)
+Location BookClient::destination(const QString &token, const QByteArray &fingerprint,
+                                 QString *fragment) const
+{
+    const auto anchor = sourcePositionFromToken(token, fingerprint);
+    if (anchor.valid())
+        return contains(anchor) ? anchor : Location{};
+    if (!token.startsWith(QStringLiteral("kobalt-epub://book-"))
+        || token.size() > int(spike::maxBookHref + spike::maxFragmentBytes))
+        return {};
+    auto uri = QUrl::fromEncoded(token.toUtf8(), QUrl::StrictMode);
+    if (!uri.isValid() || uri.hasQuery())
+        return {};
+    const auto id = uri.fragment(QUrl::FullyDecoded);
+    if (id.toUtf8().size() > int(spike::maxFragmentBytes) || id.contains(QChar(0)))
+        return {};
+    uri.setFragment(QString());
+    const auto index = source_.uris.indexOf(uri.toEncoded());
+    if (index < 0)
+        return {};
+    if (fragment)
+        *fragment = id;
+    Location location;
+    location.href = source_.spine[index];
+    return location;
+}
+
+void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done,
+                        const Location &target, const QString &fragment)
 {
     if (failed_ || closing_ || complete_) {
         done(errorPage(QStringLiteral("WebKit renderer is unavailable")));
@@ -167,7 +196,20 @@ void BookClient::render(QSize size, int fontPixels, int direction, quint64 layou
     layout_ = layout;
     index_ = displayed_.spineIndex;
     candidate_ = {};
-    if (!displayed_.anchor.href.isEmpty()) {
+    if (target.valid()) {
+        index_ = source_.spine.indexOf(target.href);
+        if (index_ < 0) {
+            done(errorPage(QStringLiteral("WebKit destination is outside the book spine")));
+            return;
+        }
+        const auto fragmentBytes = fragment.toUtf8();
+        candidate_.fragment.assign(fragmentBytes.constData(), fragmentBytes.size());
+        candidate_.restore = fragmentBytes.isEmpty();
+        candidate_.anchor.offset = target.offset;
+        candidate_.anchor.after = target.after;
+        for (const auto index : target.path)
+            candidate_.anchor.path.push_back(unsigned(index));
+    } else if (!displayed_.anchor.href.isEmpty()) {
         const int column = displayed_.pages.chapterPage.value();
         const int columns = displayed_.pages.chapterPages.value();
         if (!direction) {
@@ -194,7 +236,7 @@ void BookClient::render(QSize size, int fontPixels, int direction, quint64 layou
     transport_->deadline.start(15000);
     if (ready_)
         submit();
-    else
+    else if (!greeting_)
         start();
 }
 
@@ -307,6 +349,14 @@ bool BookClient::handle(const spike::Message &message)
     page.anchor.offset = packet.anchor.offset;
     page.anchor.after = packet.anchor.after;
     page.restoration = Restoration(packet.restoration);
+    for (const auto &link : packet.links) {
+        const auto token = QString::fromUtf8(link.uri.data(), int(link.uri.size()));
+        if (destination(token, {}).valid() && link.x + link.width <= candidate_.frame.width
+            && link.y + link.height <= candidate_.frame.height)
+            page.links.append({ token,
+                                { QRect(link.x, link.y, link.width, link.height) },
+                                LinkKind::Passage });
+    }
     finish(std::move(page));
     return true;
 }

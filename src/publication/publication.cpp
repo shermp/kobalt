@@ -99,7 +99,7 @@ struct PackageItem
 
 struct Package
 {
-    QString path, identifier;
+    QString path, identifier, title, author, toc;
     QByteArray adobeKey;
     int matchingIdentifiers = 0;
     QMap<QString, PackageItem> items;
@@ -198,8 +198,9 @@ bool readPackage(const ReadPackageResource &read, Package &result, bool scoped)
         if (!package.isStartElement())
             continue;
         ++depth;
-        if (scoped && package.attributes().hasAttribute(
-                QStringLiteral("http://www.w3.org/XML/1998/namespace"), QStringLiteral("base")))
+        if (scoped
+            && package.attributes().hasAttribute(
+                    QStringLiteral("http://www.w3.org/XML/1998/namespace"), QStringLiteral("base")))
             return false;
         if (depth == 1) {
             if (package.name() != QStringLiteral("package")
@@ -219,10 +220,13 @@ bool readPackage(const ReadPackageResource &read, Package &result, bool scoped)
             manifestDepth = depth;
         } else if (depth == 2 && package.name() == QStringLiteral("spine")) {
             spineDepth = depth;
-            if (scoped && (spineSeen || package.namespaceUri() != QStringLiteral("http://www.idpf.org/2007/opf")))
+            if (scoped
+                && (spineSeen
+                    || package.namespaceUri() != QStringLiteral("http://www.idpf.org/2007/opf")))
                 return false;
             spineSeen = true;
-            result.contentIds.insert(package.attributes().value("toc").toString());
+            result.toc = package.attributes().value("toc").toString();
+            result.contentIds.insert(result.toc);
         } else if (depth == spineDepth + 1 && spineDepth == 2
                    && package.name() == QStringLiteral("itemref")) {
             if (scoped && package.namespaceUri() != QStringLiteral("http://www.idpf.org/2007/opf"))
@@ -230,9 +234,20 @@ bool readPackage(const ReadPackageResource &read, Package &result, bool scoped)
             const auto id = package.attributes().value("idref").toString();
             result.spine.append(id);
             result.contentIds.insert(id);
+        } else if (scoped && depth == metadataDepth + 1 && metadataDepth == 2
+                   && package.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")
+                   && (package.name() == QStringLiteral("title")
+                       || package.name() == QStringLiteral("creator"))) {
+            auto &metadata =
+                    package.name() == QStringLiteral("title") ? result.title : result.author;
+            const auto text = package.readElementText().simplified().left(1024);
+            if (metadata.isEmpty())
+                metadata = text;
+            --depth;
         } else if (depth == metadataDepth + 1 && metadataDepth == 2
-                 && package.name() == QStringLiteral("identifier")
-                 && package.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
+                   && package.name() == QStringLiteral("identifier")
+                   && package.namespaceUri()
+                           == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
             const bool unique =
                     package.attributes().value("id") == identifierId && !identifierId.isEmpty();
             const auto text = package.readElementText();
@@ -254,12 +269,14 @@ bool readPackage(const ReadPackageResource &read, Package &result, bool scoped)
                    && package.name() == QStringLiteral("item")) {
             const auto attributes = package.attributes();
             const auto id = attributes.value("id").toString();
-            const auto path = packageMember(packagePath, attributes.value("href").toString(), scoped);
-            if (id.isEmpty() || result.items.contains(id) || path.isEmpty() || result.paths.contains(path))
+            const auto path =
+                    packageMember(packagePath, attributes.value("href").toString(), scoped);
+            if (id.isEmpty() || result.items.contains(id) || path.isEmpty()
+                || result.paths.contains(path))
                 return false;
             const auto media = attributes.value("media-type").toString().trimmed().toLower();
             const auto properties = attributes.value("properties").toString();
-            result.items.insert(id, {path, media, properties});
+            result.items.insert(id, { path, media, properties });
             result.paths.insert(path);
             result.contentIds.insert(attributes.value("fallback").toString());
             if (declaredFontType(media)
@@ -271,7 +288,8 @@ bool readPackage(const ReadPackageResource &read, Package &result, bool scoped)
     result.identifier = identifier;
     result.matchingIdentifiers = matchingIdentifiers;
     result.adobeKey = adobeKey;
-    return !package.hasError() && (!scoped || (manifestSeen && spineSeen && !result.spine.isEmpty()));
+    return !package.hasError()
+            && (!scoped || (manifestSeen && spineSeen && !result.spine.isEmpty()));
 }
 
 // Font obfuscation is an EPUB embedding convention, not content encryption.
@@ -293,7 +311,8 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
     if (!readPackage(read, package, false) || package.matchingIdentifiers != 1
         || package.identifier.isEmpty())
         return false;
-    const auto idpfKey = QCryptographicHash::hash(package.identifier.toUtf8(), QCryptographicHash::Sha1);
+    const auto idpfKey =
+            QCryptographicHash::hash(package.identifier.toUtf8(), QCryptographicHash::Sha1);
     const auto metadata = read("META-INF/encryption.xml");
     QXmlStreamReader check(metadata);
     while (!check.atEnd()) {
@@ -392,6 +411,7 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
     obfuscatedFonts = std::move(targets);
     return true;
 }
+
 // Encode each segment independently. Look up the exact encoded URL before
 // reading any bytes, so alternate encodings cannot bypass the allowlist.
 QByteArray memberUrl(const QByteArray &origin, const QString &member)
@@ -443,8 +463,8 @@ bool hasDeclaredSignature(const QByteArray &bytes, const QByteArray &media)
 } // namespace
 
 std::unique_ptr<WebResources> WebResources::open(const Publication &publication,
-                                                std::shared_ptr<ResourceCache> cache,
-                                                std::shared_ptr<SourceLease> lease, QString *error)
+                                                 std::shared_ptr<ResourceCache> cache,
+                                                 std::shared_ptr<SourceLease> lease, QString *error)
 {
     auto reject = [error](const char *reason) -> std::unique_ptr<WebResources> {
         if (error)
@@ -472,6 +492,11 @@ std::unique_ptr<WebResources> WebResources::open(const Publication &publication,
     auto scope = std::unique_ptr<WebResources>(new WebResources);
     scope->origin_ = "kobalt-epub://book-" + QByteArray::number(lease->generation());
     scope->fingerprint_ = publication.fingerprint();
+    scope->title_ = package.title;
+    scope->author_ = package.author;
+    const auto toc = package.items.value(package.toc);
+    if (toc.media == QStringLiteral("application/x-dtbncx+xml") && cache->contains(toc.path))
+        scope->ncx_ = toc.path;
     const QRegularExpression whitespace(QStringLiteral("\\s+"));
     for (auto it = package.items.cbegin(); it != package.items.cend(); ++it) {
         const auto &item = it.value();
@@ -484,7 +509,7 @@ std::unique_ptr<WebResources> WebResources::open(const Publication &publication,
         const auto encoded = memberUrl(scope->origin_, item.path);
         if (encoded.isEmpty())
             continue;
-        scope->members_.insert(encoded, {item.path, media, size});
+        scope->members_.insert(encoded, { item.path, media, size });
         if (media == "application/xhtml+xml" && item.properties.split(whitespace).contains("nav")) {
             if (!scope->navigation_.isEmpty())
                 return reject("Ambiguous EPUB navigation");
@@ -503,6 +528,100 @@ std::unique_ptr<WebResources> WebResources::open(const Publication &publication,
     scope->cache_ = std::move(cache);
     scope->lease_ = std::move(lease);
     return scope;
+}
+
+QVector<ChapterLink> WebResources::chapters()
+{
+    QVector<ChapterLink> result;
+    const bool ncx = navigation_.isEmpty();
+    const auto member = ncx ? ncx_ : navigation_;
+    if (member.isEmpty() || lease_->revoked())
+        return result;
+    // The admitted OPF names the document. Read within the same cache and
+    // bound as the package. Only resolved spine members become menu targets.
+    const auto bytes = cache_->readBounded(member, packageLimit);
+    QXmlStreamReader xml(bytes);
+
+    struct Entry
+    {
+        QString title, link;
+    };
+
+    QVector<Entry> entries;
+    int depth = 0, navigationDepth = -1, textDepth = -1;
+    auto append = [&](const Entry &entry, int level) {
+        QUrl href(entry.link, QUrl::StrictMode);
+        const auto fragment = href.fragment(QUrl::FullyDecoded);
+        href.setFragment(QString());
+        const auto name = entry.link.startsWith('#')
+                ? member
+                : packageMember(member, href.toString(QUrl::FullyEncoded), true);
+        if (entry.title.isEmpty() || fragment.size() > 512 || !spine_.contains(name))
+            return;
+        auto target = QUrl::fromEncoded(url(name));
+        if (!fragment.isEmpty())
+            target.setFragment(fragment, QUrl::DecodedMode);
+        result.append({ entry.title.simplified().left(1024), target.toString(QUrl::FullyEncoded),
+                        -1, level });
+    };
+    while (!xml.atEnd() && result.size() < maximumChapterEntries && !lease_->revoked()) {
+        xml.readNext();
+        if (!cleanXml(xml)
+            && !(xml.tokenType() == QXmlStreamReader::DTD
+                 && xml.text().toString().trimmed() == QStringLiteral("<!DOCTYPE html>")))
+            return {};
+        const auto tag = xml.name();
+        const auto attributes = xml.attributes();
+        if (xml.isStartElement()) {
+            if (++depth > 128)
+                return {};
+            if (attributes.hasAttribute(QStringLiteral("http://www.w3.org/XML/1998/namespace"),
+                                        QStringLiteral("base")))
+                return {};
+            if (navigationDepth < 0
+                && (ncx ? tag == QStringLiteral("navMap")
+                        : tag == QStringLiteral("nav")
+                                    && attributes.value(
+                                               QStringLiteral("http://www.idpf.org/2007/ops"),
+                                               QStringLiteral("type"))
+                                            == QStringLiteral("toc")))
+                navigationDepth = depth;
+            if (navigationDepth < 0)
+                continue;
+            if (tag == (ncx ? QStringLiteral("navPoint") : QStringLiteral("li")))
+                entries.append(Entry{});
+            if (!entries.isEmpty()
+                && (ncx ? tag == QStringLiteral("content") : tag == QStringLiteral("a"))) {
+                auto &entry = entries.last();
+                entry.link = attributes.value(ncx ? "src" : "href").toString();
+                if (ncx) {
+                    // NCX places the label before the target and before nested rows.
+                    append(entry, entries.size() - 1);
+                } else {
+                    textDepth = depth;
+                }
+            }
+            if (ncx && !entries.isEmpty() && tag == QStringLiteral("text"))
+                textDepth = depth;
+        } else if (xml.isCharacters() && textDepth >= 0 && !entries.isEmpty()) {
+            auto &title = entries.last().title;
+            if (title.size() < 1024)
+                title += xml.text().toString().left(1024 - title.size());
+        } else if (xml.isEndElement()) {
+            if (depth == textDepth) {
+                if (!ncx && !entries.isEmpty())
+                    append(entries.last(), entries.size() - 1);
+                textDepth = -1;
+            }
+            if (!entries.isEmpty()
+                && tag == (ncx ? QStringLiteral("navPoint") : QStringLiteral("li")))
+                entries.removeLast();
+            if (depth == navigationDepth)
+                break;
+            --depth;
+        }
+    }
+    return xml.hasError() || lease_->revoked() ? QVector<ChapterLink>{} : result;
 }
 
 QByteArray WebResources::url(const QString &member) const
@@ -526,7 +645,7 @@ WebResources::Resource WebResources::read(const QByteArray &encodedUrl)
         || !hasDeclaredSignature(bytes, member->media))
         return {};
     servedBytes_ += bytes.size();
-    return {bytes, member->media};
+    return { bytes, member->media };
 }
 
 bool Publication::inspect(const QByteArray &source, QString *error, OpeningResult *result)
@@ -664,7 +783,8 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
     // Scan the whole directory before admitting supported font metadata, so an
     // LCP license or encrypted member is rejected regardless of entry order.
     QSet<QString> skippedFonts;
-    if (unsupportedMetadata && !supportedFontMetadata(source, sizes_, skippedFonts, obfuscatedFonts_))
+    if (unsupportedMetadata
+        && !supportedFontMetadata(source, sizes_, skippedFonts, obfuscatedFonts_))
         return inspectionFailure(
                 error, result, OpeningFailureKind::Unsupported,
                 strings::key("error.this_publication_needs_unsupported_font_or_resource_handling"));

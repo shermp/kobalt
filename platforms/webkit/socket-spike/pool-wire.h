@@ -3,13 +3,12 @@
 #include "wire.h"
 
 namespace spike {
-constexpr unsigned maxFrameBytes = 4 * 1024 * 1024;
+constexpr unsigned maxFrameBytes = 16 * 1024 * 1024;
 constexpr uint32_t bgraPremultiplied = 1;
 
 inline bool validGeometry(uint32_t width, uint32_t height, uint32_t capacity)
 {
-    return width && height && capacity <= maxFrameBytes
-            && uint64_t(width) * 4 <= capacity
+    return width && height && capacity <= maxFrameBytes && uint64_t(width) * 4 <= capacity
             && uint64_t(width) * 4 * height <= capacity;
 }
 
@@ -36,8 +35,8 @@ struct FrameSpec
         if (data.size() < 24)
             return false;
         const auto *p = data.data();
-        spec = {read(p, 8), uint32_t(read(p + 8, 4)), uint32_t(read(p + 12, 4)),
-                uint32_t(read(p + 16, 4)), uint32_t(read(p + 20, 4))};
+        spec = { read(p, 8), uint32_t(read(p + 8, 4)), uint32_t(read(p + 12, 4)),
+                 uint32_t(read(p + 16, 4)), uint32_t(read(p + 20, 4)) };
         return spec.generation && spec.slot < 2 && spec.color <= 1;
     }
 

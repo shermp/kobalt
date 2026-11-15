@@ -1,4 +1,5 @@
 #include "opening_job.h"
+#include "publication/source_position.h"
 #include "dictionaries/stardict.h"
 #include "appearance_settings.h"
 #include "engine/engine_activity.h"
@@ -237,6 +238,8 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     if (!job.pinnedAppearance.isEmpty())
         appearance::copy(saved, job.pinnedAppearance);
     state.restart = job.restartAtStart || !saved.value("finished_position").toString().isEmpty();
+    if (!state.restart)
+        state.sourceLocation = savedSourcePosition(saved, state.digest, true);
     // Keep the saved position until the document loads: it selects
     // the DOM version used by existing bookmarks and annotations.
     if (state.restart)
@@ -265,6 +268,8 @@ void openRetained(OpeningJob &job, OpeningState &state)
         state.outcome =
                 OpeningResult::failed(OpeningFailureKind::InvalidContent,
                                       strings::key("error.cannot_restore_the_retained_position"));
+    if (state.outcome.ready() && state.sourceLocation.valid())
+        engine->goToLocation(state.sourceLocation);
     if (state.outcome.ready() && !job.cancelled()) {
         state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration);
         state.frame.author = engine->author();
@@ -296,6 +301,8 @@ void openCold(OpeningJob &job, OpeningState &state)
             restartBook(job, state);
         else if (!state.initial.isEmpty())
             locate(job, state, state.initial);
+        if (outcome.ready() && state.sourceLocation.valid())
+            engine->goToLocation(state.sourceLocation);
         if (outcome.ready()) {
             job.report(OpeningStage::Ready, 0);
             state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration);
@@ -387,6 +394,7 @@ OpeningOutput runWebKitOpening(OpeningJob &job)
     inspectSource(job, state);
     OpeningOutput output;
     if (state.outcome.ready()) {
+        const auto sourceStart = savedSourcePosition(job.saved, state.digest);
         mergeSavedState(job, state);
         auto cache = job.factory(state.publication.sizes(), job.systemFont, state.contentRejected);
         QString error;
@@ -406,9 +414,21 @@ OpeningOutput runWebKitOpening(OpeningJob &job)
                 source.uris.append(uri);
             }
             source.resources = std::move(scope);
+            if (!state.restart)
+                output.webStart = sourceStart;
+            output.savedMatches = state.savedMatches;
             output.frame.state["font_pixels"] =
                     qBound(8, job.saved.value("font_pixels").toInt(18), 96);
-            output.frame.title = QFileInfo(job.path).completeBaseName();
+            output.frame.title = source.resources->title();
+            if (output.frame.title.isEmpty())
+                output.frame.title = QFileInfo(job.path).completeBaseName();
+            output.frame.author = source.resources->author();
+            output.frame.chapters = source.resources->chapters();
+            if (output.frame.chapters.isEmpty()) {
+                for (int i = 0; i < source.uris.size(); ++i)
+                    output.frame.chapters.append({ QFileInfo(source.spine[i]).completeBaseName(),
+                                                   QString::fromUtf8(source.uris[i]) });
+            }
             output.frame.state["title"] = output.frame.title;
         } else {
             const auto kind = state.publication.protectedBook() ? OpeningFailureKind::Protected

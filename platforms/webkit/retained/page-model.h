@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <functional>
 #include <optional>
 #include <string>
@@ -23,12 +24,19 @@ struct Location
 
 enum class Restoration { Exact, Approximate, Unresolved };
 
+struct PageLink
+{
+    std::string uri;
+    unsigned x = 0, y = 0, width = 0, height = 0;
+};
+
 struct PageInfo
 {
     unsigned column = 0, chapterPages = 0;
     Location anchor;
     Restoration precision = Restoration::Unresolved;
     Restoration restoration = Restoration::Unresolved;
+    std::vector<PageLink> links = {};
 };
 
 // In-memory page model for one publication and layout. Exact totals require
@@ -38,18 +46,24 @@ class PageModel
 {
 public:
     enum class Precision { Unknown, Estimated, Exact };
+
     struct Count
     {
         unsigned pages = 0;
         Precision precision = Precision::Unknown;
     };
+
     struct Chapter
     {
         std::string href;
         uint32_t bytes; // admitted XHTML size supplied by the owning publication
     };
 
-    explicit PageModel(std::vector<Chapter> spine) : spine(std::move(spine)), entries(this->spine.size()) {}
+    explicit PageModel(std::vector<Chapter> spine)
+        : spine(std::move(spine)), entries(this->spine.size())
+    {
+    }
+
     std::optional<unsigned> chapter(const std::string &href) const;
     bool observe(unsigned index, unsigned columns);
     void resetLayout();

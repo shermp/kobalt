@@ -153,3 +153,35 @@ function visibleSource(width, height) {
     }
     return [[], -1, true, 1];
 }
+
+function visibleLinks(width, height) {
+    const links = [];
+    const anchors = document.getElementsByTagName('a');
+    for (let i = 0; i < Math.min(anchors.length, 65536) && links.length < 24; ++i) {
+        const element = anchors[i];
+        const value = element.getAttribute('href');
+        if (!value || value.length > 1600)
+            continue;
+        let uri;
+        try {
+            uri = new URL(value, document.URL);
+        } catch {
+            continue;
+        }
+        const source = new URL(document.URL);
+        if (uri.protocol !== 'kobalt-epub:' || uri.host !== source.host || uri.search
+            || uri.username || uri.password || uri.href.length > 1800)
+            continue;
+        for (const rect of element.getClientRects()) {
+            const x = Math.max(0, Math.floor(rect.left));
+            const y = Math.max(0, Math.floor(rect.top));
+            const right = Math.min(width, Math.ceil(rect.right));
+            const bottom = Math.min(height, Math.ceil(rect.bottom));
+            if (right > x && bottom > y)
+                links.push([uri.href, x, y, right - x, bottom - y]);
+            if (links.length === 24)
+                break;
+        }
+    }
+    return links;
+}

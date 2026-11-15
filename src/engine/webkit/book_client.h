@@ -5,6 +5,7 @@
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 
 #  include "engine/query.h"
+#  include "engine/links.h"
 #  include "publication/location.h"
 #  include "publication/web_resources.h"
 #  include "platforms/webkit/socket-spike/book-wire.h"
@@ -33,6 +34,7 @@ struct Page
     QImage image;
     PageInfo pages;
     Location anchor;
+    QVector<PageLink> links;
     Restoration restoration = Restoration::Unresolved;
     int spineIndex = 0;
     bool before = false, after = false, boundary = false;
@@ -47,8 +49,14 @@ public:
 
     BookClient(QString executable, Source source, QSize capacity);
     ~BookClient() override;
-    void render(QSize size, int fontPixels, int direction, quint64 layout, Completion);
+    void render(QSize size, int fontPixels, int direction, quint64 layout, Completion,
+                const Location &target = {}, const QString &fragment = {});
     void accept(const Page &);
+
+    bool contains(const Location &location) const { return source_.spine.contains(location.href); }
+
+    Location destination(const QString &token, const QByteArray &fingerprint,
+                         QString *fragment = nullptr) const;
     // Close detaches completions immediately. The object deletes itself after
     // the process and the outstanding worker resource request have drained.
     void close();

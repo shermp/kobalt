@@ -229,6 +229,7 @@ private:
     quint64 nativeFinishGeneration = 0;
     QVector<std::function<void(NativeActivityResult)>> nativeFinishCallbacks;
     QJsonObject persistedCheckpoint(const QJsonObject &state) const;
+    void checkpointWebKit(std::function<void(bool)>);
     struct CloseCheckpoint;
     void finishCloseCheckpoint(const CloseCheckpoint &save, bool saved,
                                std::function<void(bool)> done);

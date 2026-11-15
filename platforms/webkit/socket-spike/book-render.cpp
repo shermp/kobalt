@@ -225,6 +225,7 @@ void BookRender::render(uint64_t id, BookPage request)
     cancellable = g_cancellable_new();
     retained::Page candidate{ page.uri,    page.frame.width, page.frame.height,
                               page.column, page.fontPixels,  page.href };
+    candidate.fragment = page.fragment;
     if (page.restore)
         candidate.location =
                 retained::Location{ 1,
@@ -304,6 +305,8 @@ void BookRender::finish(bool success)
                          unsigned(info.precision),
                          unsigned(info.restoration),
                          { info.anchor.path, info.anchor.offset, info.anchor.after } };
+        for (const auto &link : info.links)
+            frame.links.push_back({ link.uri, link.x, link.y, link.width, link.height });
         reply(BookFrameReady, id, frame.encode(page.frame));
     }
     if (shutdownId)

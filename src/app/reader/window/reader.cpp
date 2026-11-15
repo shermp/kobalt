@@ -1915,10 +1915,11 @@ bool Reader::openLink(QPoint point, bool direct)
         || point.y() >= page->height() - page->topHeight() - page->bottomHeight())
         return false;
     const auto links = session->pageLinks();
-    const auto hit = linkAtPoint(links, point,
-                                 direct ? preferences.value("tappable_links").toString("footnotes")
-                                        : QString("all"),
-                                 int(metrics::links::revealPadding), direct ? 0 : ui::px(6));
+    auto mode = direct ? preferences.value("tappable_links").toString("footnotes") : QString("all");
+    if (session->usesWebKit() && mode != "off")
+        mode = QStringLiteral("all");
+    const auto hit = linkAtPoint(links, point, mode, int(metrics::links::revealPadding),
+                                 direct ? 0 : ui::px(6));
     if (hit.index >= 0) {
         const auto &link = links[hit.index];
         const auto bounds = hit.bounds;
@@ -2171,9 +2172,10 @@ void Reader::configureNavigation()
 
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
-    if (session->usesWebKit())
-        return;
     using Nav = kobalt::NavigationDestination;
+    if (session->usesWebKit() && destination != Nav::Chapters && destination != Nav::Bookmarks
+        && destination != Nav::Light)
+        return;
     session->cancelPendingTurn();
     if (destination == Nav::Bookmarks) {
         // The selected tab closes the list, as its close cell does.
@@ -2687,8 +2689,6 @@ void Reader::toggleLight()
 
 void Reader::showChapters()
 {
-    if (session->usesWebKit())
-        return;
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
@@ -2945,7 +2945,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
 // The layout that bookmark pages belong to, including the page area size.
 QString Reader::layoutKey() const
 {
-    return kobalt::bookmarkLayoutKey(session->pages(), session->state(), bodySize());
+    const auto key = kobalt::bookmarkLayoutKey(session->pages(), session->state(), bodySize());
+    return session->usesWebKit() ? key + session->state().value("position").toString() : key;
 }
 
 void Reader::syncBookmarks()
@@ -2963,8 +2964,6 @@ void Reader::syncBookmarks()
 
 void Reader::toggleBookmark()
 {
-    if (session->usesWebKit())
-        return;
     if (!features::enabled(preferences, features::Bookmarks))
         return;
     if (session->busy())
@@ -3075,8 +3074,18 @@ void Reader::saveExit(quint64 request)
         return;
     }
     if (session->usesWebKit()) {
-        // Finish after the close event that started this request has returned.
-        QTimer::singleShot(0, this, [this, request] { finishExitSaved(request); });
+        QPointer<Reader> guard(this);
+        book->checkpointForClose([guard, request](bool saved) {
+            if (guard)
+                QTimer::singleShot(0, guard, [guard, request, saved] {
+                    if (!guard || request != guard->closeRequest)
+                        return;
+                    if (saved)
+                        guard->finishExitSaved(request);
+                    else
+                        guard->failExit(request);
+                });
+        });
         return;
     }
     diagnostic("exit-checkpoint-start", { { "pending_wait_ms", double(closeStage.elapsed()) } });
