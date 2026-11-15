@@ -37,5 +37,7 @@ struct OpenRequest
     QString customPinsPath{};
     // Optional StarDict folder. Prepare its indexes on the opening worker.
     QString dictionariesPath{};
+    // Optional out-of-process WPE launcher, supplied by an explicit host opt-in.
+    QString webKitRenderer{};
 };
 } // namespace kobalt

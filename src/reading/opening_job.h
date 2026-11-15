@@ -1,6 +1,8 @@
 #pragma once
 #include "reader_session.h"
 #include "publication/publication.h"
+#include <QFileInfo>
+#include "engine/webkit/book_client.h"
 #include <QElapsedTimer>
 #include <QFile>
 
@@ -58,6 +60,9 @@ struct OpeningOutput
     OpeningResult outcome;
     QByteArray digest, syncDigest;
     bool savedMatches = false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    webkit::Source webSource;
+#endif
 };
 
 // The values that the stages of one opening share. Lives on the engine worker.
@@ -101,6 +106,9 @@ void logOpeningPhases(const OpeningJob &job, const OpeningState &state);
 
 // Runs on the engine worker, inside an EngineJob.
 OpeningOutput runOpening(OpeningJob &job);
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+OpeningOutput runWebKitOpening(OpeningJob &job);
+#endif
 
 // Defined in reader_session.cpp, which uses them for every later frame too.
 void captureChapters(ReaderFrame &result, Engine &engine,

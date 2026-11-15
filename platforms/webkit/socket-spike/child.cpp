@@ -1,6 +1,12 @@
 #include "pool-wire.h"
-#ifdef KOBALT_SPIKE_WEBKIT
-#include "webkit-render.h"
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
+#  ifdef KOBALT_BOOK_WEBKIT
+#    include "book-render.h"
+using Renderer = BookRender;
+#  else
+#    include "webkit-render.h"
+using Renderer = WebKitRender;
+#  endif
 #endif
 
 #include <gio/gio.h>
@@ -25,13 +31,13 @@ public:
     Child(GSocket *socket, GMainLoop *loop, std::array<unsigned char *, 2> maps,
           uint32_t capacity) : socket(socket), loop(loop), maps(maps), capacity(capacity)
     {
-#ifdef KOBALT_SPIKE_WEBKIT
-        real = std::make_unique<WebKitRender>(maps, capacity,
-                [this](Type type, uint64_t id, const std::string &payload) {
-            if (type == Bye)
-                closing = true;
-            queue(type, id, payload);
-        });
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
+        real = std::make_unique<Renderer>(
+                maps, capacity, [this](Type type, uint64_t id, const std::string &payload) {
+                    if (type == Bye)
+                        closing = true;
+                    queue(type, id, payload);
+                });
 #endif
     }
     int run();
@@ -55,15 +61,15 @@ private:
     uint64_t last = 0, pending = 0;
     bool greeted = false, closing = false;
     int status = 0;
-#ifdef KOBALT_SPIKE_WEBKIT
-    std::unique_ptr<WebKitRender> real;
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
+    std::unique_ptr<Renderer> real;
     bool stopping = false;
 #endif
 };
 
 void Child::stop(int code)
 {
-#ifdef KOBALT_SPIKE_WEBKIT
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
     if (stopping)
         return;
     stopping = true;
@@ -124,7 +130,7 @@ bool Child::received(const Message &message)
     if (closing || message.id <= last)
         return false;
     last = message.id;
-#ifdef KOBALT_SPIKE_WEBKIT
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
     return real->receive(message);
 #endif
     if (!greeted) {
@@ -244,7 +250,7 @@ int descriptor(const char *text)
 
 int main(int argc, char **argv)
 {
-#ifdef KOBALT_SPIKE_WEBKIT
+#if defined(KOBALT_SPIKE_WEBKIT) || defined(KOBALT_BOOK_WEBKIT)
     if (argc != 7)
         return 2;
 #else

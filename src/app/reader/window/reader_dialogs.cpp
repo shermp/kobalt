@@ -582,6 +582,8 @@ void Reader::askRemoveBookmark(const QString &position)
 
 void Reader::openBookmarks()
 {
+    if (session->usesWebKit())
+        return;
     const bool bookmarksEnabled = features::enabled(preferences, features::Bookmarks);
     const bool annotationsEnabled = features::enabled(preferences, features::Annotations);
     const bool wordsEnabled = savedWords && features::enabled(preferences, features::Words);

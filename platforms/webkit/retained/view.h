@@ -22,7 +22,8 @@ public:
     // The frame is borrowed for the duration of completion. A null frame
     // means the candidate did not commit. Calls are serialized by the owner.
     using Completion = std::function<void(WebKitImage *, const char *)>;
-    View(WebKitWebContext *, const char *style);
+    View(WebKitWebContext *, const char *style, bool requireFixtureFont = true,
+         const char *securityPolicy = nullptr);
     ~View();
     void show(Page, GCancellable *, Completion);
     std::optional<PageInfo> pageInfo() const { return confirmed; }
@@ -43,6 +44,7 @@ private:
     Completion completion;
     GCancellable *cancellable = nullptr;
     std::string failure;
+    bool requireFixtureFont;
     bool healthy = true, loading = false, restoring = false, externalResource = false;
 };
 } // namespace retained

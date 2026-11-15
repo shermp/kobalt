@@ -2190,9 +2190,75 @@ int run(int argc, char **argv)
     return result;
 }
 
+// Runs explicitly with --webkit and a controlled EPUB fixture.
+static int webKitReader(int argc, char **argv)
+{
+    QGuiApplication app(argc, argv);
+    QTimer::singleShot(35000, &app, [] { require(false, "WPE reader test timed out"); });
+    require(!qgetenv("KOBALT_WPE_RENDERER").isEmpty(), "Missing WPE renderer launcher");
+    const auto path = QString::fromLocal8Bit(argv[2]);
+    QTimer::singleShot(0, &app, [&] {
+        auto reader =
+                std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+        auto lease = std::make_shared<SourceLease>();
+        QEventLoop finished;
+        OpeningResult outcome;
+        const QSize firstSize(320, 260);
+        reader->open(
+                { path, path, firstSize, {}, {}, {}, lease, localResourceFactory(path, lease) },
+                [&](OpeningResult result) {
+                    outcome = result;
+                    finished.quit();
+                });
+        finished.exec();
+        require(outcome.ready(), qPrintable(openingMessage(outcome)));
+        require(reader->usesWebKit() && reader->image().size() == firstSize && reader->pages() > 0
+                        && reader->bookPages() == 0,
+                "WPE did not publish a first frame or reported an unknown total as a number");
+        const auto first = reader->image().copy();
+        const auto wait = [&] {
+            if (reader->busy())
+                finished.exec();
+            require(reader->error().isEmpty(), qPrintable(reader->error()));
+        };
+        reader->updated = [&] { finished.quit(); };
+        require(reader->turn(1), "WPE rejected a forward turn");
+        wait();
+        require(reader->image() != first, "WPE turn did not change pixels");
+        require(reader->turn(-1), "WPE rejected a reverse turn");
+        wait();
+        require(reader->page() == 0 && reader->image() == first, "WPE first page did not restore");
+        const auto target = QStringLiteral("OEBPS/chapter1.xhtml");
+        for (int turn = 0; turn < 30 && reader->sourceLocation().href != target; ++turn) {
+            require(reader->turn(1), "WPE could not reach the text chapter");
+            wait();
+        }
+        require(reader->sourceLocation().href == target, "WPE did not reach the text chapter");
+        const auto beforeReflow = reader->image().copy();
+        require(reader->adjustWebKitFont(+4), "WPE rejected font size");
+        require(reader->adjustWebKitFont(+2), "WPE rejected newer font size");
+        wait();
+        require(reader->fontSize() == 24 && reader->image() != beforeReflow
+                        && reader->sourceLocation().href == target,
+                "WPE did not publish the latest font size and pixels");
+        reader->resize(QSize(320, 240));
+        wait();
+        require(reader->image().size() == QSize(320, 240), "WPE viewport did not reflow");
+        require(reader->turn(1), "WPE rejected turn before close");
+        reader.reset();
+        ReaderSession::drain([lease, &app] {
+            require(lease->revoked(), "WPE kept the source lease after close");
+            app.quit();
+        });
+    });
+    return app.exec();
+}
+
 // Checks the reader session: opening failures, sync previews and imports, stale results, appearance progress, buffered turns, previews and non-linear pages.
 int main(int argc, char **argv)
 {
+    if (argc == 3 && QByteArray(argv[1]) == "--webkit")
+        return webKitReader(argc, argv);
     const int result = run(argc, argv);
     std::puts(
             "PASS: position comparison status, session typography, retained fresh access, preview lifetime, denied reopen, stale completion and application shutdown");

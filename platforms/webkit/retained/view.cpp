@@ -27,13 +27,36 @@ constexpr char layoutScript[] = R"JS(
     document.documentElement.style.setProperty('--reader-font-size', fontSize + 'px');
     document.body.getBoundingClientRect();
     const rtl = getComputedStyle(document.documentElement).direction === 'rtl';
-    const faces = await document.fonts.load(fontSize + 'px ReaderFixture', rtl ? 'שלום WPE' : 'WPE');
+    if (requireFixtureFont) {
+        const faces = await document.fonts.load(fontSize + 'px ReaderFixture', rtl ? 'שלום WPE' : 'WPE');
+        if (!faces.length)
+            throw new Error('Expected fixture font did not load');
+    }
     await document.fonts.ready;
-    await Promise.all(Array.from(document.images, image => image.decode()));
-    if (!faces.length)
-        throw new Error('Expected fixture font did not load');
-    const columns = Math.max(1, Math.ceil(document.documentElement.scrollWidth / width));
-    let actual = column, quality = 2;
+    const images = Array.from(document.images, image => image.decode());
+    if (requireFixtureFont)
+        await Promise.all(images);
+    else
+        await Promise.allSettled(images);
+    // WebKit's overflow ends at the last glyph, so the final column may
+    // otherwise clamp short of its viewport-aligned scroll position.
+    if (globalThis.retainedTail)
+        globalThis.retainedTail.remove();
+    const extent = document.documentElement.scrollWidth;
+    const columns = Math.max(1, Math.ceil(extent / width));
+    if (columns * width > extent && columns > 1) {
+        const tail = document.createElementNS(document.documentElement.namespaceURI, "span");
+        const style = {
+            position: "absolute", display: "block", visibility: "hidden",
+            width: "1px", height: "1px", margin: "0", padding: "0", border: "0",
+            top: "0", [rtl ? "right" : "left"]: (columns * width - 1) + "px"
+        };
+        for (const [property, value] of Object.entries(style))
+            tail.style.setProperty(property, value, "important");
+        document.documentElement.appendChild(tail);
+        globalThis.retainedTail = tail;
+    }
+    let actual = column === 0xffffffff ? columns - 1 : column, quality = 2;
     if (restore) {
         const indexes = path ? path.split(",").map(Number) : [];
         const resolved = resolveSource(indexes, offset, after);
@@ -58,8 +81,8 @@ constexpr char layoutScript[] = R"JS(
     window.scrollTo(scroll, 0);
     await tick();
     await tick();
-    if (window.scrollX !== scroll || document.documentElement.hasAttribute('data-book-script'))
-        throw new Error('Scroll position or script policy mismatch');
+    if (window.scrollX !== scroll || (requireFixtureFont && document.documentElement.hasAttribute('data-book-script')))
+        throw new Error('Scroll position or script policy mismatch: expected ' + scroll + ' got ' + window.scrollX + ' extent ' + document.documentElement.scrollWidth);
     const anchor = visibleSource(width, height);
     return [actual, columns, quality, ...anchor];
 )JS";
@@ -124,7 +147,9 @@ bool software(WebKitSettings *settings)
 }
 } // namespace
 
-View::View(WebKitWebContext *context, const char *style)
+View::View(WebKitWebContext *context, const char *style, bool fixtureFont,
+           const char *securityPolicy)
+    : requireFixtureFont(fixtureFont)
 {
     g_autoptr(WebKitSettings) settings = webkit_settings_new();
     healthy = software(settings);
@@ -138,9 +163,10 @@ View::View(WebKitWebContext *context, const char *style)
     webkit_user_content_manager_add_style_sheet(content, sheet);
     webkit_user_style_sheet_unref(sheet);
     auto *display = wpe_display_headless_new();
-    view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW, "display", display, "settings",
-                                       settings, "web-context", context, "network-session", network,
-                                       "user-content-manager", content, nullptr));
+    view = WEBKIT_WEB_VIEW(
+            g_object_new(WEBKIT_TYPE_WEB_VIEW, "display", display, "settings", settings,
+                         "web-context", context, "network-session", network, "user-content-manager",
+                         content, "default-content-security-policy", securityPolicy, nullptr));
     g_object_unref(display);
 
     g_signal_connect(view, "resource-load-started",
@@ -257,6 +283,8 @@ void View::layout()
     g_variant_builder_add(&args, "{sv}", "height", g_variant_new_uint32(candidate.height));
     g_variant_builder_add(&args, "{sv}", "column", g_variant_new_uint32(candidate.column));
     g_variant_builder_add(&args, "{sv}", "fontSize", g_variant_new_uint32(candidate.fontSize));
+    g_variant_builder_add(&args, "{sv}", "requireFixtureFont",
+                          g_variant_new_uint32(requireFixtureFont));
     const auto location = candidate.location.value_or(Location{});
     std::string path;
     for (auto index : location.path) {

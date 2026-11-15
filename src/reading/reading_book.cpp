@@ -164,7 +164,7 @@ bool ReadingBook::deviceTransition() const
 
 bool ReadingBook::canWriteNative() const
 {
-    return bridge && bridge->writable();
+    return !session_->usesWebKit() && bridge && bridge->writable();
 }
 
 void ReadingBook::releaseNative(bool save)
@@ -190,6 +190,10 @@ void ReadingBook::finishReading(std::function<void(NativeActivityResult)> done)
 
 void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done)
 {
+    if (session_->usesWebKit()) {
+        done(NativeActivityResult::NotRequired);
+        return;
+    }
     if (!bridge) {
         done(NativeActivityResult::NotRequired);
         return;
@@ -232,6 +236,8 @@ void ReadingBook::retryFailedReadingSave(std::function<void(NativeActivityResult
 
 void ReadingBook::observeReading(bool learnPace)
 {
+    if (session_->usesWebKit())
+        return;
     // Reading continues around these stops, so none of them waits for storage.
     if (released || (bridge && !bridge->writable())) {
         stopReading(true);
@@ -377,6 +383,8 @@ bool ReadingBook::activitySaveDue(int intervalMilliseconds) const
 
 void ReadingBook::saveReadingActivity(bool durable)
 {
+    if (session_->usesWebKit())
+        return;
     if (activityPending || deferredCheckpointEpoch || !deferredCloses.isEmpty()
         || closeCheckpointPending || activitySaveCoolingDown())
         return;
@@ -512,6 +520,8 @@ void ReadingBook::resumeDeferredCheckpoints()
 
 void ReadingBook::rememberAppearance()
 {
+    if (session_->usesWebKit())
+        return;
     if (session_->temporaryTypography())
         return;
     const auto state = checkpointState();
@@ -605,6 +615,8 @@ void ReadingBook::appearanceCheckpointSaved(const QJsonObject &state)
 
 void ReadingBook::saveSpeed(bool force, bool background)
 {
+    if (session_->usesWebKit())
+        return;
     if (!speed || !speed->dirty()
         || (!force && speedSaved.isValid() && speedSaved.elapsed() < 60000)) {
         return;
@@ -687,6 +699,8 @@ bool ReadingBook::offerFinish() const
 
 bool ReadingBook::canFinish() const
 {
+    if (session_->usesWebKit())
+        return false;
     if (released || (bridge && !bridge->writable()) || session_->busy() || session_->pages() <= 0
         || !session_->error().isEmpty())
         return false;
@@ -723,12 +737,16 @@ ReadingProgress ReadingBook::readProgress() const
 
 void ReadingBook::observeProgress()
 {
+    if (session_->usesWebKit())
+        return;
     if (bridge)
         reconciliation.observe(bridge->read());
 }
 
 void ReadingBook::pollProgress()
 {
+    if (session_->usesWebKit())
+        return;
     if (!bridge)
         return;
     // Nickel's saved position changes after sync, account updates and USB, and
@@ -766,6 +784,8 @@ void ReadingBook::acknowledge(const ReadingProgress &shown, bool moved)
 
 void ReadingBook::markNativeReading()
 {
+    if (session_->usesWebKit())
+        return;
     if (std::exchange(openingStatusAttempted, true))
         return;
     if (!bridge || !canWriteNative() || reconciliation.pending())
@@ -786,7 +806,7 @@ void ReadingBook::markNativeReading()
 
 NativeSaveResult ReadingBook::writeNative(const QString &location, const QString &mappingError)
 {
-    if (!bridge) {
+    if (session_->usesWebKit() || !bridge) {
         nativeWriteback = NativeSaveResult::localOnly();
         return nativeSaveResult();
     }
@@ -862,6 +882,8 @@ NativeSaveResult ReadingBook::nativeSaveResult() const
 
 bool ReadingBook::saveDictionaryChoice(const QString &id)
 {
+    if (session_->usesWebKit())
+        return false;
     // Known exception: like a settings change, the choice waits for its write.
     mainthread::AllowBlocking allow("settings write");
     const auto previous = dictionaryChoice_;
@@ -1026,6 +1048,10 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background)
 
 bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background, quint64 epoch)
 {
+    if (session_->usesWebKit()) {
+        *snapshot = preservedState;
+        return true;
+    }
     if (!background) {
         ++activityGeneration;
         if (activityWriter)
@@ -1157,6 +1183,10 @@ void ReadingBook::checkpointForClose(std::function<void(bool)> done)
 
 void ReadingBook::checkpointForClose(std::function<void(bool)> done, quint64 epoch)
 {
+    if (session_->usesWebKit()) {
+        done(true);
+        return;
+    }
     if (activityPending || appearancePending || closeCheckpointPending
         || !deferredCloses.isEmpty()) {
         deferredCheckpointEpoch = epoch;

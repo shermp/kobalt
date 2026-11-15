@@ -265,7 +265,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     // replace.
     const bool settingsReadable = savedSettings.status == kobalt::storage::ReadStatus::Ok
             || savedSettings.status == kobalt::storage::ReadStatus::Missing;
-    if (settingsReadable && !session->temporaryTypography()) {
+    if (settingsReadable && !session->usesWebKit() && !session->temporaryTypography()) {
         auto global = appearance::globalPreferences(preferences);
         appearance::rememberTextLayout(global, session->state());
         appearance::rememberPageMargins(global, session->state());
@@ -606,7 +606,7 @@ void Reader::buildReadingPage()
         progressTick();
     };
     page->imageHeld = [this](QPoint point) {
-        if (session->busy() || lifecycleHidden || closing || exitPending || exportRunning
+        if (session->usesWebKit() || session->busy() || lifecycleHidden || closing || exitPending || exportRunning
             || annotationSaving || services.suspended() || book->deviceTransition()
             || appearanceEdit.panelOpen() || settingsVisible() || searchPanel->isVisible()
             || linksActive() || !pageImageAtPoint(page->image, point))
@@ -640,6 +640,8 @@ void Reader::buildReadingPage()
     const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     page->chrome = chrome.layout;
+    if (session->usesWebKit())
+        page->chrome.progressBar = false;
 }
 
 void Reader::startClockTimer()
@@ -863,6 +865,22 @@ void Reader::buildToolbar()
                        });
     toolbarComposition.settings->setCheckable(true);
     toolbarButtons.settings = toolbarComposition.settings;
+    if (session->usesWebKit()) {
+        for (auto *action :
+             { toolbarButtons.typography, toolbarButtons.layout, toolbarButtons.graph,
+               toolbarComposition.search, toolbarComposition.sync, toolbarComposition.bookmarks,
+               toolbarComposition.annotate, toolbarComposition.settings })
+            action->setEnabled(false);
+        for (const int delta : { -2, 2 }) {
+            auto *button = new ui::Button(delta < 0 ? QStringLiteral("A−") : QStringLiteral("A+"),
+                                          topControls);
+            button->setObjectName(delta < 0 ? "rrWpeFontSmaller" : "rrWpeFontLarger");
+            toolbarComposition.readingActions.append(button);
+            top->addWidget(button);
+            connect(button, &QPushButton::clicked, this,
+                    [this, delta] { session->adjustWebKitFont(delta); });
+        }
+    }
     toolbarComposition.clock = menuClock;
     toolbarComposition.session = menuSession;
     toolbarComposition.battery = menuBattery;
@@ -870,7 +888,8 @@ void Reader::buildToolbar()
          topControls->findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         if (button == back)
             continue;
-        if (button->objectName() != "rrSettings" && button->objectName() != "rrBookmarks"
+        if (!toolbarComposition.readingActions.contains(button)
+            && button->objectName() != "rrSettings" && button->objectName() != "rrBookmarks"
             && button->objectName() != "rrAnnotate" && button->objectName() != "rrFormattingWarning"
             && button->objectName() != "rrSearchOpen" && button->objectName() != "rrKosyncManual")
             topActions.append(button);
@@ -2107,7 +2126,7 @@ void Reader::connectPageInput()
     page->annotationDragMoved = [this](QPoint point) { moveAnnotationDrag(point); };
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
-        if (!features::enabled(preferences, features::Annotations) || annotationMode
+        if (session->usesWebKit() || !features::enabled(preferences, features::Annotations) || annotationMode
             || quickAnnotations() || !isEnabled() || !isVisible() || lifecycleHidden || closing
             || exitPending || exportRunning || services.suspended() || book->deviceTransition()
             || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
@@ -2197,8 +2216,8 @@ void Reader::connectPageInput()
         if (!annotationMode && point.y() >= page->topHeight()
             && point.y() < page->height() - page->bottomHeight() && openLink(bodyPoint, true))
             return;
-        if (features::enabled(preferences, features::Bookmarks) && bookmarks->available()
-            && page->bookmarkCorner().contains(point)) {
+        if (!session->usesWebKit() && features::enabled(preferences, features::Bookmarks)
+            && bookmarks->available() && page->bookmarkCorner().contains(point)) {
             toggleBookmark();
             return;
         }

@@ -1,0 +1,479 @@
+#include "book_client.h"
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#  include "engine/engine_worker.h"
+#  include "publication/source_lease.h"
+#  include "support/qt_compat.h"
+#  include "platforms/webkit/socket-spike/frame-pool.h"
+#  include "platforms/webkit/socket-spike/inherited-process.h"
+
+#  include <QCoreApplication>
+#  include <QLocalSocket>
+#  include <QPointer>
+#  include <QTimer>
+#  include <cerrno>
+#  include <signal.h>
+#  include <sys/socket.h>
+
+namespace kobalt {
+namespace webkit {
+namespace {
+struct CloseQueue
+{
+    unsigned active = 0;
+    QVector<BookClient::Post> waiters;
+};
+
+CloseQueue &closingBooks()
+{
+    static CloseQueue queue;
+    return queue;
+}
+
+Page errorPage(const QString &error)
+{
+    Page failure;
+    failure.error = error;
+    return failure;
+}
+} // namespace
+
+struct BookClient::Transport
+{
+    InheritedProcess child;
+    QLocalSocket socket;
+    QTimer deadline, retry;
+    std::string input;
+    int inherited = -1;
+    pid_t group = 0;
+};
+
+BookClient::BookClient(QString executable, Source source, QSize capacity)
+    : QObject(qApp),
+      transport_(new Transport),
+      executable_(std::move(executable)),
+      source_(std::move(source)),
+      pool_(new FramePool(source_.lease->generation(), capacity.width(), capacity.height()))
+{
+    auto &io = *transport_;
+    io.deadline.setSingleShot(true);
+    io.retry.setSingleShot(true);
+    connect(&io.retry, &QTimer::timeout, this, [this] { submit(); });
+    connect(&io.deadline, &QTimer::timeout, this, [this] {
+        if (closing_)
+            stopProcess();
+        else
+            fail(QStringLiteral("WebKit renderer timed out"));
+    });
+    connect(&io.socket, &QLocalSocket::readyRead, this, [this] { receive(); });
+    connect(&io.socket, &QLocalSocket::stateChanged, this,
+            [this](QLocalSocket::LocalSocketState state) {
+                if (state == QLocalSocket::UnconnectedState && !closing_)
+                    fail(QStringLiteral("WebKit renderer disconnected"));
+            });
+    connect(&io.child, &QProcess::started, this, [this] {
+        auto &io = *transport_;
+        if (io.inherited >= 0) {
+            ::close(io.inherited);
+            io.inherited = -1;
+        }
+#  if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        io.group = pid_t(io.child.pid());
+#  else
+        io.group = pid_t(io.child.processId());
+#  endif
+        if (closing_ || failed_)
+            return stopProcess();
+        greeting_ = true;
+        std::string hello;
+        spike::put(hello, pool_->generation, 8);
+        spike::put(hello, pool_->capacity, 4);
+        send(spike::PoolHello, hello);
+    });
+    connect(&io.child,
+            static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished), this,
+            [this](int, QProcess::ExitStatus) {
+                stopProcess();
+                if (!closing_)
+                    fail(QStringLiteral("WebKit renderer exited"));
+                settled();
+            });
+#  if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
+    connect(&io.child, static_cast<void (QProcess::*)(QProcess::ProcessError)>(&QProcess::error),
+#  else
+    connect(&io.child, &QProcess::errorOccurred,
+#  endif
+            this, [this](QProcess::ProcessError error) {
+                if (error != QProcess::FailedToStart)
+                    return;
+                if (!closing_)
+                    fail(QStringLiteral("WebKit renderer could not start"));
+                settled();
+            });
+}
+
+BookClient::~BookClient()
+{
+    if (transport_->inherited >= 0)
+        ::close(transport_->inherited);
+}
+
+void BookClient::start()
+{
+    if (!pool_->valid())
+        return fail(QStringLiteral("Could not allocate WebKit frame pool"));
+    auto &io = *transport_;
+    int descriptors[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, descriptors))
+        return fail(QStringLiteral("Could not create WebKit control socket"));
+    // Qt owns the parent descriptor once it adopts it. Keep audit numbers
+    // above the range normally opened during the child dynamic load.
+    const int parent = fcntl(descriptors[0], F_DUPFD_CLOEXEC, 80);
+    ::close(descriptors[0]);
+    io.inherited = descriptors[1];
+    const int sentinel = parent >= 0 ? fcntl(parent, F_DUPFD_CLOEXEC, 90) : -1;
+    if (parent < 0 || sentinel < 0) {
+        if (parent >= 0)
+            ::close(parent);
+        return fail(QStringLiteral("Could not reserve WebKit descriptors"));
+    }
+    if (!io.socket.setSocketDescriptor(parent, QLocalSocket::ConnectedState,
+                                       QIODevice::ReadWrite)) {
+        ::close(sentinel);
+        ::close(parent);
+        return fail(QStringLiteral("Could not attach WebKit control socket"));
+    }
+    io.child.passDescriptors({ { io.inherited, pool_->descriptor(0), pool_->descriptor(1) } },
+                             true);
+    const QStringList args{ QString::number(io.inherited),
+                            QString::number(parent),
+                            QString::number(sentinel),
+                            QString::number(pool_->descriptor(0)),
+                            QString::number(pool_->descriptor(1)),
+                            QString::number(pool_->capacity) };
+    io.child.setProcessChannelMode(QProcess::ForwardedChannels);
+    io.child.start(executable_, args);
+    ::close(sentinel);
+}
+
+void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done)
+{
+    if (failed_ || closing_ || complete_) {
+        done(errorPage(QStringLiteral("WebKit renderer is unavailable")));
+        return;
+    }
+    size_ = size;
+    fontPixels_ = fontPixels;
+    layout_ = layout;
+    index_ = displayed_.spineIndex;
+    candidate_ = {};
+    if (!displayed_.anchor.href.isEmpty()) {
+        const int column = displayed_.pages.chapterPage.value();
+        const int columns = displayed_.pages.chapterPages.value();
+        if (!direction) {
+            candidate_.restore = true;
+            candidate_.anchor.offset = displayed_.anchor.offset;
+            candidate_.anchor.after = displayed_.anchor.after;
+            for (const auto index : displayed_.anchor.path)
+                candidate_.anchor.path.push_back(unsigned(index));
+        } else if (column + direction >= 0 && column + direction < columns) {
+            candidate_.column = unsigned(column + direction);
+        } else {
+            index_ += direction;
+            if (index_ < 0 || index_ >= source_.spine.size()) {
+                Page boundary;
+                boundary.boundary = true;
+                done(std::move(boundary));
+                return;
+            }
+            if (direction < 0)
+                candidate_.column = spike::lastColumn;
+        }
+    }
+    complete_ = std::move(done);
+    transport_->deadline.start(15000);
+    if (ready_)
+        submit();
+    else
+        start();
+}
+
+void BookClient::submit()
+{
+    if (closing_ || failed_ || reserved_)
+        return;
+    if (!spike::validGeometry(size_.width(), size_.height(), pool_->capacity))
+        return finish(errorPage(QStringLiteral("Viewport exceeds the WebKit frame pool")));
+    if (!pool_->reserve(0, size_.width(), size_.height(), candidate_.frame)) {
+        transport_->retry.start(20);
+        return;
+    }
+    reserved_ = true;
+    const auto uri = source_.uris.value(index_);
+    const auto href = source_.spine.value(index_).toUtf8();
+    candidate_.uri.assign(uri.constData(), uri.size());
+    candidate_.href.assign(href.constData(), href.size());
+    candidate_.revision = { source_.lease->generation(), layout_, next_ + 1 };
+    candidate_.fontPixels = unsigned(fontPixels_);
+    renderId_ = next_ + 1;
+    const auto data = candidate_.encode();
+    if (data.size() > spike::maxPayload)
+        return fail(QStringLiteral("WebKit spine item path is oversized"));
+    send(spike::RenderBookPage, data);
+}
+
+void BookClient::send(spike::Type type, const std::string &data)
+{
+    auto &socket = transport_->socket;
+    const auto wire = spike::encode(type, ++next_, data);
+    if (socket.bytesToWrite() > 2 * spike::maxPayload
+        || socket.write(wire.data(), wire.size()) != qint64(wire.size())) {
+        if (closing_)
+            stopProcess();
+        else
+            fail(QStringLiteral("WebKit control write failed"));
+    }
+}
+
+void BookClient::receive()
+{
+    auto &io = *transport_;
+    while (io.socket.bytesAvailable()) {
+        const auto bytes = io.socket.read(4096);
+        if (bytes.isEmpty())
+            break;
+        io.input.append(bytes.constData(), bytes.size());
+        spike::Message message{};
+        for (;;) {
+            const auto parsed = spike::take(io.input, message);
+            if (parsed == spike::Parse::Incomplete)
+                break;
+            if (parsed == spike::Parse::Invalid || !handle(message)) {
+                if (closing_)
+                    stopProcess();
+                else
+                    fail(QStringLiteral("Invalid WebKit renderer reply"));
+                return;
+            }
+        }
+    }
+}
+
+bool BookClient::handle(const spike::Message &message)
+{
+    if (closing_)
+        return true;
+    if (!ready_) {
+        if (!greeting_ || message.type != spike::Ready || message.id != 1
+            || message.payload.size() != 12
+            || spike::read(message.payload.data(), 8) != pool_->generation
+            || spike::read(message.payload.data() + 8, 4) != pool_->capacity)
+            return false;
+        ready_ = true;
+        submit();
+        return true;
+    }
+    if (message.type == spike::ResourceRequest) {
+        resource(message);
+        return true;
+    }
+    if (!reserved_ || message.id != renderId_)
+        return false;
+    if (message.type == spike::ErrorReply && message.payload.size() == 4) {
+        finish(errorPage(QStringLiteral("WebKit could not render the requested page")));
+        return true;
+    }
+    spike::BookFrame packet;
+    if (message.type != spike::BookFrameReady || !packet.decode(message.payload)
+        || !(packet.revision == candidate_.revision))
+        return false;
+    Page page;
+    page.image = pool_->publish(candidate_.frame, message.payload.substr(0, 36));
+    if (page.image.isNull())
+        return false;
+    reserved_ = false;
+    const LayoutGeneration generation{ packet.revision.document, packet.revision.layout };
+    page.pages.chapterPage = Query<int>::exact(int(packet.column), generation);
+    page.pages.chapterPages = Query<int>::exact(int(packet.columns), generation);
+    page.pages.bookPage = Query<int>::pending(generation);
+    page.pages.bookPages = Query<int>::pending(generation);
+    page.pages.bookProgress = Query<double>::pending(generation);
+    page.spineIndex = index_;
+    page.before = index_ > 0;
+    page.after = index_ + 1 < source_.spine.size();
+    page.anchor.href = source_.spine.value(index_);
+    for (const auto index : packet.anchor.path)
+        page.anchor.path.push_back(int(index));
+    page.anchor.offset = packet.anchor.offset;
+    page.anchor.after = packet.anchor.after;
+    page.restoration = Restoration(packet.restoration);
+    finish(std::move(page));
+    return true;
+}
+
+void BookClient::resource(const spike::Message &message)
+{
+    if (source_.lease->revoked() || message.payload.size() < 4
+        || message.payload.size() > spike::maxBookHref + 4 || readingPending_)
+        return fail(QStringLiteral("Invalid WebKit resource request"));
+    const auto offset = unsigned(spike::read(message.payload.data(), 4));
+    if (offset) {
+        if (message.id != resourceId_ || offset != resourceOffset_ || message.payload.size() != 4
+            || offset >= unsigned(reading_.bytes.size()))
+            return fail(QStringLiteral("Invalid WebKit resource continuation"));
+        resourceChunk(message.id, offset);
+        return;
+    }
+    if (message.id <= resourceId_ || message.payload.size() == 4 || !reading_.bytes.isEmpty())
+        return fail(QStringLiteral("Invalid WebKit resource sequence"));
+    resourceId_ = message.id;
+    resourceOffset_ = 0;
+    readingPending_ = true;
+    const auto scope = source_.resources;
+    const auto uri = QByteArray(message.payload.data() + 4, int(message.payload.size() - 4));
+    QPointer<BookClient> guard(this);
+    qt::invoke(
+            engineWorker(),
+            [guard, scope, uri, id = resourceId_] {
+                auto data = scope->read(uri);
+                qt::invoke(
+                        qApp,
+                        [guard, data = std::move(data), id]() mutable {
+                            if (!guard)
+                                return;
+                            guard->readingPending_ = false;
+                            if (guard->closing_)
+                                return guard->settled();
+                            if (guard->failed_ || guard->source_.lease->revoked())
+                                return;
+                            guard->reading_ = std::move(data);
+                            guard->resourceChunk(id, 0);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void BookClient::resourceChunk(quint64 id, unsigned offset)
+{
+    const auto size = unsigned(reading_.bytes.size());
+    const auto media = offset ? QByteArray() : reading_.mediaType;
+    if (size > spike::maxResourceBytes || media.size() > 64)
+        return fail(QStringLiteral("Oversized WebKit resource"));
+    const auto count = qMin(size - offset, spike::resourceChunk);
+    std::string data;
+    spike::put(data, id, 8);
+    spike::put(data, offset, 4);
+    spike::put(data, size, 4);
+    spike::put(data, media.size(), 1);
+    data.append(media.constData(), media.size());
+    data.append(reading_.bytes.constData() + offset, count);
+    resourceOffset_ = offset + count;
+    if (resourceOffset_ == size)
+        reading_ = {};
+    send(spike::ResourceData, data);
+}
+
+void BookClient::accept(const Page &page)
+{
+    displayed_ = page;
+    displayed_.image = {};
+}
+
+void BookClient::finish(Page page)
+{
+    transport_->deadline.stop();
+    transport_->retry.stop();
+    if (reserved_) {
+        pool_->discard(candidate_.frame);
+        reserved_ = false;
+    }
+    auto callback = std::move(complete_);
+    complete_ = {};
+    if (callback)
+        callback(std::move(page));
+}
+
+void BookClient::stopProcess()
+{
+    auto &io = *transport_;
+    if (io.group > 0) {
+        ::kill(-io.group, SIGKILL);
+        io.group = 0;
+    }
+    if (io.child.state() != QProcess::NotRunning)
+        io.child.kill();
+}
+
+void BookClient::fail(QString message)
+{
+    if (failed_ || closing_)
+        return;
+    failed_ = true;
+    // On a protocol failure a reserved slot stays unpublished until the
+    // renderer has been stopped. The failed client cannot submit again.
+    stopProcess();
+    finish(errorPage(message));
+}
+
+void BookClient::close()
+{
+    if (closing_)
+        return;
+    closing_ = true;
+    complete_ = {};
+    ++closingBooks().active;
+    transport_->retry.stop();
+    if (transport_->child.state() != QProcess::NotRunning) {
+        transport_->deadline.start(2000);
+        if (transport_->socket.state() == QLocalSocket::ConnectedState)
+            send(spike::Shutdown);
+        else
+            stopProcess();
+    }
+    settled();
+}
+
+void BookClient::settled()
+{
+    if (done_ || !closing_ || readingPending_ || transport_->child.state() != QProcess::NotRunning)
+        return;
+    done_ = true;
+    stopProcess();
+    transport_->deadline.stop();
+    transport_->socket.abort();
+    // WebResources and its cache were used on the worker. Drop our copy there
+    // before publishing the end of the drain.
+    QPointer<BookClient> guard(this);
+    qt::invoke(
+            engineWorker(),
+            [guard, scope = std::move(source_.resources)]() mutable {
+                scope.reset();
+                qt::invoke(
+                        qApp,
+                        [guard] {
+                            if (!guard)
+                                return;
+                            guard->deleteLater();
+                            auto &queue = closingBooks();
+                            if (--queue.active == 0) {
+                                for (const auto &callback : std::exchange(queue.waiters, {}))
+                                    callback();
+                            }
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void BookClient::drain(Post callback)
+{
+    auto &queue = closingBooks();
+    if (queue.active)
+        queue.waiters.append(std::move(callback));
+    else
+        callback();
+}
+} // namespace webkit
+} // namespace kobalt
+#endif

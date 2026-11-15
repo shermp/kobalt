@@ -226,6 +226,8 @@ void Reader::buildKosyncPage()
 // or, if those syncs are on, at sleep or close.
 void Reader::syncKosyncWhileReading()
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Kosync))
         return;
     if (!kosyncStarted)
@@ -403,6 +405,8 @@ void Reader::finishKosyncPresentation()
 
 void Reader::synchronizeKosync(bool interactive)
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Kosync)) {
         kosyncStarted = true;
         return;

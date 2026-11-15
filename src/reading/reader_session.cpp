@@ -22,6 +22,8 @@
 #include <QPointer>
 #include <QThread>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QScreen>
 #include <utility>
 
 namespace kobalt {
@@ -520,6 +522,10 @@ ReaderSession::ReaderSession(std::shared_ptr<Engine> retainedEngine, QString pla
 
 std::unique_ptr<ReaderSession> ReaderSession::retained()
 {
+    if (usesWebKit()) {
+        cancelSource();
+        return {};
+    }
     if (running || !openingResult_.ready() || !frame.error.isEmpty() || fingerprint.isEmpty())
         return {};
     // Stop background image work before queuing eviction. The existing close
@@ -585,6 +591,10 @@ void ReaderSession::cancelSource()
     cancelPendingTurn();
     if (lease_)
         lease_->cancel();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (auto *client = std::exchange(webKitClient_, nullptr))
+        client->close();
+#endif
     clearRenderProgress();
 }
 
@@ -597,6 +607,10 @@ void ReaderSession::revokeSource()
     cancelPendingTurn();
     if (lease_)
         lease_->revoke();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (auto *client = std::exchange(webKitClient_, nullptr))
+        client->close();
+#endif
     clearRenderProgress();
 }
 
@@ -604,7 +618,19 @@ void ReaderSession::drain(std::function<void()> finished)
 {
     kobalt::qt::invoke(
             engineWorker(),
-            [finished] { kobalt::qt::invoke(qApp, finished, Qt::QueuedConnection); },
+            [finished] {
+                kobalt::qt::invoke(
+                        qApp,
+                        [finished] {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                            webkit::BookClient::drain(finished);
+#else
+                            finished();
+#endif
+                        },
+                        Qt::QueuedConnection);
+            },
+
             Qt::QueuedConnection);
 }
 
@@ -735,69 +761,224 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     Qt::QueuedConnection);
         };
     opening.current = current;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    auto renderer = QFile::decodeName(qgetenv("KOBALT_WPE_RENDERER"));
+    if (renderer.isEmpty())
+        renderer = std::move(request.webKitRenderer);
+    webKit_ = !renderer.isEmpty();
+#else
+    webKit_ = false;
+#endif
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, opening = std::move(opening), identity, finished, lease, job]() mutable {
+            [guard, opening = std::move(opening), identity, finished, lease, job
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+             ,
+             renderer
+#endif
+    ]() mutable {
                 EngineJob activity;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                auto output = renderer.isEmpty() ? runOpening(opening) : runWebKitOpening(opening);
+#else
                 auto output = runOpening(opening);
+#endif
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(output.frame), outcome = output.outcome,
-                         digest = output.digest, syncDigest = output.syncDigest, identity,
-                         savedMatches = output.savedMatches, finished, lease, job,
-                         customPins = std::move(output.customPins)]() mutable {
-                            if (!guard) {
+                        [guard, output = std::move(output), identity, finished, lease, job
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                         ,
+                         renderer
+#endif
+                ]() mutable {
+                            if (!guard)
+                                return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                            if (!renderer.isEmpty() && output.outcome.ready() && lease
+                                && !lease->revoked() && guard->revision == job
+                                && guard->lease_ == lease) {
+                                guard->openWebKit(renderer, std::move(output), identity, finished);
                                 return;
                             }
-                            guard->completeFrameMarkup(
-                                    std::move(result), job, lease,
-                                    [guard, outcome, digest, syncDigest, identity, savedMatches,
-                                     finished, lease, job, customPins](ReaderFrame result) mutable {
-                                        if (!guard || guard->revision != job
-                                            || guard->lease_ != lease)
-                                            return;
-                                        if (!lease || lease->revoked()) {
-                                            result = {};
-                                            outcome = OpeningResult::failed(
-                                                    lease
-                                                                    && lease->end()
-                                                                            == SourceLease::End::
-                                                                                    Revoked
-                                                            ? OpeningFailureKind::Revoked
-                                                            : OpeningFailureKind::Cancelled,
-                                                    strings::key("error.opening_interrupted"));
-                                        }
-                                        guard->documentAuthor = result.author;
-                                        guard->documentCover = result.cover;
-                                        guard->running = false;
-                                        guard->frame = result;
-                                        guard->openingResult_ = outcome;
-                                        guard->layoutReady_ = outcome.ready();
-                                        guard->customPins_ = outcome.ready()
-                                                ? customPins
-                                                : storage::CustomPins();
-                                        guard->desired = result.state;
-                                        guard->fingerprint = digest;
-                                        guard->syncDigest_ =
-                                                outcome.ready() ? syncDigest : QByteArray();
-                                        if (!outcome.ready()) {
-                                            guard->syncFilenameDigest_.clear();
-                                            guard->syncFilename_.clear();
-                                        }
-                                        guard->savedMatched = savedMatches;
-                                        guard->identity_ = identity;
-                                        finished(outcome);
-                                        if (guard) {
-                                            guard->startPendingSearch();
-                                            // Let opening callbacks build the window and queue
-                                            // its presentation work before idle rendering.
-                                            guard->resumeIdleWork(1, job);
-                                        }
-                                    });
+#endif
+                            guard->completeOpening(std::move(output), identity, finished, lease,
+                                                   job);
                         },
                         Qt::QueuedConnection);
             },
             Qt::QueuedConnection);
+}
+
+void ReaderSession::completeOpening(OpeningOutput output, const QString &identity,
+                                    std::function<void(OpeningResult)> finished,
+                                    const std::shared_ptr<SourceLease> &lease, quint64 job)
+{
+    QPointer<ReaderSession> guard(this);
+    completeFrameMarkup(
+            std::move(output.frame), job, lease,
+            [guard, outcome = output.outcome, digest = output.digest,
+             syncDigest = output.syncDigest, identity, savedMatches = output.savedMatches, finished,
+             lease, job, customPins = std::move(output.customPins)](ReaderFrame result) mutable {
+                if (!guard || guard->revision != job || guard->lease_ != lease)
+                    return;
+                if (!lease || lease->revoked()) {
+                    result = {};
+                    const auto kind = lease && lease->end() == SourceLease::End::Revoked
+                            ? OpeningFailureKind::Revoked
+                            : OpeningFailureKind::Cancelled;
+                    outcome =
+                            OpeningResult::failed(kind, strings::key("error.opening_interrupted"));
+                }
+                guard->documentAuthor = result.author;
+                guard->documentCover = result.cover;
+                guard->running = false;
+                guard->frame = result;
+                guard->openingResult_ = outcome;
+                guard->layoutReady_ = outcome.ready();
+                guard->customPins_ = outcome.ready() ? customPins : storage::CustomPins();
+                guard->desired = result.state;
+                guard->fingerprint = digest;
+                guard->syncDigest_ = outcome.ready() ? syncDigest : QByteArray();
+                if (!outcome.ready()) {
+                    guard->syncFilenameDigest_.clear();
+                    guard->syncFilename_.clear();
+                }
+                guard->savedMatched = savedMatches;
+                guard->identity_ = identity;
+                finished(outcome);
+                if (guard) {
+                    guard->startPendingSearch();
+                    guard->resumeIdleWork(1, job);
+                }
+            });
+}
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+namespace {
+void applyWebKitPage(ReaderFrame &frame, const webkit::Page &page, quint64 job, int fontPixels,
+                     int delta)
+{
+    frame.image = page.image;
+    frame.pageInfo = page.pages;
+    frame.sourceLocation = page.anchor;
+    frame.renderId = job;
+    frame.turnDirection = delta;
+    frame.error.clear();
+    const auto column = page.pages.chapterPage.value();
+    const auto columns = page.pages.chapterPages.value();
+    frame.state["font_pixels"] = fontPixels;
+    frame.state["page"] = column;
+    frame.state["pages"] = columns;
+    frame.state["chapter_page"] = column + 1;
+    frame.state["chapter_pages"] = columns;
+    frame.state["continues_before"] = page.before;
+    frame.state["continues_after"] = page.after;
+    frame.state["next_page"] = column + 1 < columns ? column + 1 : column;
+    diagnostic("wpe-frame",
+               { { "render_id", double(job) },
+                 { "column", column },
+                 { "spine", page.spineIndex },
+                 { "font_pixels", fontPixels },
+                 { "turn", delta } },
+               false);
+}
+} // namespace
+
+void ReaderSession::openWebKit(const QString &renderer, OpeningOutput output,
+                               const QString &identity, std::function<void(OpeningResult)> finished)
+{
+    const auto size = desiredSize;
+    QSize capacity = size;
+    if (auto *screen = QGuiApplication::primaryScreen()) {
+        const auto screenSize = screen->size();
+        if (qint64(screenSize.width()) * screenSize.height() > qint64(size.width()) * size.height()
+            && spike::validGeometry(screenSize.width(), screenSize.height(), spike::maxFrameBytes))
+            capacity = screenSize;
+    }
+    const auto lease = lease_;
+    const auto job = revision;
+    const auto pixels = output.frame.state.value("font_pixels").toInt();
+    webKitClient_ = new webkit::BookClient(renderer, std::move(output.webSource), capacity);
+    QPointer<ReaderSession> guard(this);
+    webKitClient_->render(size, pixels, 0, newestLayout->load(),
+                          [guard, lease, job, pixels, identity, finished,
+                           output = std::move(output)](webkit::Page page) mutable {
+                              if (!guard || guard->revision != job || guard->lease_ != lease)
+                                  return;
+                              if (!page.error.isEmpty() || page.image.isNull()) {
+                                  output.outcome = OpeningResult::failed(
+                                          OpeningFailureKind::Io, "opening.wpe-render", page.error);
+                              } else {
+                                  guard->webKitClient_->accept(page);
+                                  applyWebKitPage(output.frame, page, job, pixels, 0);
+                              }
+                              guard->completeOpening(std::move(output), identity, finished, lease,
+                                                     job);
+                          });
+}
+
+void ReaderSession::dispatchWebKit()
+{
+    if (!webKitClient_ || !lease_ || lease_->revoked())
+        return;
+    running = true;
+    const auto delta = std::exchange(pageDelta, 0);
+    turning = delta != 0;
+    const auto lease = lease_;
+    const auto job = revision;
+    const auto pixels = desired.value("font_pixels").toInt(18);
+    QPointer<ReaderSession> guard(this);
+    webKitClient_->render(desiredSize, pixels, delta, newestLayout->load(),
+                          [guard, lease, job, pixels, delta](webkit::Page result) {
+                              if (!guard || guard->lease_ != lease)
+                                  return;
+                              guard->running = false;
+                              guard->turning = false;
+                              if (lease->revoked())
+                                  return;
+                              if (guard->revision != job)
+                                  return guard->dispatchWebKit();
+                              if (!result.image.isNull()) {
+                                  guard->webKitClient_->accept(result);
+                                  applyWebKitPage(guard->frame, result, job, pixels, delta);
+                              } else if (!result.boundary) {
+                                  guard->frame.error = result.error;
+                                  guard->cancelPendingTurn();
+                              }
+                              guard->layoutReady_ = !guard->frame.image.isNull();
+                              guard->desired = guard->frame.state;
+                              guard->clearRenderProgress();
+                              if (!guard || guard->lease_ != lease || guard->revision != job)
+                                  return;
+                              if (result.boundary && guard->turnBoundary)
+                                  guard->turnBoundary(delta);
+                              if (guard && guard->updated)
+                                  guard->updated();
+                              if (!guard || !guard->pendingTurn || guard->revision != job)
+                                  return;
+                              QTimer::singleShot(0, guard, [guard, lease, job] {
+                                  if (!guard || guard->lease_ != lease || guard->revision != job)
+                                      return;
+                                  const int direction = std::exchange(guard->pendingTurn, 0);
+                                  if (direction && !guard->turn(direction) && guard->turnBoundary)
+                                      guard->turnBoundary(direction);
+                              });
+                          });
+}
+#endif
+
+bool ReaderSession::adjustWebKitFont(int delta)
+{
+    if (!usesWebKit() || !openingResult_.ready() || frame.image.isNull() || !lease_
+        || lease_->revoked())
+        return false;
+    const auto old = desired.value("font_pixels").toInt(18);
+    const auto pixels = qBound(8, old + delta, 96);
+    if (old == pixels)
+        return false;
+    desired["font_pixels"] = pixels;
+    request(true, RenderReason::Appearance);
+    return true;
 }
 
 void ReaderSession::openPreview(const ReaderSession &source, QSize size,
@@ -1022,6 +1203,8 @@ bool ReaderSession::style(int pixels, int spacing, const QString &face, int marg
 
 void ReaderSession::setDarkMode(bool enabled)
 {
+    if (usesWebKit())
+        return;
     if (temporaryTypography())
         return;
     if (desired.value("dark_mode").toBool(false) == enabled)
@@ -1140,6 +1323,8 @@ bool ReaderSession::turn(int direction)
 
 bool ReaderSession::go(int target)
 {
+    if (usesWebKit())
+        return false;
     // The worker may already have left the slice whose numbers are on screen.
     if (running && frame.state.contains("book_fraction"))
         return false;
@@ -1155,6 +1340,8 @@ bool ReaderSession::go(int target)
 
 bool ReaderSession::goToFraction(double fraction)
 {
+    if (usesWebKit())
+        return false;
     if (!(fraction >= 0 && fraction <= 1))
         return false;
     fractionTarget = fraction;
@@ -1167,6 +1354,8 @@ bool ReaderSession::goToFraction(double fraction)
 
 bool ReaderSession::goTo(const QString &anchor)
 {
+    if (usesWebKit())
+        return false;
     if (anchor.isEmpty())
         return false;
     destination = anchor;
@@ -1180,6 +1369,8 @@ bool ReaderSession::goTo(const QString &anchor)
 
 bool ReaderSession::goToChapter(int index)
 {
+    if (usesWebKit())
+        return false;
     const auto list = chapters();
     if (index < 0 || index >= list.size() || list[index].position.isEmpty())
         return false;
@@ -1206,6 +1397,8 @@ bool ReaderSession::goToSyncedPosition(const QString &position,
 bool ReaderSession::importPosition(const QString &location, bool native,
                                    std::function<void(QString)> finished)
 {
+    if (usesWebKit())
+        return false;
     if (running || retiring || !lease_ || lease_->revoked() || !layoutReady_)
         return false;
     cancelPendingTurn();
@@ -1753,6 +1946,10 @@ void ReaderSession::anchoredPage(bool stayInChapter, std::function<void(QImage)>
 
 void ReaderSession::nativePosition(std::function<void(QString, QString)> finished)
 {
+    if (usesWebKit()) {
+        finished({}, {});
+        return;
+    }
     auto engine = engine_;
     const auto positions = positions_;
     QPointer<ReaderSession> guard(this);
@@ -2107,6 +2304,8 @@ void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, co
 
 void ReaderSession::prepareSearch()
 {
+    if (usesWebKit())
+        return;
     if (running || searchCancelled || !searchQuery.isEmpty() || retiring || !lease_
         || lease_->revoked())
         return;
@@ -2198,8 +2397,8 @@ void ReaderSession::completeFrameMarkup(ReaderFrame result, quint64 job,
                                         const std::shared_ptr<SourceLease> &lease,
                                         std::function<void(ReaderFrame)> finished)
 {
-    if (revision != job || lease_ != lease || !lease || lease->revoked() || result.image.isNull()
-        || !result.error.isEmpty()) {
+    if (usesWebKit() || revision != job || lease_ != lease || !lease || lease->revoked()
+        || result.image.isNull() || !result.error.isEmpty()) {
         finished(std::move(result));
         return;
     }
@@ -2459,6 +2658,8 @@ void ReaderSession::resize(QSize size)
 
 void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph)
 {
+    if (usesWebKit())
+        return;
     const auto positions = positions_;
     const auto lease = lease_;
     auto engine = engine_;
@@ -2578,7 +2779,8 @@ void ReaderSession::loadImages()
 
 void ReaderSession::resumeIdleWork(int direction, quint64 job)
 {
-    if (running || pendingTurn || retiring || !currentSourceFrame(job) || !frame.error.isEmpty())
+    if (usesWebKit() || running || pendingTurn || retiring || !currentSourceFrame(job)
+        || !frame.error.isEmpty())
         return;
     loadImages();
     if (loadingImage || preview_ || !openingResult_.ready())
@@ -2707,6 +2909,10 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
 
 void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit())
+        return dispatchWebKit();
+#endif
     running = true;
     turning = pageTurn;
     const auto positions = positions_;

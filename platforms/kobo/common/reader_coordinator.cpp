@@ -1083,7 +1083,10 @@ void ReaderCoordinator::load()
               run.diskBaseline.valid && run.diskBaseline.status == 2,
               run.nativePublication->coverPath(),
               environment_.paths.customPins(),
-              QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries") },
+              QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries"),
+              QFileInfo(environment_.paths.directory + "/wpe/run").isExecutable()
+                      ? environment_.paths.directory + "/wpe/run"
+                      : QString() },
             [this](const kobalt::OpeningResult &outcome) {
                 run.openingTimings["load_and_layout_ms"] =
                         run.openingTimer.elapsed() - run.layoutStarted;

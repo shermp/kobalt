@@ -106,6 +106,10 @@ target_include_directories(kobalt-core SYSTEM PUBLIC
     "${KOBALT_TEST_DEPENDENCIES}/include/freetype2" "${KOBALT_TEST_DEPENDENCIES}/include/fribidi"
     "${KOBALT_TEST_PNG_INCLUDE}")
 target_compile_definitions(kobalt-core PUBLIC ${kobalt_shared_definitions})
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(kobalt-core PRIVATE "${KOBALT_ROOT}/platforms/webkit/socket-spike/frame-pool.cpp")
+    target_link_libraries(kobalt-core PUBLIC rt)
+endif()
 if(APPLE)
     target_compile_definitions(kobalt-core PUBLIC fdatasync=fsync)
 endif()

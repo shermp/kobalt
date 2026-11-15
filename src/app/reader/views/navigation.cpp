@@ -816,7 +816,8 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
       wifi(controls.wifi),
       formattingWarning(controls.formattingWarning),
       search(controls.search),
-      sync(controls.sync)
+      sync(controls.sync),
+      readingActions(controls.readingActions)
 {
     zenViewBase = new ZenViewBase(parent);
     zenViewBase->setObjectName("rrZenViewBase");
@@ -1192,7 +1193,8 @@ void Navigation::update(QSize size, const NavigationState &state)
     const bool settingsOpen = state.settings && state.settings->isVisible();
     // Zen mode's top group belongs to the reading menu alone. Chapters,
     // Bookmarks, Search and Settings keep the regular top bar.
-    zenTop = state.zen && !state.chaptersOpen && !settingsOpen && !state.searchOpen;
+    zenTop = readingActions.isEmpty() && state.zen && !state.chaptersOpen && !settingsOpen
+            && !state.searchOpen;
     zenStatsShown = zenTop && state.zenStats;
     state.footer->hide();
     toolbar->setGeometry(0, 0, size.width(), toolbarHeight());
@@ -1200,9 +1202,9 @@ void Navigation::update(QSize size, const NavigationState &state)
     rules->setGeometry(toolbar->rect());
     rules->show();
     rules->raise();
-    const QVector<QWidget *> actions{
-        settings, bookmarks, annotate, search, sync, formattingWarning
-    };
+    const auto actions = readingActions.isEmpty()
+            ? QVector<QWidget *>{ settings, bookmarks, annotate, search, sync, formattingWarning }
+            : readingActions;
     if (zenTop)
         placeZenToolbar(size, actions, state);
     else

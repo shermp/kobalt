@@ -217,6 +217,8 @@ void Reader::buildAnnotations()
 
 void Reader::enterAnnotations(bool notice)
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Annotations))
         return;
     if (session->busy() || !highlights->writable() || appearanceEdit.panelOpen()
@@ -520,6 +522,8 @@ void Reader::annotationTap(QPoint point)
 
 bool Reader::beginAnnotationDrag(QPoint point, int boundary)
 {
+    if (session->usesWebKit())
+        return false;
     if (annotationSaving || session->busy() || lifecycleHidden || closing || services.suspended()
         || (boundary >= 0 && !annotationMode
             && (annotationDraft->range().start.isEmpty() || annotationDraft->range().end.isEmpty()))
@@ -1135,6 +1139,8 @@ void Reader::syncAnnotationControls()
 
 void Reader::syncMarkupRequest()
 {
+    if (session->usesWebKit())
+        return;
     ReaderMarkupRequest request;
     for (const auto &item : highlights->highlights()) {
         if (item.id != annotationDraft->editingId()) {

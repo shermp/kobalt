@@ -36,6 +36,7 @@ struct ToolbarComposition
     ui::WifiIndicator *wifi = nullptr;
     QPushButton *formattingWarning = nullptr;
     QPushButton *search = nullptr, *sync = nullptr;
+    QVector<QWidget *> readingActions;
 };
 // Search, Annotate and Bookmarks are tabs only in Zen mode.
 enum class NavigationDestination {
@@ -223,6 +224,7 @@ private:
     ui::WifiIndicator *wifi;
     QPushButton *formattingWarning;
     QPushButton *search, *sync;
+    QVector<QWidget *> readingActions;
     QString searchStyle, syncStyle;
     ui::ButtonPaintMode syncPaint = ui::ButtonPaintMode::Native;
     ui::ButtonPaintMode searchPaint = ui::ButtonPaintMode::Native;

@@ -9,18 +9,21 @@
 class InheritedProcess final : public QProcess
 {
 public:
-    void passDescriptors(std::array<int, 3> descriptors)
+    void passDescriptors(std::array<int, 3> descriptors, bool ownGroup = false)
     {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
         inherited = descriptors;
+        ownGroup_ = ownGroup;
 #else
-        setChildProcessModifier([descriptors] { inherit(descriptors); });
+        setChildProcessModifier([descriptors, ownGroup] { inherit(descriptors, ownGroup); });
 #endif
     }
 
 private:
-    static void inherit(const std::array<int, 3> &descriptors)
+    static void inherit(const std::array<int, 3> &descriptors, bool ownGroup)
     {
+        if (ownGroup && setsid() < 0)
+            _exit(126);
         for (int fd : descriptors) {
             if (fd < 0)
                 continue;
@@ -31,7 +34,9 @@ private:
     }
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    void setupChildProcess() override { inherit(inherited); }
+    void setupChildProcess() override { inherit(inherited, ownGroup_); }
+
+    bool ownGroup_ = false;
     std::array<int, 3> inherited{{-1, -1, -1}};
 #endif
 };

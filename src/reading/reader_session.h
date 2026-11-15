@@ -13,6 +13,11 @@
 #include <memory>
 
 namespace kobalt {
+struct OpeningOutput;
+
+namespace webkit {
+class BookClient;
+}
 struct BookmarkLocations
 {
     QVector<int> pages, order;
@@ -59,6 +64,8 @@ struct ReaderMarkupFrame
 struct ReaderFrame
 {
     quint64 renderId = 0;
+    PageInfo pageInfo;
+    Location sourceLocation;
     int turnDirection = 0;
     bool formattingWarning = false;
     QImage image;
@@ -193,6 +200,12 @@ public:
     // Keep at most one turn behind the current turn. The latest direction wins.
     bool turn(int direction);
     bool canTurn() const;
+
+    bool usesWebKit() const { return webKit_; }
+
+    const Location &sourceLocation() const { return frame.sourceLocation; }
+
+    bool adjustWebKitFont(int delta);
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
@@ -361,12 +374,16 @@ public:
     // Display pages cover the whole book. Local pages still drive navigation and geometry.
     int bookPage() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookPage.ready() ? frame.pageInfo.bookPage.value() : -1;
         return frame.state.contains("book_fraction") ? frame.state.value("rough_page").toInt() - 1
                                                      : page();
     }
 
     int bookPages() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookPages.ready() ? frame.pageInfo.bookPages.value() : 0;
         return frame.state.contains("book_fraction") ? frame.state.value("rough_pages").toInt()
                                                      : pages();
     }
@@ -388,6 +405,8 @@ public:
     // The same as a fraction from 0 to 1, for the progress bar.
     double progressFraction() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookProgress.ready() ? frame.pageInfo.bookProgress.value() : 0;
         const auto fraction = frame.state.value("book_fraction");
         return fraction.isDouble() ? qBound(0.0, fraction.toDouble(), 1.0)
                                    : pageProgressFraction(page(), pages());
@@ -395,6 +414,8 @@ public:
 
     int progressPercent() const
     {
+        if (webKit_)
+            return int(progressFraction() * 100);
         const auto fraction = frame.state.value("book_fraction");
         if (fraction.isDouble())
             return qBound(0, int(fraction.toDouble() * 100), 100);
@@ -499,6 +520,15 @@ public:
 
 private:
     friend struct ReaderLocationProbe;
+    bool webKit_ = false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    webkit::BookClient *webKitClient_ = nullptr;
+    void openWebKit(const QString &, OpeningOutput, const QString &,
+                    std::function<void(OpeningResult)>);
+    void dispatchWebKit();
+#endif
+    void completeOpening(OpeningOutput, const QString &, std::function<void(OpeningResult)>,
+                         const std::shared_ptr<SourceLease> &, quint64);
     // Background pagination only offers a document. A foreground render
     // can adopt it after checking the requested layout and reading position.
     void showFullDocument(quint64 job);

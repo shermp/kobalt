@@ -707,11 +707,12 @@ void Reader::syncReadingControls()
     toolbarButtons.light->setChecked(lightPopup->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Light);
-    toolbarButtons.typography->setEnabled(!session->busy());
-    toolbarButtons.layout->setEnabled(!session->busy());
+    toolbarButtons.typography->setEnabled(!session->usesWebKit() && !session->busy());
+    toolbarButtons.layout->setEnabled(!session->usesWebKit() && !session->busy());
     // Settings applies the newest draft, or waits for the preview to open.
     // Its click handler ignores taps while a panel's changes apply.
-    toolbarButtons.settings->setEnabled(!session->busy() || appearanceEdit.applying());
+    toolbarButtons.settings->setEnabled(!session->usesWebKit()
+                                        && (!session->busy() || appearanceEdit.applying()));
     toolbarButtons.typography->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
                                           && panels->currentIndex() == 0);
     toolbarButtons.layout->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
@@ -719,13 +720,15 @@ void Reader::syncReadingControls()
                                               != int(kobalt::reader::AppearancePage::Typography));
     toolbarButtons.settings->setChecked(settingsVisible());
     const bool settingsOpen = settingsVisible();
+    const bool standardActions = !session->usesWebKit();
     // Zen mode moves Search, Annotate and Bookmarks to the bottom tabs.
     const bool zen = zenMode();
     for (auto *action : std::initializer_list<QWidget *>{ toolbarComposition.exitAction,
                                                           toolbarComposition.settings })
         if (action)
-            action->setVisible(!settingsOpen);
-    toolbarComposition.search->setVisible(!settingsOpen && !zen);
+            action->setVisible(!settingsOpen
+                               && (standardActions || action == toolbarComposition.exitAction));
+    toolbarComposition.search->setVisible(standardActions && !settingsOpen && !zen);
     const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
     const bool annotationsShown = features::enabled(preferences, features::Annotations);
     const bool wordsShown = savedWords && features::enabled(preferences, features::Words);
@@ -744,14 +747,15 @@ void Reader::syncReadingControls()
                     { bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
                       ui::IconRendition::Action });
     }
-    toolbarComposition.annotate->setVisible(!settingsOpen && !zen
+    toolbarComposition.annotate->setVisible(standardActions && !settingsOpen && !zen
                                             && features::enabled(preferences, features::Annotations)
                                             && !quickAnnotations());
-    toolbarComposition.bookmarks->setVisible(!settingsOpen && !zen
+    toolbarComposition.bookmarks->setVisible(standardActions && !settingsOpen && !zen
                                              && (bookmarksShown || annotationsShown || wordsShown));
-    toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen
+    toolbarComposition.formattingWarning->setVisible(standardActions && !settingsOpen && !zen
                                                      && session->formattingWarning());
-    toolbarButtons.graph->setEnabled(!session->busy() && !appearanceEdit.applying());
+    toolbarButtons.graph->setEnabled(standardActions && !session->busy()
+                                     && !appearanceEdit.applying());
     toolbarButtons.graph->setChecked(chapterGraph->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Stats);

@@ -11,10 +11,34 @@ constexpr uint32_t magic = 0x53455057; // WPES, on the wire
 constexpr uint16_t version = 1;
 
 enum Type : uint16_t {
-    Hello = 1, Work, Cancel, Shutdown,
-    PoolHello, Frame, Finish,
-    Open = 20, Turn, Navigate, SetViewport, SetAppearance, Query, Close,
-    Ready = 101, Pending, Cancelled, CancelAck, Bye, HalfWritten, FrameReady, StateReply, ErrorReply, Closed
+    Hello = 1,
+    Work,
+    Cancel,
+    Shutdown,
+    PoolHello,
+    Frame,
+    Finish,
+    Open = 20,
+    Turn,
+    Navigate,
+    SetViewport,
+    SetAppearance,
+    Query,
+    Close,
+    RenderBookPage,
+    ResourceData,
+    Ready = 101,
+    Pending,
+    Cancelled,
+    CancelAck,
+    Bye,
+    HalfWritten,
+    FrameReady,
+    StateReply,
+    ErrorReply,
+    Closed,
+    BookFrameReady,
+    ResourceRequest
 };
 
 struct Message

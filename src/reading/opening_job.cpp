@@ -378,4 +378,51 @@ OpeningOutput runOpening(OpeningJob &job)
     output.savedMatches = state.savedMatches;
     return output;
 }
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+OpeningOutput runWebKitOpening(OpeningJob &job)
+{
+    OpeningState state;
+    state.timer.start();
+    inspectSource(job, state);
+    OpeningOutput output;
+    if (state.outcome.ready()) {
+        mergeSavedState(job, state);
+        auto cache = job.factory(state.publication.sizes(), job.systemFont, state.contentRejected);
+        QString error;
+        auto scope = WebResources::open(state.publication, std::move(cache), job.lease, &error);
+        if (scope) {
+            auto &source = output.webSource;
+            source.lease = job.lease;
+            source.spine = scope->spine();
+            for (const auto &href : source.spine) {
+                const auto uri = scope->url(href);
+                if (uri.size() > int(spike::maxBookHref)
+                    || href.toUtf8().size() > int(spike::maxBookHref)) {
+                    state.outcome = OpeningResult::failed(OpeningFailureKind::Unsupported,
+                                                          "opening.wpe-spine-path");
+                    break;
+                }
+                source.uris.append(uri);
+            }
+            source.resources = std::move(scope);
+            output.frame.state["font_pixels"] =
+                    qBound(8, job.saved.value("font_pixels").toInt(18), 96);
+            output.frame.title = QFileInfo(job.path).completeBaseName();
+            output.frame.state["title"] = output.frame.title;
+        } else {
+            const auto kind = state.publication.protectedBook() ? OpeningFailureKind::Protected
+                                                                : OpeningFailureKind::Unsupported;
+            state.outcome = OpeningResult::failed(kind, "opening.wpe-admission", error);
+        }
+    }
+    if (job.cancelled())
+        state.outcome = job.interrupted();
+    if (!state.outcome.ready())
+        output.webSource = {};
+    output.outcome = state.outcome;
+    output.digest = state.digest;
+    return output;
+}
+#endif
 } // namespace kobalt

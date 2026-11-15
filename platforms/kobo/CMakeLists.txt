@@ -127,7 +127,7 @@ endif()
 set(kobalt_libraries ${qt_libraries}
     "${engine}" "${prefix}/lib/libharfbuzz.a" "${prefix}/lib/libxxhash.a" "${prefix}/lib/libutf8proc.a"
     "${prefix}/lib/libjpeg.a" "${prefix}/lib/liblunasvg.a" "${prefix}/lib/libfreetype.a"
-    "${prefix}/lib/libfribidi.a" "${prefix}/lib/libunibreak.a" "${KOBALT_TEST_PNG}" z dl pthread)
+    "${prefix}/lib/libfribidi.a" "${prefix}/lib/libunibreak.a" "${KOBALT_TEST_PNG}" z dl pthread rt)
 target_link_libraries(kobalt-code PRIVATE ${qt_libraries})
 target_link_libraries(kobalt PRIVATE kobalt-code ${kobalt_libraries})
 # An evaluation package adds the scenario player, its scenario file, the test

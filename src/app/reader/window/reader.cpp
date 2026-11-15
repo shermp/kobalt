@@ -165,6 +165,8 @@ void Reader::checkpoint()
 
 void Reader::observeReading()
 {
+    if (session->usesWebKit())
+        return;
     if (closing || exitPending || lifecycleHidden || !isVisible() || services.suspended()) {
         if (!closing && !exitPending && services.suspended())
             book->sleepReading(preferences);
@@ -1765,6 +1767,8 @@ void Reader::closeSearch()
 
 void Reader::openSeek()
 {
+    if (session->usesWebKit())
+        return;
     if (!navigateAvailable())
         return;
     if (session->busy() || appearanceEdit.applying()) {
@@ -1797,6 +1801,8 @@ void Reader::openSeek()
 
 void Reader::openSearch(const QString &query)
 {
+    if (session->usesWebKit())
+        return;
     session->cancelPendingTurn();
     if (!isVisible() || lifecycleHidden || closing || services.suspended() || session->busy()
         || appearanceEdit.panelOpen() || appearanceEdit.applying())
@@ -2165,6 +2171,8 @@ void Reader::configureNavigation()
 
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
+    if (session->usesWebKit())
+        return;
     using Nav = kobalt::NavigationDestination;
     session->cancelPendingTurn();
     if (destination == Nav::Bookmarks) {
@@ -2679,6 +2687,8 @@ void Reader::toggleLight()
 
 void Reader::showChapters()
 {
+    if (session->usesWebKit())
+        return;
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
@@ -2750,6 +2760,8 @@ void Reader::toggleGraph()
 
 void Reader::openGraph()
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Stats))
         return;
     session->cancelPendingTurn();
@@ -2951,6 +2963,8 @@ void Reader::syncBookmarks()
 
 void Reader::toggleBookmark()
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Bookmarks))
         return;
     if (session->busy())
@@ -3058,6 +3072,11 @@ void Reader::saveExit(quint64 request)
     }
     if (bookmarks->hasFailedSave() || highlights->hasFailedSave()) {
         failExit(request, strings::get("annotations.change_not_saved"));
+        return;
+    }
+    if (session->usesWebKit()) {
+        // Finish after the close event that started this request has returned.
+        QTimer::singleShot(0, this, [this, request] { finishExitSaved(request); });
         return;
     }
     diagnostic("exit-checkpoint-start", { { "pending_wait_ms", double(closeStage.elapsed()) } });

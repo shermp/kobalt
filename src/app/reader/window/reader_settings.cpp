@@ -90,8 +90,8 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.time = services.clock();
     values.chapterPage = session->chapterPage();
     values.chapterPages = session->chapterPages();
-    values.page = session->page() + 1;
-    values.pages = session->pages();
+    values.page = session->usesWebKit() ? session->bookPage() + 1 : session->page() + 1;
+    values.pages = session->usesWebKit() ? session->bookPages() : session->pages();
     // An engine with the text of only a part of the book shows rough page
     // numbers from its page estimate. The chapter is the spine item. Before
     // the estimate has a total, each page field shows its percent form.
@@ -405,6 +405,8 @@ bool Reader::hideNativeStatus() const
 
 void Reader::openSettings()
 {
+    if (session->usesWebKit())
+        return;
     if (session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
@@ -1116,6 +1118,8 @@ void Reader::toggleZenStats()
 
 void Reader::applyDarkMode(bool enabled)
 {
+    if (session->usesWebKit())
+        return;
     if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph || pendingDarkMode >= 0
         || session->busy() || session->temporaryTypography()) {
         refresh();
@@ -1336,6 +1340,8 @@ void Reader::resizeText()
 
 void Reader::selectPanel(int index)
 {
+    if (session->usesWebKit())
+        return;
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
