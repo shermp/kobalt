@@ -22,6 +22,8 @@ public:
 
     const QStringList &names() const { return names_; }
 
+    const QSet<QString> &obfuscatedFonts() const { return obfuscatedFonts_; }
+
     const QSet<QString> &skippedFonts() const { return skippedFonts_; }
 
     // SHA-256 of the file length, the ZIP directory and its end record. The
@@ -38,7 +40,7 @@ private:
     bool protected_ = false;
     QStringList names_;
     QMap<QString, qint64> sizes_;
-    QSet<QString> skippedFonts_;
+    QSet<QString> skippedFonts_, obfuscatedFonts_;
     QByteArray archive_, directory_, fingerprint_;
     int received_ = 0;
 };

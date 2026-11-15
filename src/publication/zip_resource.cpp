@@ -77,8 +77,25 @@ struct ZipResourceIndex::Data
 ZipResourceIndex::ZipResourceIndex() = default;
 ZipResourceIndex::~ZipResourceIndex() = default;
 
+bool ZipResourceIndex::pin(QIODevice &source)
+{
+    if (!prepare(source) || !data_->hasIdentity)
+        return false;
+    pinned_ = true;
+    return true;
+}
+
+bool ZipResourceIndex::stillPinned(QIODevice &source) const
+{
+    FileIdentity current{};
+    return pinned_ && data_->source == &source && identity(source, current)
+            && data_->file == current;
+}
+
 bool ZipResourceIndex::prepare(QIODevice &source)
 {
+    if (pinned_)
+        return stillPinned(source);
     FileIdentity current{};
     const bool hasIdentity = identity(source, current);
     if (data_

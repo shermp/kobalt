@@ -15,11 +15,17 @@ public:
     ZipResourceIndex(const ZipResourceIndex &) = delete;
     ZipResourceIndex &operator=(const ZipResourceIndex &) = delete;
 
+    // Keep a scoped publication tied to one inspected open file. A changed
+    // file invalidates the scope instead of rebuilding its index.
+    bool pin(QIODevice &source);
+    bool stillPinned(QIODevice &source) const;
+
 private:
     friend class ZipResource;
     struct Data;
     std::unique_ptr<Data> data_;
     bool prepare(QIODevice &source);
+    bool pinned_ = false;
 };
 
 // Sequential stored/deflated ZIP input. The caller must already hold Nickel's
