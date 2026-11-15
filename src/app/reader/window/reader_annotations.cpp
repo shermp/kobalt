@@ -691,9 +691,10 @@ void Reader::requestAnnotationDrag()
     if (!annotationDrag.active() || annotationDrag.requestPending || session->busy()
         || lifecycleHidden || services.suspended())
         return;
-    if (annotationDrag.turn || (annotationDrag.handle && annotationDrag.edges.first.text.isEmpty()))
+    const bool usesPageEdges = annotationDrag.handle && !session->usesWebKit();
+    if (annotationDrag.turn || (usesPageEdges && annotationDrag.edges.first.text.isEmpty()))
         return;
-    if (annotationDrag.handle) {
+    if (usesPageEdges) {
         const int direction = annotationDragPageDirection(annotationDrag.point);
         if (direction != 0) {
             if (!annotationMode
