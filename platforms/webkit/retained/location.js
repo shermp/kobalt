@@ -203,3 +203,36 @@ function visibleLinks(width, height) {
     }
     return links;
 }
+
+function wordAtPoint(x, y) {
+    const caret = document.caretRangeFromPoint(x, y);
+    const node = caret && caret.startContainer;
+    if (!node || node.nodeType !== Node.TEXT_NODE || !document.body.contains(node)
+        || node.length > maxText || !Intl.Segmenter)
+        return null;
+    const segments = new Intl.Segmenter(undefined, {granularity: 'word'}).segment(node.data);
+    // WebKit can place the caret on either edge of the glyph under the
+    // pointer. Only accept a candidate that actually covers the hit.
+    for (const offset of [caret.startOffset, caret.startOffset - 1]) {
+        const word = segments.containing(offset);
+        if (!word || !word.isWordLike || word.segment.length > 256)
+            continue;
+        const range = document.createRange();
+        range.setStart(node, word.index);
+        range.setEnd(node, word.index + word.segment.length);
+        const rects = Array.from(range.getClientRects());
+        if (!rects.some(r => r.left <= x && x < r.right && r.top <= y && y < r.bottom))
+            continue;
+        const start = sourcePosition(node, range.startOffset);
+        const end = sourcePosition(node, range.endOffset);
+        if (!start || !end || start[1] >= end[1])
+            return null;
+        const bounds = range.getBoundingClientRect();
+        const left = Math.max(0, Math.floor(bounds.left));
+        const top = Math.max(0, Math.floor(bounds.top));
+        const right = Math.min(innerWidth, Math.ceil(bounds.right));
+        const bottom = Math.min(innerHeight, Math.ceil(bounds.bottom));
+        return [word.segment, start, end, left, top, right - left, bottom - top];
+    }
+    return null;
+}

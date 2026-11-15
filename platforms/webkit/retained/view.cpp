@@ -4,6 +4,7 @@
 #include <wpe/headless/wpe-headless.h>
 
 #include <cmath>
+#include <memory>
 #include <string_view>
 #include <utility>
 
@@ -99,6 +100,28 @@ bool integer(JSCValue *array, unsigned index, int min, int max, int &out)
     if (!std::isfinite(number) || std::trunc(number) != number || number < min || number > max)
         return false;
     out = int(number);
+    return true;
+}
+
+bool readWordAnchor(JSCValue *value, Location &out)
+{
+    if (!value || !jsc_value_is_array(value) || !integer(value, 1, 0, 2 * 1024 * 1024, out.offset))
+        return false;
+    g_autoptr(JSCValue) path = jsc_value_object_get_property_at_index(value, 0);
+    g_autoptr(JSCValue) after = jsc_value_object_get_property_at_index(value, 2);
+    if (!path || !jsc_value_is_array(path) || !after || !jsc_value_is_boolean(after))
+        return false;
+    g_autoptr(JSCValue) length = jsc_value_object_get_property(path, "length");
+    const auto size = length ? jsc_value_to_int32(length) : -1;
+    if (size < 0 || size > 128)
+        return false;
+    out.after = jsc_value_to_boolean(after);
+    for (int i = 0; i < size; ++i) {
+        int index;
+        if (!integer(path, i, 0, 2 * 1024 * 1024, index))
+            return false;
+        out.path.push_back(unsigned(index));
+    }
     return true;
 }
 
@@ -272,6 +295,49 @@ View::~View()
     g_signal_handlers_disconnect_by_data(view, this);
     g_clear_object(&view);
     g_clear_object(&cancellable);
+}
+
+void View::wordAt(unsigned x, unsigned y, std::function<void(Word)> done)
+{
+    if (!confirmed || completion || x >= current.width || y >= current.height)
+        return done({});
+    GVariantBuilder args;
+    g_variant_builder_init(&args, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(&args, "{sv}", "x", g_variant_new_uint32(x));
+    g_variant_builder_add(&args, "{sv}", "y", g_variant_new_uint32(y));
+    g_autoptr(GVariant) parameters = g_variant_ref_sink(g_variant_builder_end(&args));
+    static const std::string script =
+            std::string(sourceLocationScript) + "\nreturn wordAtPoint(x, y);";
+    webkit_web_view_call_async_javascript_function(
+            view, script.c_str(), script.size(), parameters, world, nullptr, nullptr,
+            +[](GObject *source, GAsyncResult *result, gpointer data) {
+                const std::unique_ptr<std::function<void(Word)>> finish(
+                        static_cast<std::function<void(Word)> *>(data));
+                g_autoptr(JSCValue) value = webkit_web_view_call_async_javascript_function_finish(
+                        WEBKIT_WEB_VIEW(source), result, nullptr);
+                Word word;
+                int x, y, width, height;
+                if (!value || !jsc_value_is_array(value) || !integer(value, 3, 0, 2048, x)
+                    || !integer(value, 4, 0, 2048, y) || !integer(value, 5, 1, 2048, width)
+                    || !integer(value, 6, 1, 2048, height) || x + width > 2048 || y + height > 2048)
+                    return (*finish)({});
+                g_autoptr(JSCValue) name = jsc_value_object_get_property_at_index(value, 0);
+                g_autoptr(JSCValue) start = jsc_value_object_get_property_at_index(value, 1);
+                g_autoptr(JSCValue) end = jsc_value_object_get_property_at_index(value, 2);
+                if (!name || !jsc_value_is_string(name) || !readWordAnchor(start, word.start)
+                    || !readWordAnchor(end, word.end))
+                    return (*finish)({});
+                g_autofree char *text = jsc_value_to_string(name);
+                if (!text || !*text || std::string_view(text).size() > 1024)
+                    return (*finish)({});
+                word.text = text;
+                word.x = unsigned(x);
+                word.y = unsigned(y);
+                word.width = unsigned(width);
+                word.height = unsigned(height);
+                (*finish)(std::move(word));
+            },
+            new std::function<void(Word)>(std::move(done)));
 }
 
 void View::show(Page page, GCancellable *cancel, Completion done)

@@ -27,6 +27,7 @@ enum Type : uint16_t {
     Close,
     RenderBookPage,
     ResourceData,
+    BookWordAt,
     Ready = 101,
     Pending,
     Cancelled,
@@ -38,7 +39,8 @@ enum Type : uint16_t {
     ErrorReply,
     Closed,
     BookFrameReady,
-    ResourceRequest
+    ResourceRequest,
+    BookWordReply
 };
 
 struct Message
@@ -86,7 +88,7 @@ inline Parse take(std::string &bytes, Message &message)
         return Parse::Invalid;
     if (bytes.size() < headerSize + length)
         return Parse::Incomplete;
-    message = {Type(read(p + 6, 2)), id, bytes.substr(headerSize, length)};
+    message = { Type(read(p + 6, 2)), id, bytes.substr(headerSize, length) };
     bytes.erase(0, headerSize + length);
     return Parse::Message;
 }

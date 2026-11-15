@@ -2091,6 +2091,35 @@ void Reader::lookupSelection()
             true);
 }
 
+void Reader::lookupWebKitWord(QPoint point)
+{
+    if (session->busy() || closing || lifecycleHidden || services.suspended()
+        || topControls->isVisible() || readingToolOpen())
+        return;
+    if (openLink(point, false))
+        return;
+    const auto epoch = ++lookupEpoch;
+    lookupPending = true;
+    updateOrientationBlock();
+    QPointer<Reader> guard(this);
+    session->wordAt(point, [guard, epoch](WordSelection word) {
+        if (!guard || guard->lookupEpoch != epoch)
+            return;
+        guard->lookupPending = false;
+        if (!word.text.isEmpty() && !word.rectangles.isEmpty() && !guard->closing
+            && !guard->lifecycleHidden && !guard->services.suspended()) {
+            guard->page->mark(word.rectangles);
+            guard->lookupBounds = word.rectangles.first().translated(
+                    guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
+            guard->lookupPosition = word.start;
+            guard->lookupContext.clear();
+            guard->dictionaryPanel->requested(word.text);
+        }
+        guard->updateOrientationBlock();
+        guard->updateLinkReturn();
+    });
+}
+
 int Reader::millisecondsOfDay() const
 {
     return services.millisecondsOfDay ? services.millisecondsOfDay()

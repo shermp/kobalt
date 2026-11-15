@@ -2218,6 +2218,21 @@ void ReaderSession::textRange(const QString &start, const QString &end,
 
 void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->wordAt(point, [guard, job = revision, finished](WordSelection word) {
+            if (guard)
+                finished(guard->currentSourceFrame(job) && !guard->busy() ? std::move(word)
+                                                                          : WordSelection{});
+        });
+        return;
+    }
+#endif
     if (running)
         return;
     auto engine = engine_;

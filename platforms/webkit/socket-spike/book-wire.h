@@ -202,4 +202,46 @@ struct BookFrame
         return offset == data.size();
     }
 };
+
+struct BookWord
+{
+    BookAnchor start, end;
+    std::string text;
+    unsigned x = 0, y = 0, width = 0, height = 0;
+
+    std::string encode() const
+    {
+        std::string first, last, data;
+        start.append(first);
+        end.append(last);
+        put(data, first.size(), 2);
+        put(data, last.size(), 2);
+        put(data, x, 2);
+        put(data, y, 2);
+        put(data, width, 2);
+        put(data, height, 2);
+        return data + first + last + text;
+    }
+
+    bool decode(const std::string &data)
+    {
+        constexpr size_t header = 12;
+        if (data.size() < header)
+            return false;
+        const auto *p = data.data();
+        const auto first = size_t(read(p, 2)), last = size_t(read(p + 2, 2));
+        const auto endAt = header + first + last;
+        x = unsigned(read(p + 4, 2));
+        y = unsigned(read(p + 6, 2));
+        width = unsigned(read(p + 8, 2));
+        height = unsigned(read(p + 10, 2));
+        if (endAt >= data.size() || data.size() - endAt > 1024 || !width || !height
+            || x + width > 2048 || y + height > 2048 || !start.decode(data.substr(header, first), 0)
+            || !end.decode(data.substr(header + first, last), 0) || start.offset < 0
+            || end.offset < 0)
+            return false;
+        text = data.substr(endAt);
+        return text.find('\0') == std::string::npos;
+    }
+};
 } // namespace spike

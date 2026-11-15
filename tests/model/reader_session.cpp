@@ -2505,6 +2505,23 @@ static int webKitReader(int argc, char **argv)
         require(note.kind == LinkKind::Footnote && note.tappable("footnotes")
                         && !note.rectangles.isEmpty(),
                 "WPE did not classify an explicit cross-chapter note");
+        const auto reference = note.rectangles.first();
+        const auto point = QPoint(reference.left() + 3, reference.center().y());
+        WordSelection selected;
+        QEventLoop queried;
+        links->wordAt(point, [&](WordSelection word) {
+            selected = std::move(word);
+            QTimer::singleShot(0, &queried, &QEventLoop::quit);
+        });
+        queried.exec();
+        const auto begin = sourcePositionFromToken(selected.start, links->sourceHash());
+        const auto end = sourcePositionFromToken(selected.end, links->sourceHash());
+        require(selected.text == "short" && !selected.rectangles.isEmpty()
+                        && selected.rectangles.first().contains(point) && begin.valid()
+                        && end.valid() && begin.href == links->sourceLocation().href
+                        && end.href == begin.href
+                        && end.offset - begin.offset == selected.text.size(),
+                "WPE word query did not return visible geometry and counted source boundaries");
         const auto passage = findLink(QStringLiteral("destination"));
         require(passage.kind == LinkKind::Passage && !passage.tappable("footnotes")
                         && detailsFor(passage.source).kind == LinkKind::Passage,

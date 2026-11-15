@@ -87,7 +87,8 @@ bool BookRender::receive(const Message &message)
             cancel();
         else {
             refuseResources();
-            reply(Bye, shutdownId, {});
+            if (!wordId)
+                reply(Bye, shutdownId, {});
         }
         return true;
     }
@@ -102,6 +103,8 @@ bool BookRender::receive(const Message &message)
     }
     if (message.type == ResourceData)
         return resourceData(message.payload);
+    if (message.type == BookWordAt)
+        return wordAt(message);
     if (message.type != spike::RenderBookPage)
         return false;
     if (renderId) {
@@ -122,6 +125,47 @@ bool BookRender::receive(const Message &message)
         return true;
     }
     render(message.id, std::move(request));
+    return true;
+}
+
+bool BookRender::wordAt(const Message &message)
+{
+    if (message.payload.size() != 28 || wordId)
+        return false;
+    const auto *data = message.payload.data();
+    const auto revision = Revision::decode(data);
+    if (!view || renderId || !committed.frame || !(revision == committed)) {
+        reply(BookWordReply, message.id, {});
+        return true;
+    }
+    wordId = message.id;
+    view->wordAt(unsigned(read(data + 24, 2)), unsigned(read(data + 26, 2)),
+                 [this, revision](retained::Word word) {
+                     const auto id = std::exchange(wordId, 0);
+                     if (drained) {
+                         if (!renderId)
+                             drainHelpers();
+                         return;
+                     }
+                     if (shutdownId) {
+                         if (!renderId)
+                             reply(Bye, shutdownId, {});
+                         return;
+                     }
+                     std::string payload;
+                     if (!renderId && revision == committed && !word.text.empty()) {
+                         payload =
+                                 BookWord{ { word.start.path, word.start.offset, word.start.after },
+                                           { word.end.path, word.end.offset, word.end.after },
+                                           std::move(word.text),
+                                           word.x,
+                                           word.y,
+                                           word.width,
+                                           word.height }
+                                         .encode();
+                     }
+                     reply(BookWordReply, id, payload);
+                 });
     return true;
 }
 
@@ -289,7 +333,8 @@ void BookRender::finish(bool success)
     g_clear_object(&cancellable);
     const auto id = std::exchange(renderId, 0);
     if (drained) {
-        drainHelpers();
+        if (!wordId)
+            drainHelpers();
         return;
     }
     if (cancelled)
@@ -309,7 +354,7 @@ void BookRender::finish(bool success)
             frame.links.push_back({ link.uri, link.x, link.y, link.width, link.height, link.note });
         reply(BookFrameReady, id, frame.encode(page.frame));
     }
-    if (shutdownId)
+    if (shutdownId && !wordId)
         reply(Bye, shutdownId, {});
 }
 
@@ -327,7 +372,8 @@ void BookRender::disconnect(std::function<void()> done)
         cancel();
     else {
         refuseResources();
-        drainHelpers();
+        if (!wordId)
+            drainHelpers();
     }
 }
 

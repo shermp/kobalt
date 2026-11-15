@@ -6,6 +6,7 @@
 
 #  include "engine/query.h"
 #  include "engine/links.h"
+#  include "engine/types.h"
 #  include "publication/location.h"
 #  include "publication/web_resources.h"
 #  include "platforms/webkit/socket-spike/book-wire.h"
@@ -35,6 +36,7 @@ struct Page
     PageInfo pages;
     Location anchor;
     QVector<PageLink> links;
+    spike::Revision revision;
     Restoration restoration = Restoration::Unresolved;
     int spineIndex = 0;
     bool before = false, after = false, boundary = false;
@@ -59,6 +61,7 @@ public:
     Location destination(const QString &token, const QByteArray &fingerprint,
                          QString *fragment = nullptr) const;
     void linkDetails(const PageLink &, std::function<void(LinkDetails)>);
+    void wordAt(QPoint, std::function<void(WordSelection)>);
     // Close detaches completions immediately. The object deletes itself after
     // the process and the outstanding worker resource request have drained.
     void close();
@@ -77,6 +80,7 @@ private:
     void settled();
     void finish(Page);
     void stopProcess();
+    void finishWord(WordSelection = {});
 
     std::unique_ptr<Transport> transport_;
     QString executable_;
@@ -84,10 +88,14 @@ private:
     QSize capacity_;
     std::unique_ptr<FramePool> pool_;
     Completion complete_;
+    std::function<void(WordSelection)> word_;
     spike::BookPage candidate_;
     Page displayed_;
     WebResources::Resource reading_;
     quint64 next_ = 0, renderId_ = 0, resourceId_ = 0;
+    quint64 wordId_ = 0;
+    spike::Revision wordRevision_{};
+    QSize wordSize_;
     unsigned resourceOffset_ = 0;
     QSize size_;
     int fontPixels_ = 18, index_ = 0;

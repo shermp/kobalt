@@ -17,6 +17,13 @@ struct Page
     std::string fragment = {};
 };
 
+struct Word
+{
+    Location start, end;
+    std::string text;
+    unsigned x = 0, y = 0, width = 0, height = 0;
+};
+
 class View
 {
 public:
@@ -27,6 +34,7 @@ public:
          const char *securityPolicy = nullptr);
     ~View();
     void show(Page, GCancellable *, Completion);
+    void wordAt(unsigned x, unsigned y, std::function<void(Word)>);
 
     std::optional<PageInfo> pageInfo() const { return confirmed; }
 

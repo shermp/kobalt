@@ -1131,8 +1131,9 @@ void Reader::syncAnnotationControls()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible()
             && !lightPopup->isVisible();
     const bool selectionEnabled = annotationMenuSelectionEnabled();
-    page->setAnnotationInputEnabled(readingOnly || dictionaryPanel->isVisible()
-                                    || selectionEnabled);
+    page->setAnnotationInputEnabled(
+            !session->usesWebKit()
+            && (readingOnly || dictionaryPanel->isVisible() || selectionEnabled));
     page->setAnnotationHandles(annotationDraft->geometry());
     syncPopoverExclusions();
 }

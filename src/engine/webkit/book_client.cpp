@@ -45,7 +45,7 @@ struct BookClient::Transport
 {
     InheritedProcess child;
     QLocalSocket socket;
-    QTimer deadline, retry;
+    QTimer deadline, retry, wordDeadline;
     std::string input;
     int inherited = -1;
     pid_t group = 0;
@@ -62,6 +62,9 @@ BookClient::BookClient(QString executable, Source source, QSize capacity)
     auto &io = *transport_;
     io.deadline.setSingleShot(true);
     io.retry.setSingleShot(true);
+    io.wordDeadline.setSingleShot(true);
+    connect(&io.wordDeadline, &QTimer::timeout, this,
+            [this] { fail(QStringLiteral("WebKit word lookup timed out")); });
     connect(&io.retry, &QTimer::timeout, this, [this] { submit(); });
     connect(&io.deadline, &QTimer::timeout, this, [this] {
         if (closing_)
@@ -213,6 +216,33 @@ void BookClient::linkDetails(const PageLink &link, std::function<void(LinkDetail
             Qt::QueuedConnection);
 }
 
+void BookClient::wordAt(QPoint point, std::function<void(WordSelection)> finished)
+{
+    if (!ready_ || failed_ || closing_ || complete_ || word_
+        || !QRect(QPoint(), size_).contains(point) || !displayed_.revision.frame) {
+        finished({});
+        return;
+    }
+    word_ = std::move(finished);
+    wordId_ = next_ + 1;
+    wordRevision_ = displayed_.revision;
+    wordSize_ = size_;
+    auto data = wordRevision_.encode();
+    spike::put(data, unsigned(point.x()), 2);
+    spike::put(data, unsigned(point.y()), 2);
+    transport_->wordDeadline.start(3000);
+    send(spike::BookWordAt, data);
+}
+
+void BookClient::finishWord(WordSelection word)
+{
+    transport_->wordDeadline.stop();
+    auto finished = std::move(word_);
+    word_ = {};
+    if (finished)
+        finished(std::move(word));
+}
+
 void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done,
                         const Location &target, const QString &fragment)
 {
@@ -348,6 +378,35 @@ bool BookClient::handle(const spike::Message &message)
         resource(message);
         return true;
     }
+    if (message.type == spike::BookWordReply) {
+        if (!word_ || message.id != wordId_)
+            return false;
+        spike::BookWord result;
+        WordSelection word;
+        if (!message.payload.empty()) {
+            if (!result.decode(message.payload)
+                || result.x + result.width > unsigned(wordSize_.width())
+                || result.y + result.height > unsigned(wordSize_.height()))
+                return false;
+            if (!complete_ && wordRevision_ == displayed_.revision) {
+                const auto position = [this](const spike::BookAnchor &anchor) {
+                    Location location;
+                    location.href = displayed_.anchor.href;
+                    for (const auto index : anchor.path)
+                        location.path.append(int(index));
+                    location.offset = anchor.offset;
+                    location.after = anchor.after;
+                    return sourcePositionToken(location, source_.resources->fingerprint());
+                };
+                word = { QString::fromUtf8(result.text.data(), int(result.text.size())),
+                         position(result.start),
+                         position(result.end),
+                         { QRect(result.x, result.y, result.width, result.height) } };
+            }
+        }
+        finishWord(std::move(word));
+        return true;
+    }
     if (!reserved_ || message.id != renderId_)
         return false;
     if (message.type == spike::ErrorReply && message.payload.size() == 4) {
@@ -359,6 +418,7 @@ bool BookClient::handle(const spike::Message &message)
         || !(packet.revision == candidate_.revision))
         return false;
     Page page;
+    page.revision = packet.revision;
     page.image = pool_->publish(candidate_.frame, message.payload.substr(0, 36));
     if (page.image.isNull())
         return false;
@@ -516,6 +576,7 @@ void BookClient::fail(QString message)
     // On a protocol failure a reserved slot stays unpublished until the
     // renderer has been stopped. The failed client cannot submit again.
     stopProcess();
+    finishWord();
     finish(errorPage(message));
 }
 
@@ -525,6 +586,8 @@ void BookClient::close()
         return;
     closing_ = true;
     complete_ = {};
+    word_ = {};
+    transport_->wordDeadline.stop();
     ++closingBooks().active;
     transport_->retry.stop();
     if (transport_->child.state() != QProcess::NotRunning) {

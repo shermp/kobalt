@@ -587,7 +587,9 @@ void Reader::buildReadingPage()
         this->session->goTo(hit.start);
     };
     page->held = [this](QPoint point) {
-        if (beginAnnotationDrag(point, -1))
+        if (this->session->usesWebKit())
+            lookupWebKitWord(point);
+        else if (beginAnnotationDrag(point, -1))
             finishAnnotationDrag(false);
     };
     imageViewer = new ImageViewer(this);
