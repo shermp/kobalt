@@ -1,0 +1,5 @@
+# WPE-M7 navigation previews
+
+Navigate uses the existing chapter bar and adjacent-page thumbnails. The current thumbnail scales the confirmed image on the worker. To produce an adjacent thumbnail, the retained renderer snapshots the requested page in the free shared slot and restores the confirmed document and scroll position before replying. No preview advances the source position or changes the authoritative frame. A foreground turn supersedes a queued thumbnail, and closing drops thumbnail callbacks. The chapter bar omits whole-book progress until it is known.
+
+The native WPE ReaderSession regression compared the thumbnail with the frame from the actual forward turn. It checked that previewing left the initial pixels and source anchor intact and that cancellation suppressed the thumbnail while a queued turn completed. Retained source locations, native reading and link regressions, both Kobo syntax lanes, and the native and FW4 renderer builds passed. The preview protocol requires matching Kobalt and renderer binaries.

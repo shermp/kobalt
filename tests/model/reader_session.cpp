@@ -2272,12 +2272,37 @@ static int webKitReader(int argc, char **argv)
             require(reader->error().isEmpty(), qPrintable(reader->error()));
         };
         reader->updated = [&] { finished.quit(); };
+        const QSize thumbnailBounds(160, 130);
+        const auto firstPosition = reader->state().value("position");
+        QImage preview;
+        reader->previewAdjacentPage(1, thumbnailBounds, {}, [&](QImage image, bool) {
+            preview = std::move(image);
+            finished.quit();
+        });
+        finished.exec();
+        require(preview.size() == thumbnailBounds && reader->image() == first
+                        && reader->state().value("position") == firstPosition,
+                "WPE preview replaced the confirmed reading position or pixels");
         require(reader->turn(1), "WPE rejected a forward turn");
         wait();
-        require(reader->image() != first, "WPE turn did not change pixels");
+        require(reader->image() != first
+                        && reader->image().scaled(thumbnailBounds, Qt::KeepAspectRatio,
+                                                  Qt::SmoothTransformation)
+                                == preview,
+                "WPE preview did not match the target page");
         require(reader->turn(-1), "WPE rejected a reverse turn");
         wait();
         require(reader->page() == 0 && reader->image() == first, "WPE first page did not restore");
+        bool cancelledPreview = false;
+        reader->previewAdjacentPage(1, thumbnailBounds, {},
+                                    [&](QImage, bool) { cancelledPreview = true; });
+        reader->cancelPagePreview();
+        require(reader->turn(1), "WPE did not queue a turn behind an in-flight preview");
+        wait();
+        require(!cancelledPreview && reader->image() != first,
+                "WPE published a cancelled preview or discarded the queued turn");
+        require(reader->turn(-1), "WPE rejected a reverse turn after a cancelled preview");
+        wait();
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
         const auto originalPosition = reader->state().value("position");
         const auto retained = reader->image();

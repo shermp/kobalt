@@ -1848,7 +1848,40 @@ void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> 
 void ReaderSession::cancelPagePreview()
 {
     newestPreview->fetch_add(1);
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (webKitClient_)
+        webKitClient_->cancelPreview();
+#endif
 }
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+void ReaderSession::scaleWebKitPreview(QImage image, QSize bounds, quint64 request, quint64 job,
+                                       std::function<void(QImage)> finished)
+{
+    const auto token = newestPreview;
+    const auto latest = newest;
+    const auto lease = lease_;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [guard, image = std::move(image), bounds, request, job, token, latest, lease,
+             finished] {
+                if (token->load() != request || latest->load() != job || lease->revoked())
+                    return;
+                const auto scaled =
+                        image.scaled(bounds, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, scaled, request, job, token, latest, lease, finished] {
+                            if (guard && token->load() == request && latest->load() == job
+                                && !lease->revoked())
+                                finished(scaled);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+#endif
 
 void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImage)> finished)
 {
@@ -1856,6 +1889,13 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
     if (running || retiring || !lease_ || lease_->revoked() || page < 0 || page >= pages()
         || bounds.isEmpty() || qint64(bounds.width()) * bounds.height() > 1024 * 1024)
         return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (page == this->page())
+            scaleWebKitPreview(frame.image, bounds, newestPreview->load(), revision, finished);
+        return;
+    }
+#endif
     const auto request = newestPreview->load();
     const auto token = newestPreview;
     const auto latest = newest;
@@ -1922,6 +1962,36 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
     if (running || retiring || !lease_ || lease_->revoked() || (direction != -1 && direction != 1)
         || bounds.isEmpty() || qint64(bounds.width()) * bounds.height() > 1024 * 1024)
         return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit() && webKitClient_) {
+        const auto job = revision;
+        const auto request = newestPreview->load();
+        QPointer<ReaderSession> guard(this);
+        if (!frame.image.isNull() && !frame.error.isEmpty()) {
+            finished({}, false);
+            return;
+        }
+        webKitClient_->render(
+                frame.image.size(), fontSize(), direction, newestLayout->load(),
+                [guard, job, request, bounds, bookmarkPositions, finished](webkit::Page page) {
+                    if (!guard || !guard->currentSourceFrame(job)
+                        || request != guard->newestPreview->load())
+                        return;
+                    if (page.image.isNull()) {
+                        finished({}, false);
+                        return;
+                    }
+                    const bool marked = bookmarkPositions.contains(
+                            sourcePositionToken(page.anchor, guard->fingerprint));
+                    guard->scaleWebKitPreview(std::move(page.image), bounds, request, job,
+                                              [finished, marked](QImage image) {
+                                                  finished(std::move(image), marked);
+                                              });
+                },
+                {}, {}, true);
+        return;
+    }
+#endif
     const auto request = newestPreview->load();
     const auto token = newestPreview;
     const auto latest = newest;

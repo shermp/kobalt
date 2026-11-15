@@ -57,7 +57,7 @@ struct BookPage
     Revision revision;
     uint32_t column = 0, fontPixels = 18;
     std::string uri, href, fragment;
-    bool restore = false;
+    bool restore = false, preview = false;
     BookAnchor anchor;
 
     std::string encode() const
@@ -68,7 +68,7 @@ struct BookPage
         put(data, uri.size(), 2);
         put(data, href.size(), 2);
         put(data, fragment.size(), 2);
-        put(data, restore, 1);
+        put(data, unsigned(restore) | (unsigned(preview) << 1), 1);
         data += uri;
         data += href;
         data += fragment;
@@ -93,7 +93,7 @@ struct BookPage
         if (!revision.document || !revision.layout || !revision.frame || fontPixels < 8
             || fontPixels > 96 || (column > 65535 && column != lastColumn) || !uriSize
             || uriSize > maxBookHref || !hrefSize || hrefSize > maxBookHref
-            || fragmentSize > maxFragmentBytes || flag > 1 || (flag && fragmentSize)
+            || fragmentSize > maxFragmentBytes || flag > 3 || ((flag & 1) && fragmentSize)
             || end > data.size())
             return false;
         uri = data.substr(header, uriSize);
@@ -102,7 +102,8 @@ struct BookPage
         if (uri.compare(0, 19, "kobalt-epub://book-") || uri.find('\0') != std::string::npos
             || href.find('\0') != std::string::npos || fragment.find('\0') != std::string::npos)
             return false;
-        restore = flag != 0;
+        restore = (flag & 1) != 0;
+        preview = (flag & 2) != 0;
         return restore ? anchor.decode(data, end) : end == data.size();
     }
 };

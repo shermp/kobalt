@@ -428,9 +428,10 @@ void PageScrubber::syncRange(bool chaptersChanged)
                                                .arg(rangeLast + 1)
                                                .arg(totalPages));
     const auto scope = strings::get("reader.zoom_scale").arg(zoomScales[zoomLevel]);
-    rangeLabel->setText(
-            chapterBar ? strings::get("chapter_graph.book_progress").arg(bookPercent).toUpper()
-                       : scope.toUpper());
+    const auto chapterScope = bookPercent < 0
+            ? chapterTitle
+            : strings::get("chapter_graph.book_progress").arg(bookPercent);
+    rangeLabel->setText((chapterBar ? chapterScope : scope).toUpper());
     rangeStart->setText(QString::number(rangeFirst + 1));
     rangeEnd->setText(QString::number(rangeLast + 1));
     overviewEnd->setText(QString::number(totalPages));
@@ -580,7 +581,8 @@ void PageScrubber::setChapterPosition(int index, int count, QString title, int p
     indicator->setRange(0, bookPages > 0 ? qMax(1, bookPages - 1) : 100);
     indicator->setValue(bookPages > 0 ? bookPage : percent);
     indicator->setMarkers(chapterPages);
-    indicator->setAccessibleDescription(QString::number(percent) + QLatin1Char('%'));
+    indicator->setAccessibleDescription(percent < 0 ? QString()
+                                                    : QString::number(percent) + QLatin1Char('%'));
     syncRange();
     updateCaption();
 }
@@ -973,7 +975,7 @@ void PageScrubber::arrange()
     previous->setVisible(barVisible);
     next->setVisible(barVisible);
     position->setVisible(barVisible && !chapterBar);
-    indicator->setVisible(barVisible && chapterBar);
+    indicator->setVisible(barVisible && chapterBar && bookPercent >= 0);
     overviewRule->setVisible(barVisible && zoomAvailable());
     overviewToggle->setVisible(barVisible && zoomAvailable());
     buttonIcon(overviewToggle, overviewExpanded ? ControlIcon::Down : ControlIcon::Up);

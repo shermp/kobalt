@@ -307,11 +307,14 @@ void BookRender::render(uint64_t id, BookPage request)
                                     { page.anchor.path.begin(), page.anchor.path.end() },
                                     page.anchor.offset,
                                     page.anchor.after };
-    view->show(std::move(candidate), cancellable, [this](WebKitImage *image, const char *error) {
-        if (error && !g_cancellable_is_cancelled(cancellable))
-            g_warning("WebKit page: %s", error);
-        snapshot(image);
-    });
+    view->show(
+            std::move(candidate), cancellable,
+            [this](WebKitImage *image, const char *error) {
+                if (error && !g_cancellable_is_cancelled(cancellable))
+                    g_warning("WebKit page: %s", error);
+                snapshot(image);
+            },
+            page.preview);
 }
 
 void BookRender::snapshot(WebKitImage *image)
@@ -372,9 +375,10 @@ void BookRender::finish(bool success)
     else if (!success)
         reject(id, RenderError::Failed);
     else {
-        const auto info = *view->pageInfo();
-        committed = page.revision;
-        BookFrame frame{ committed,
+        const auto info = *(page.preview ? view->previewPageInfo() : view->pageInfo());
+        if (!page.preview)
+            committed = page.revision;
+        BookFrame frame{ page.revision,
                          info.column,
                          info.chapterPages,
                          unsigned(info.precision),

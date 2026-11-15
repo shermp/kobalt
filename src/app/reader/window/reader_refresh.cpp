@@ -195,7 +195,8 @@ void Reader::refresh()
     }
     openPendingDestination();
     syncNavigation();
-    if (seekOpen && !session->busy() && session->state().contains("book_fraction"))
+    if (seekOpen && !session->busy()
+        && (session->usesWebKit() || session->state().contains("book_fraction")))
         pageScrubber->showCurrentPage();
     finishAnnotationPresentation();
 }
@@ -649,8 +650,9 @@ void Reader::syncStaleControls()
 // The part of syncReadingControls() that does not depend on a visible control.
 void Reader::syncReadingState()
 {
+    const bool chapterBar = session->usesWebKit() || session->state().contains("book_fraction");
     if (session->busy()) {
-        if (seekOpen && session->state().contains("book_fraction"))
+        if (seekOpen && chapterBar)
             pageScrubber->beginNavigation();
         else
             pageScrubber->cancel();
@@ -664,13 +666,13 @@ void Reader::syncReadingState()
 
 void Reader::syncReadingControls()
 {
+    const bool chapterBar = session->usesWebKit() || session->state().contains("book_fraction");
     if (session->busy()) {
-        if (seekOpen && session->state().contains("book_fraction"))
+        if (seekOpen && chapterBar)
             pageScrubber->beginNavigation();
         else
             pageScrubber->cancel();
     }
-    const bool chapterBar = session->state().contains("book_fraction");
     QVector<QPair<int, QString>> chapters;
     for (const auto &chapter : session->chapters())
         chapters.append({ chapter.page, chapter.title });
@@ -688,7 +690,8 @@ void Reader::syncReadingControls()
         for (const auto &chapter : chapters)
             chapterPages.append(chapter.first);
         pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
-                                         session->chapterTitle(), session->progressPercent(),
+                                         session->chapterTitle(),
+                                         session->usesWebKit() ? -1 : session->progressPercent(),
                                          session->bookPage(), session->bookPages(), chapterPages);
     } else {
         pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());

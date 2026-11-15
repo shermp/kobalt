@@ -308,8 +308,19 @@ void BookClient::searchText(const QString &query, SearchCursor cursor, SearchSco
 }
 
 void BookClient::render(QSize size, int fontPixels, int direction, quint64 layout, Completion done,
-                        const Location &target, const QString &fragment)
+                        const Location &target, const QString &fragment, bool preview)
 {
+    if (!failed_ && !closing_ && complete_ && candidate_.preview) {
+        if (!preview)
+            cancelPreview();
+        if (!preview || !queuedRender_) {
+            auto &queued = preview ? queuedPreview_ : queuedRender_;
+            queued = [this, size, fontPixels, direction, layout, done, target, fragment, preview] {
+                render(size, fontPixels, direction, layout, done, target, fragment, preview);
+            };
+        }
+        return;
+    }
     if (failed_ || closing_ || complete_) {
         done(errorPage(QStringLiteral("WebKit renderer is unavailable")));
         return;
@@ -319,6 +330,7 @@ void BookClient::render(QSize size, int fontPixels, int direction, quint64 layou
     layout_ = layout;
     index_ = displayed_.spineIndex;
     candidate_ = {};
+    candidate_.preview = preview;
     if (target.valid()) {
         index_ = source_.spine.indexOf(target.href);
         if (index_ < 0) {
@@ -639,6 +651,13 @@ void BookClient::finish(Page page)
     complete_ = {};
     if (callback)
         callback(std::move(page));
+    if (!closing_ && !complete_) {
+        auto next = std::exchange(queuedRender_, {});
+        if (!next)
+            next = std::exchange(queuedPreview_, {});
+        if (next)
+            next();
+    }
 }
 
 void BookClient::stopProcess()
@@ -670,6 +689,8 @@ void BookClient::close()
         return;
     closing_ = true;
     complete_ = {};
+    queuedRender_ = {};
+    cancelPreview();
     query_ = {};
     transport_->queryDeadline.stop();
     ++closingBooks().active;

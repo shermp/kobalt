@@ -1767,8 +1767,6 @@ void Reader::closeSearch()
 
 void Reader::openSeek()
 {
-    if (session->usesWebKit())
-        return;
     if (!navigateAvailable())
         return;
     if (session->busy() || appearanceEdit.applying()) {
@@ -2200,7 +2198,7 @@ void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
     using Nav = kobalt::NavigationDestination;
     if (session->usesWebKit() && destination != Nav::Chapters && destination != Nav::Bookmarks
-        && destination != Nav::Light)
+        && destination != Nav::Light && destination != Nav::Seek)
         return;
     session->cancelPendingTurn();
     if (destination == Nav::Bookmarks) {

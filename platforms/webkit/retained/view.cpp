@@ -395,11 +395,11 @@ void View::rangeRects(const Location &start, const Location &end,
             new Completion(std::move(done)));
 }
 
-void View::show(Page page, GCancellable *cancel, Completion done)
+void View::show(Page page, GCancellable *cancel, Completion done, bool preview)
 {
     if (!healthy || completion || page.uri.compare(0, 19, "kobalt-epub://book-") != 0 || !page.width
         || !page.height || page.width > 2048 || page.height > 2048 || page.fontSize < 8
-        || page.fontSize > 96) {
+        || page.fontSize > 96 || (preview && !confirmed)) {
         done(nullptr, "Invalid retained view request");
         return;
     }
@@ -417,6 +417,8 @@ void View::show(Page page, GCancellable *cancel, Completion done)
             || page.fontSize != current.fontSize))
         page.location = confirmed->anchor;
     candidate = std::move(page);
+    previewing = preview;
+    previewInfo.reset();
     completion = std::move(done);
     cancellable = G_CANCELLABLE(g_object_ref(cancel));
     apply();
@@ -477,6 +479,8 @@ void View::layout()
                     return self.failed("Unresolved source location");
                 if (!self.restoring && g_cancellable_is_cancelled(self.cancellable))
                     return self.failed("Cancelled");
+                if (self.restoring && self.previewImage)
+                    return self.complete(self.previewImage, nullptr);
                 webkit_web_view_get_snapshot(
                         self.view, WEBKIT_SNAPSHOT_REGION_VISIBLE, WEBKIT_SNAPSHOT_OPTIONS_NONE,
                         self.restoring ? nullptr : self.cancellable,
@@ -499,6 +503,14 @@ void View::snapshot(GAsyncResult *result)
         return complete(nullptr, failure.c_str());
     if (g_cancellable_is_cancelled(cancellable))
         return failed("Cancelled");
+    if (previewing) {
+        previewImage = WEBKIT_IMAGE(g_object_ref(image));
+        previewInfo = measured;
+        restoring = true;
+        candidate = current;
+        apply();
+        return;
+    }
     current = candidate;
     current.column = measured.column;
     current.location.reset();
@@ -521,9 +533,11 @@ void View::failed(const char *reason)
 
 void View::complete(WebKitImage *image, const char *error)
 {
+    g_autoptr(WebKitImage) captured = std::exchange(previewImage, nullptr);
     auto done = std::move(completion);
     completion = {};
     restoring = false;
+    previewing = false;
     g_clear_object(&cancellable);
     done(image, error);
 }

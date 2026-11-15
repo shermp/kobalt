@@ -530,6 +530,8 @@ private:
     void openWebKit(const QString &, OpeningOutput, const QString &,
                     std::function<void(OpeningResult)>);
     void dispatchWebKit();
+    void scaleWebKitPreview(QImage, QSize, quint64 request, quint64 job,
+                            std::function<void(QImage)>);
 #endif
     void completeOpening(OpeningOutput, const QString &, std::function<void(OpeningResult)>,
                          const std::shared_ptr<SourceLease> &, quint64);

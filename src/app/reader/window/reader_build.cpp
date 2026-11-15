@@ -939,7 +939,7 @@ void Reader::buildBottomControls()
     pageScrubber->previewRequested = [this](int target, QSize bounds) {
         if (closing || lifecycleHidden || services.suspended())
             return;
-        if (session->state().contains("book_fraction")) {
+        if (session->usesWebKit() || session->state().contains("book_fraction")) {
             const int current =
                     int(session->page() > 0 || session->state().value("continues_before").toBool());
             pageScrubber->setCurrentPageBookmarked(page->bookmarked);
@@ -1000,7 +1000,8 @@ void Reader::buildBottomControls()
     pageScrubber->accepted = [this](int target) {
         if (session->busy() || closing || lifecycleHidden || services.suspended())
             return;
-        if (session->state().contains("book_fraction") || target == session->page()) {
+        if (session->usesWebKit() || session->state().contains("book_fraction")
+            || target == session->page()) {
             dismissControls();
             return;
         }

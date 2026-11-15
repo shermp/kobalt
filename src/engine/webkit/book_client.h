@@ -53,7 +53,10 @@ public:
     BookClient(QString executable, Source source, QSize capacity);
     ~BookClient() override;
     void render(QSize size, int fontPixels, int direction, quint64 layout, Completion,
-                const Location &target = {}, const QString &fragment = {});
+                const Location &target = {}, const QString &fragment = {}, bool preview = false);
+
+    void cancelPreview() { queuedPreview_ = {}; }
+
     void accept(const Page &);
     BookClient *recover();
 
@@ -93,6 +96,7 @@ private:
     QSize capacity_;
     std::unique_ptr<FramePool> pool_;
     Completion complete_;
+    Post queuedRender_, queuedPreview_;
     std::function<void(WordSelection)> query_;
     spike::BookPage candidate_;
     Page displayed_;

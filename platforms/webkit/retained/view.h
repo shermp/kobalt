@@ -38,12 +38,14 @@ public:
     View(WebKitWebContext *, const char *style, bool requireFixtureFont = true,
          const char *securityPolicy = nullptr);
     ~View();
-    void show(Page, GCancellable *, Completion);
+    void show(Page, GCancellable *, Completion, bool preview = false);
     void wordAt(unsigned x, unsigned y, std::function<void(Word)>);
     void rangeRects(const Location &start, const Location &end,
                     std::function<void(std::vector<Rect>)>);
 
     std::optional<PageInfo> pageInfo() const { return confirmed; }
+
+    std::optional<PageInfo> previewPageInfo() const { return previewInfo; }
 
     bool usable() const { return healthy; }
 
@@ -58,12 +60,14 @@ private:
 
     WebKitWebView *view = nullptr;
     Page current, candidate;
-    std::optional<PageInfo> confirmed;
+    std::optional<PageInfo> confirmed, previewInfo;
     PageInfo measured;
     Completion completion;
     GCancellable *cancellable = nullptr;
+    WebKitImage *previewImage = nullptr;
     std::string failure;
     bool requireFixtureFont;
     bool healthy = true, loading = false, restoring = false, externalResource = false;
+    bool previewing = false;
 };
 } // namespace retained
