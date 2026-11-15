@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+(cd "$root" && sha256sum -c SHA256SUMS)
+# Keep caches, process state and any crash artifacts off the root partition.
+umask 077
+ulimit -c 0
+run=$(mktemp -d /tmp/kobalt-wpe-m35.XXXXXX)
+trap 'rm -rf -- "$run"' EXIT
+trap 'exit 1' HUP INT TERM
+mkdir "$run/home" "$run/data" "$run/config" "$run/cache" "$run/runtime" "$run/plugins" "$run/gio"
+export HOME="$run/home" XDG_DATA_HOME="$run/data" XDG_CONFIG_HOME="$run/config"
+export XDG_CACHE_HOME="$run/cache" XDG_RUNTIME_DIR="$run/runtime" TMPDIR="$run"
+export QT_PLUGIN_PATH="$run/plugins" GIO_MODULE_DIR="$run/gio" LC_ALL=C
+unset LD_PRELOAD QT_QPA_PLATFORM_PLUGIN_PATH WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS
+LD_LIBRARY_PATH="$root/qt-lib" "$root/bin/wpe-pool-smoke" --webkit "$root/bin/render"

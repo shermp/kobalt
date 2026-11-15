@@ -52,11 +52,10 @@ public:
         close(fd);
         require(sentinel >= 0, "duplicate unrelated descriptor");
         connect(&socket, &QLocalSocket::readyRead, this, [this] { receive(); });
-        connect(&socket, &QLocalSocket::disconnected, this, [this] {
-            receive();
-            require(in.empty(), "truncated child reply");
-            eof = true;
-            settled();
+        connect(&socket, &QLocalSocket::disconnected, this, [this] { socketClosed(); });
+        connect(&socket, &QLocalSocket::stateChanged, this, [this](QLocalSocket::LocalSocketState state) {
+            if (state == QLocalSocket::UnconnectedState)
+                socketClosed();
         });
         connect(&socket, &QLocalSocket::bytesWritten, this, [this](qint64) { flush(); });
         connect(&process, &QProcess::started, this, [this, &pool, started] {
@@ -72,7 +71,11 @@ public:
                 this, [this](int status, QProcess::ExitStatus exit) {
             require(killed ? exit == QProcess::CrashExit
                            : (exit == QProcess::NormalExit && status == 0), "unexpected exit");
+            qDebug("renderer reaped: status=%d crash=%d", status, exit == QProcess::CrashExit);
             reaped = true;
+            // Qt 5.2 can close an adopted socket without emitting disconnected.
+            if (socket.socketDescriptor() == -1)
+                socketClosed();
             settled();
         });
         process.setProcessChannelMode(QProcess::ForwardedErrorChannel);
@@ -116,33 +119,46 @@ public:
 
         QSet<int> helpers;
         bool web = false, network = false;
-        QDir tasks(proc + QStringLiteral("/task"));
-        for (const auto &thread : tasks.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            QFile children(tasks.filePath(thread + QStringLiteral("/children")));
-            if (!children.open(QIODevice::ReadOnly))
+        // FW4 kernels can omit /proc/PID/task/TID/children. A helper
+        // spawned by any renderer thread still reports the renderer TGID.
+        const QDir procRoot(QStringLiteral("/proc"));
+        for (const auto &entry : procRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const int childPid = entry.toInt();
+            if (childPid <= 0)
                 continue;
-            for (const auto &number : children.readAll().split(' ')) {
-                const int childPid = number.toInt();
-                if (childPid <= 0 || helpers.contains(childPid))
-                    continue;
-                const auto childPath = QStringLiteral("/proc/%1").arg(childPid);
-                QFile cmdline(childPath + QStringLiteral("/cmdline"));
-                if (!cmdline.open(QIODevice::ReadOnly))
-                    continue;
-                const auto command = cmdline.readAll();
-                if (!command.contains("WPEWebProcess") && !command.contains("WPENetworkProcess"))
-                    continue;
-                helpers.insert(childPid);
-                web |= command.contains("WPEWebProcess");
-                network |= command.contains("WPENetworkProcess");
-                QDir descriptors(childPath + QStringLiteral("/fd"));
-                const auto files = descriptors.entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
-                require(!files.isEmpty(), "cannot inspect WebKit helper descriptors");
-                for (const auto &file : files) {
-                    const auto target = descriptorTarget(childPath, file.toInt());
-                    require(target != control && target != shmA && target != shmB,
-                            "launcher descriptor leaked into WebKit helper");
+            const auto childPath = procRoot.filePath(entry);
+            QFile status(childPath + QStringLiteral("/status"));
+            if (!status.open(QIODevice::ReadOnly))
+                continue;
+            qlonglong parent = 0;
+            for (const auto &line : status.readAll().split('\n')) {
+                if (line.startsWith("PPid:")) {
+                    parent = line.mid(5).toLongLong();
+                    break;
                 }
+            }
+            if (parent != pid)
+                continue;
+            QFile cmdline(childPath + QStringLiteral("/cmdline"));
+            if (!cmdline.open(QIODevice::ReadOnly))
+                continue;
+            const auto command = cmdline.readAll();
+            const bool isWeb = command.contains("WPEWebProcess");
+            const bool isNetwork = command.contains("WPENetworkProcess");
+            if (!isWeb && !isNetwork)
+                continue;
+            QDir descriptors(childPath + QStringLiteral("/fd"));
+            const auto files = descriptors.entryList(
+                    QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot);
+            if (files.isEmpty())
+                continue; // The helper may have exited during enumeration.
+            helpers.insert(childPid);
+            web |= isWeb;
+            network |= isNetwork;
+            for (const auto &file : files) {
+                const auto target = descriptorTarget(childPath, file.toInt());
+                require(target != control && target != shmA && target != shmB,
+                        "launcher descriptor leaked into WebKit helper");
             }
         }
         require(web && network, "did not inspect both WebKit helpers");
@@ -190,10 +206,23 @@ private:
         }
     }
 
+    void socketClosed()
+    {
+        if (eof)
+            return;
+        receive();
+        require(in.empty(), "truncated child reply");
+        eof = true;
+        qDebug("renderer socket closed");
+        settled();
+    }
+
     void settled()
     {
-        if (eof && reaped)
+        if (eof && reaped && !reported) {
+            reported = true;
             stopped();
+        }
     }
 
     InheritedProcess process;
@@ -202,7 +231,7 @@ private:
     std::function<void()> stopped;
     int child, childNumber, sentinel;
     std::string in, out;
-    bool killed = false, eof = false, reaped = false;
+    bool killed = false, eof = false, reaped = false, reported = false;
 };
 
 class Smoke : public QObject
@@ -218,8 +247,12 @@ public:
             sendCandidate();
         });
         deadline.setSingleShot(true);
-        connect(&deadline, &QTimer::timeout, this, [] { fail("pool smoke timed out"); });
-        deadline.start(10000);
+        connect(&deadline, &QTimer::timeout, this, [this] {
+            qCritical("pool smoke timed out: phase=%d event=%d helpers=%d renderer=%d",
+                      int(phase), int(event), int(helpers.size()), bool(session));
+            fail("pool smoke timed out");
+        });
+        deadline.start(30000);
         pool = std::make_unique<FramePool>(1, webkit ? 208 : 160, webkit ? 136 : 120);
         launch();
     }
@@ -420,8 +453,13 @@ private:
 
     void published(QImage image)
     {
-        if (webkit)
+        if (webkit) {
             helpers.unite(session->auditHelpers(*pool));
+            qDebug("frame verified: pool=%llu revision=%llu dimensions=%dx%d page=%u",
+                   static_cast<unsigned long long>(pool->generation),
+                   static_cast<unsigned long long>(revision.frame), image.width(), image.height(),
+                   candidate.color);
+        }
         switch (phase) {
         case FirstRed:
             red = std::move(image);
