@@ -31,6 +31,15 @@ find_program(glib_compile_resources NAMES glib-compile-resources REQUIRED)
 find_program(pkg_config NAMES pkg-config REQUIRED)
 set(recipe "${CMAKE_CURRENT_LIST_DIR}")
 set(identity "${hash};${KOBALT_WEBKIT_TOOLCHAIN};${KOBALT_WEBKIT_PREFIXES};${CMAKE_VERSION}")
+set(minimal_options)
+if(KOBALT_WEBKIT_MINIMAL)
+    set(minimal_options
+        -DENABLE_BUBBLEWRAP_SANDBOX=OFF
+        -DENABLE_JIT=OFF -DENABLE_DFG_JIT=OFF -DENABLE_FTL_JIT=OFF
+        -DENABLE_WEBASSEMBLY=OFF -DENABLE_C_LOOP=ON
+        -DENABLE_SAMPLING_PROFILER=OFF)
+    string(APPEND identity ";${minimal_options}")
+endif()
 foreach(input fw4-toolchain.cmake headless-options.cmake
     patches/lazy-wpe-egl.patch patches/no-libdrm-snapshot.patch patches/release-exec-path.patch
     patches/static-glib-exports.patch patches/pal-crypto-dependencies.patch patches/bubblewrap-memfd-fw4.patch patches/xdgmime-private-symbols.patch
@@ -92,4 +101,5 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -G Ninja
     "-DCMAKE_C_FLAGS_RELEASE=-O1 -DNDEBUG"
     "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG"
     -DBWRAP_EXECUTABLE=/usr/bin/bwrap -DDBUS_PROXY_EXECUTABLE=/usr/bin/xdg-dbus-proxy
+    ${minimal_options}
     COMMAND_ERROR_IS_FATAL ANY)
