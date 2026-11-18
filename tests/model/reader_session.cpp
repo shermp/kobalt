@@ -2791,6 +2791,31 @@ static int webKitReader(int argc, char **argv)
                     "The WPE renderer remained after the session drained");
         }
         require(descriptors() <= initialDescriptors, "WPE sessions leaked parent descriptors");
+
+        qunsetenv("KOBALT_WPE_RENDERER");
+        renderingMode::setOverride(1);
+        auto chapterReader = openAgain(path, {}, firstSize);
+        renderingMode::setOverride(-1);
+        const auto initialPosition = chapterReader->state().value("position");
+        const auto initialPage = chapterReader->image().copy();
+        require(chapterReader->state().contains("book_fraction")
+                        && chapterReader->sourceLocation().href != savedLocation.href,
+                "Blaze did not start before the saved WPE chapter");
+        auto missingLocation = savedLocation;
+        missingLocation.path.append(1000);
+        require(chapterReader->goTo(sourcePositionToken(missingLocation, digest)),
+                "Blaze rejected the cross-chapter bookmark request");
+        finished.exec();
+        require(!chapterReader->error().isEmpty()
+                        && chapterReader->state().value("position") == initialPosition
+                        && chapterReader->image() == initialPage,
+                "An unresolved WPE bookmark changed the active Blaze chapter");
+        require(chapterReader->goTo(bookmark),
+                "Blaze rejected the valid cross-chapter WPE bookmark request");
+        finished.exec();
+        require(chapterReader->error().isEmpty()
+                        && chapterReader->sourceLocation().href == savedLocation.href,
+                "Blaze could not restore a WPE bookmark in a different chapter window");
 #endif
         ReaderSession::drain([&app] { app.quit(); });
     });

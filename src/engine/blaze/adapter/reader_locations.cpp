@@ -298,22 +298,27 @@ bool EngineDocument::goToLocation(const Location &location)
 {
     if (!location.valid())
         return false;
-    const auto original = position();
-    const auto first = windowFirst_, last = windowLast_;
-    const auto item = spineItems().indexOf(location.href);
+    const int item = spineItems().indexOf(location.href);
     if (item < 0)
         return false;
-    const bool moved = windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_);
-    if (moved) {
-        const auto unit = unitFrom(item);
-        if (!showSpineItems(unit.first, unit.second))
+    if (windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_)) {
+        const auto unit = slicePages_ > 0
+                ? unitFrom(item)
+                : qMakePair(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
+        auto *next = openAhead(unit.first, {}, unit.second);
+        if (!next || item < next->windowFirst_ || item > next->windowLast_)
             return false;
+        // Resolve the source anchor before replacing the active chapter.
+        const auto anchor = next->positionOf(location);
+        if (anchor.isEmpty() || !next->goTo(anchor))
+            return false;
+        const qint64 loadMs = next->windowLoadMs_;
+        if (!adoptAhead(unit.first, unit.second))
+            return false;
+        windowLoadMs_ = loadMs;
+        return true;
     }
     const auto anchor = positionOf(location);
-    if (!anchor.isEmpty() && goTo(anchor))
-        return true;
-    if (moved && showSpineItems(first, last))
-        goTo(original);
-    return false;
+    return !anchor.isEmpty() && goTo(anchor);
 }
 } // namespace kobalt

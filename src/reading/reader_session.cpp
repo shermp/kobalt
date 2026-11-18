@@ -3006,7 +3006,7 @@ void ReaderSession::resize(QSize size)
     // Hybrid rendering: another page size goes back to the chapter, as
     // another appearance does in requestAppearance(). Laying out the whole
     // book again would hold up the reader; it follows in the background.
-    if (!preview_ && renderingMode::countsInBackground()) {
+    if (!usesWebKit() && !preview_ && renderingMode::countsInBackground()) {
         quietTurns_ = 0;
         backgroundCount_->store(false);
         fullDocumentPending_ = false;

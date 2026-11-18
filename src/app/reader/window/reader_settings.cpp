@@ -124,6 +124,9 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.approximateTime = remainingTime::approximate(preferences);
     values.decimalPercentages = headerfooter::decimalPercentages(preferences);
     values.pageTurnMilliseconds = pageTurnMilliseconds;
+    // WPE keeps one spine item laid out even after it knows the exact book total.
+    if (session->usesWebKit())
+        return values;
     if (state.contains("chapter_load_ms"))
         values.chapterLoadMilliseconds = qint64(state.value("chapter_load_ms").toDouble());
     values.wholeBook = !state.contains("book_fraction");
@@ -185,7 +188,8 @@ bool Reader::bookStatusShown() const
 
 void Reader::syncStatusTimer()
 {
-    if (!bookStatusShown() || !isVisible() || lifecycleHidden || closing || services.suspended()) {
+    if (session->usesWebKit() || !bookStatusShown() || !isVisible() || lifecycleHidden || closing
+        || services.suspended()) {
         if (statusTimer)
             statusTimer->stop();
         return;

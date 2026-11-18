@@ -608,8 +608,8 @@ void Reader::buildReadingPage()
         progressTick();
     };
     page->imageHeld = [this](QPoint point) {
-        if (session->usesWebKit() || session->busy() || lifecycleHidden || closing || exitPending || exportRunning
-            || annotationSaving || services.suspended() || book->deviceTransition()
+        if (session->usesWebKit() || session->busy() || lifecycleHidden || closing || exitPending
+            || exportRunning || annotationSaving || services.suspended() || book->deviceTransition()
             || appearanceEdit.panelOpen() || settingsVisible() || searchPanel->isVisible()
             || linksActive() || !pageImageAtPoint(page->image, point))
             return false;
