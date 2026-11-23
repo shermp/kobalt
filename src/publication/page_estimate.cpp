@@ -429,6 +429,10 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
                 targetWords = wordCounter.words();
             }
             count(value, at, INT_MAX);
+            // A chapter that starts before its first character has fraction zero
+            // for every positive text length. Empty chapters still return -1.
+            if (target == 0 && characters > 0)
+                break;
         }
     }
     if (interrupted || (current && !current()) || !body || characters <= 0)

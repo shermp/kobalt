@@ -311,6 +311,12 @@ void blocks()
     // outside the basic multilingual plane.
     const auto passage = QStringLiteral("<html><body><p>😀😀 go west</p></body></html>").toUtf8();
     qint64 words = -1;
+    require(pageEstimateTextFraction("<html><body><p> </p></body></html>", "/body/p", false, &words)
+                            == -1
+                    && words == -1,
+            "A chapter with only whitespace has no text fraction");
+    require(pageEstimateTextFraction(passage, "/body/p", false, &words) == 0 && words == 0,
+            "The first paragraph must start at zero words and zero fraction");
     const auto halfway = pageEstimateTextFraction(passage, "/body/p/text().5", false, &words);
     require(qAbs(halfway - 0.5) < 0.000001 && words == 1,
             "Supplementary characters changed the estimated place or word count at a source anchor");
