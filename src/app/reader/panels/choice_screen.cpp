@@ -189,6 +189,30 @@ private:
 };
 } // namespace
 
+struct ChoiceScreen::FontPageStyle
+{
+    QSize size;
+    QFont label;
+    const ui::ThemeColors *theme;
+    int density, weight;
+    qreal scale;
+
+    static FontPageStyle current(ChoiceScreen *screen)
+    {
+        return { screen->size(),           ui::chromeFont(metrics::text::body),
+                 &ui::themeColors(screen), ui::density(),
+                 ui::interfaceWeight(),    ui::textScale() };
+    }
+
+    bool operator==(const FontPageStyle &other) const
+    {
+        return size == other.size && label == other.label && theme == other.theme
+                && density == other.density && weight == other.weight && scale == other.scale;
+    }
+};
+
+ChoiceScreen::~ChoiceScreen() = default;
+
 void ChoiceScreen::setFontAppearance(const ui::SampleAppearance &appearance)
 {
     if (fontAppearance == appearance)
@@ -359,6 +383,8 @@ void ChoiceScreen::setChapterPosition(const QString &text)
 void ChoiceScreen::selectValue(const QString &value)
 {
     selectedValue = value;
+    if (mode == Mode::Fonts && isVisible() && refreshFontButtonSelection())
+        return;
     redraw();
 }
 
@@ -567,98 +593,16 @@ void ChoiceScreen::redrawFonts()
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = itemIndex(row);
         auto *button = buttons[row];
-        auto *label = labels[row];
-        auto *fontCell = static_cast<FontCell *>(button);
-        const bool visible = row < pageSize && index >= 0 && index < items.size();
-        if (!visible) {
+        if (row >= pageSize || index < 0 || index >= items.size()) {
             button->hide();
             continue;
         }
-        const auto &item = items[index];
-        const bool selectedItem = !item.placeholder && item.value == selectedValue;
-        fontCell->fontMode = true;
-        fontCell->placeholder = item.placeholder;
-        fontCell->defaultRequested = !item.placeholder
-                ? std::function<void()>([this, value = item.value] {
-                      if (defaultRequested)
-                          defaultRequested(value, false);
-                  })
-                : std::function<void()>{};
-        // Qt 5.2 does not repaint the area that a caption leaves when it is
-        // hidden. A cell that shows another font repaints completely, so a
-        // caption from the previous page cannot stay on screen.
-        if (button->objectName() != item.name)
-            button->update();
-        button->setObjectName(item.name);
-        button->setAccessibleName(item.placeholder ? item.detail : item.label);
-        button->setAccessibleDescription(item.detail);
-        button->setCheckable(true);
-        button->setChecked(selectedItem);
         const int col = row % columns, line = row / columns;
-        button->setGeometry(col * width() / columns, header + sectionHeight + line * body / rows,
-                            (col + 1) * width() / columns - col * width() / columns,
-                            (line + 1) * body / rows - line * body / rows);
-        readerStyle(
-                button,
-                QString("QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
-                        .arg(selectedItem ? "palette(window-text)" : "palette(window)")
-                        .arg(int(metrics::control::border)));
-        const QFont labelFont = ui::chromeFont(metrics::text::body);
-        const auto family = item.value.isEmpty() ? QStringLiteral("Libron") : item.value;
-        label->setFont(labelFont);
-        // The default slot draws its Aa with the private renderer.
-        fontCell->helpFont = QFont(family);
-        label->setAppearance(item.placeholder ? ui::SampleAppearance() : fontAppearance);
-        label->setPreviewSource(ui::fontPreviewSource(family, item.fontFiles));
-        label->optical = true;
-        label->setWordWrap(true);
-        label->setTextFormat(Qt::PlainText);
-        label->setText(item.label);
-        label->setAlignment(Qt::AlignCenter);
-        label->setObjectName(item.name + "Title");
-        auto styleFamily = labelFont.family();
-        styleFamily.replace('"', "\\\"");
-        readerStyle(
-                label,
-                QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;font-weight:400;")
-                        .arg(selectedItem ? "palette(window)" : "palette(window-text)")
-                        .arg(styleFamily)
-                        .arg(labelFont.pixelSize()));
-        auto *detail = fontCell->detail;
-        detail->setObjectName(item.name + "Detail");
-        detail->setText(item.detail.toUpper());
-        const auto caption = ui::captionFont(ui::px(18));
-        detail->setFont(caption);
-        readerStyle(
-                detail,
-                QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;")
-                        .arg(selectedItem ? "palette(window)" : ui::noteColor(this).name())
-                        .arg(caption.family())
-                        .arg(caption.pixelSize()));
-        const int inset = ui::px(12), detailWidth = qMax(1, button->width() - 2 * inset);
-        // A short cell, as in two rows of six, keeps a line for the name. The
-        // caption drops its first lines, which give the least detail. Only a
-        // caption with several lines measures its sample, which loads that face.
-        auto lines = item.detail.toUpper().split('\n');
-        const int sampleHeight =
-                !item.placeholder && lines.size() > 1 ? fontSample(family).pixelSize() : 0;
-        while (sampleHeight && lines.size() > 1
-               && button->height() - detail->heightForWidth(detailWidth) - ui::px(32)
-                       < sampleHeight) {
-            lines.removeFirst();
-            detail->setText(lines.join('\n'));
-        }
-        const int detailHeight = item.detail.isEmpty() ? 0 : detail->heightForWidth(detailWidth);
-        const int titleLimit = item.detail.isEmpty() ? ui::px(96) : ui::px(64);
-        const int titleHeight = item.placeholder
-                ? ui::px(64)
-                : qMax(0, qMin<int>(titleLimit, button->height() - detailHeight - ui::px(32)));
-        const int top = qMax(0, (button->height() - titleHeight - detailHeight - ui::px(8)) / 2);
-        label->setGeometry(inset, top, detailWidth, titleHeight);
-        detail->setGeometry(inset, top + titleHeight + ui::px(8), detailWidth, detailHeight);
-        detail->setVisible(!item.detail.isEmpty());
-        label->setVisible(!item.placeholder);
-        button->show();
+        presentFontButton(row, items[index],
+                          QRect(col * width() / columns,
+                                header + sectionHeight + line * body / rows,
+                                (col + 1) * width() / columns - col * width() / columns,
+                                (line + 1) * body / rows - line * body / rows));
     }
     for (auto *button : buttons)
         if (!button->isHidden())
@@ -668,8 +612,120 @@ void ChoiceScreen::redrawFonts()
     fontHeader->raise();
     fontSectionBar->raise();
     fontPager->raise();
+    if (!fontPageStyle)
+        fontPageStyle = std::make_unique<FontPageStyle>();
+    *fontPageStyle = FontPageStyle::current(this);
     if (changed && isVisible())
         changed();
+}
+
+void ChoiceScreen::presentFontButton(int row, const Choice &item, const QRect &bounds)
+{
+    auto *button = buttons[row];
+    auto *fontCell = static_cast<FontCell *>(button);
+    auto *label = labels[row];
+    const bool selectedItem = !item.placeholder && item.value == selectedValue;
+    fontCell->fontMode = true;
+    fontCell->placeholder = item.placeholder;
+    fontCell->defaultRequested = !item.placeholder
+            ? std::function<void()>([this, value = item.value] {
+                  if (defaultRequested)
+                      defaultRequested(value, false);
+              })
+            : std::function<void()>{};
+    // Qt 5.2 does not repaint the area that a caption leaves when it is
+    // hidden. A cell that shows another font repaints completely, so a
+    // caption from the previous page cannot stay on screen.
+    if (button->objectName() != item.name)
+        button->update();
+    button->setObjectName(item.name);
+    button->setAccessibleName(item.placeholder ? item.detail : item.label);
+    button->setAccessibleDescription(item.detail);
+    button->setCheckable(true);
+    button->setChecked(selectedItem);
+    button->setGeometry(bounds);
+    readerStyle(
+            button,
+            QString("QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
+                    .arg(selectedItem ? "palette(window-text)" : "palette(window)")
+                    .arg(int(metrics::control::border)));
+    const QFont labelFont = ui::chromeFont(metrics::text::body);
+    const auto family = item.value.isEmpty() ? QStringLiteral("Libron") : item.value;
+    label->setFont(labelFont);
+    // The default slot draws its Aa with the private renderer.
+    fontCell->helpFont = QFont(family);
+    label->setAppearance(item.placeholder ? ui::SampleAppearance() : fontAppearance);
+    label->setPreviewSource(ui::fontPreviewSource(family, item.fontFiles));
+    label->optical = true;
+    label->setWordWrap(true);
+    label->setTextFormat(Qt::PlainText);
+    label->setText(item.label);
+    label->setAlignment(Qt::AlignCenter);
+    label->setObjectName(item.name + "Title");
+    auto styleFamily = labelFont.family();
+    styleFamily.replace('"', "\\\"");
+    readerStyle(
+            label,
+            QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;font-weight:400;")
+                    .arg(selectedItem ? "palette(window)" : "palette(window-text)")
+                    .arg(styleFamily)
+                    .arg(labelFont.pixelSize()));
+    auto *detail = fontCell->detail;
+    detail->setObjectName(item.name + "Detail");
+    detail->setText(item.detail.toUpper());
+    const auto caption = ui::captionFont(ui::px(18));
+    detail->setFont(caption);
+    readerStyle(
+            detail,
+            QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;")
+                    .arg(selectedItem ? "palette(window)" : ui::noteColor(this).name())
+                    .arg(caption.family())
+                    .arg(caption.pixelSize()));
+    const int inset = ui::px(12), detailWidth = qMax(1, button->width() - 2 * inset);
+    // A short cell, as in two rows of six, keeps a line for the name. The
+    // caption drops its first lines, which give the least detail. Only a
+    // caption with several lines measures its sample, which loads that face.
+    auto lines = item.detail.toUpper().split('\n');
+    const int sampleHeight =
+            !item.placeholder && lines.size() > 1 ? fontSample(family).pixelSize() : 0;
+    while (sampleHeight && lines.size() > 1
+           && button->height() - detail->heightForWidth(detailWidth) - ui::px(32) < sampleHeight) {
+        lines.removeFirst();
+        detail->setText(lines.join('\n'));
+    }
+    const int detailHeight = item.detail.isEmpty() ? 0 : detail->heightForWidth(detailWidth);
+    const int titleLimit = item.detail.isEmpty() ? ui::px(96) : ui::px(64);
+    const int titleHeight = item.placeholder
+            ? ui::px(64)
+            : qMax(0, qMin<int>(titleLimit, button->height() - detailHeight - ui::px(32)));
+    const int top = qMax(0, (button->height() - titleHeight - detailHeight - ui::px(8)) / 2);
+    label->setGeometry(inset, top, detailWidth, titleHeight);
+    detail->setGeometry(inset, top + titleHeight + ui::px(8), detailWidth, detailHeight);
+    detail->setVisible(!item.detail.isEmpty());
+    label->setVisible(!item.placeholder);
+    button->show();
+}
+
+bool ChoiceScreen::refreshFontButtonSelection()
+{
+    if (buttons.isEmpty() || fontPages.isEmpty())
+        return false;
+    if (!fontPageStyle || !(*fontPageStyle == FontPageStyle::current(this)))
+        return false;
+    const auto &slotsOnPage = fontPages[page];
+    if (slotsOnPage.size() > buttons.size())
+        return false;
+    for (int row = 0; row < slotsOnPage.size(); ++row) {
+        auto *button = buttons[row];
+        const auto &item = items[slotsOnPage[row]];
+        if (button->isHidden() || button->objectName() != item.name)
+            return false;
+        if (button->isChecked() != (!item.placeholder && item.value == selectedValue))
+            presentFontButton(row, item, button->geometry());
+    }
+    if (changed)
+        changed();
+    return true;
 }
 
 } // namespace kobalt

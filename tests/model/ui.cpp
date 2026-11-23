@@ -2854,6 +2854,20 @@ int main(int argc, char **argv)
         auto *next = picker.findChild<QPushButton *>("rrFontPagerNext");
         auto *previous = picker.findChild<QPushButton *>("rrFontPagerPrevious");
         require(next && previous, "Font picker lacks paging controls");
+        int selectionChanges = 0;
+        picker.changed = [&] { ++selectionChanges; };
+        picker.selectValue(choices[0].value);
+        picker.selectValue(choices[1].value);
+        picker.selectValue(choices[1].value);
+        require(selectionChanges == 3 && !picker.findChild<QPushButton *>("font0")->isChecked()
+                        && picker.findChild<QPushButton *>("font1")->isChecked(),
+                "Each confirmed font selection must update the checkmark and notify its caller");
+        picker.changed = {};
+        const auto selectedPage = picker.grab().toImage();
+        picker.showChoices("Font", choices, choices[1].value, ChoiceScreen::Mode::Fonts);
+        require(selectedPage == picker.grab().toImage(),
+                "Changing the font selection must paint the same page as opening at that font");
+
         for (int page = 0; page < 3; ++page) {
             app.processEvents();
             int visible = 0;

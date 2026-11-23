@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QStringList>
 #include <functional>
+#include <memory>
 
 namespace kobalt::ui {
 class ModalOverlay;
@@ -107,6 +108,7 @@ public:
     QJsonObject fontSamples() const;
     void setFontAppearance(const ui::SampleAppearance &appearance);
     explicit ChoiceScreen(QWidget *parent);
+    ~ChoiceScreen() override;
     void showChoices(const QString &heading, QVector<Choice> choices, const QString &current = {},
                      Mode presentation = Mode::Chapters,
                      ChapterGroups groups = ChapterGroups::Current);
@@ -127,6 +129,7 @@ public:
     {
         contents->showPrintedPageInput(pages, hasOtherLabels, std::move(jump), std::move(other));
     }
+
     void setChapterPosition(const QString &text);
     void setChapterPages(const QVector<int> &pages);
 
@@ -164,7 +167,11 @@ private:
     bool fittingHeight = false;
     void redraw();
     ChapterContents *contents;
+    struct FontPageStyle;
+    std::unique_ptr<FontPageStyle> fontPageStyle;
     void redrawFonts();
+    void presentFontButton(int row, const Choice &item, const QRect &bounds);
+    bool refreshFontButtonSelection();
     ui::Panel *fontHeader;
     QPushButton *fontClose;
     QLabel *fontTitle, *fontSection;
