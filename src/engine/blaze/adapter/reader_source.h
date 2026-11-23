@@ -50,16 +50,23 @@ struct ReaderSource
         QString path, id, position;
     };
 
-    QVector<TocAnchor> tocAnchors;
     struct TocFragments
     {
         QMultiHash<QString, int> ids;
         QVector<int> items;
     };
-    QHash<QString, TocFragments> pendingTocFragments;
-    QHash<QString, int> boundaryElementOrder;
-    bool mainTextChecked = false;
-    QPair<QString, QString> mainTextHints;
+
+    struct Boundaries
+    {
+        enum Status { Unchecked, Incomplete, Complete };
+
+        Status status = Unchecked;
+        QVector<TocAnchor> tocAnchors;
+        QHash<QString, TocFragments> pendingTocFragments;
+        QHash<QString, int> elementOrder;
+        QPair<QString, QString> hints;
+    } boundaries;
+
     // EPUB spine flags, including fragments whose text the chapter window omitted.
     QVector<bool> nonLinearItems;
     // Folded chapter text used to skip items during search. Recent keys share

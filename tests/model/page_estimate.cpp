@@ -111,7 +111,7 @@ struct ReaderLocationProbe
 
     static bool fragmentsPending(const EngineDocument &model, const QString &path)
     {
-        return model.source_->pendingTocFragments.contains(path);
+        return model.source_->boundaries.pendingTocFragments.contains(path);
     }
 
     static std::unique_ptr<ReaderSession> chapterActionSession(
@@ -3649,6 +3649,9 @@ static void lazyChapterFragments()
                     && model.chapterBoundaryPosition(links, 1) == after
                     && model.chapterBoundaryPosition(links, 3) == body,
             "Deferring TOC fragments changed duplicate IDs or anchors before malformed XML");
+    require(model.setChapterMode(true, {}, {}) && Probe::fragmentsPending(model, "second.xhtml")
+                    && !Probe::fragmentsPending(model, "first.xhtml"),
+            "Chapter mode lost the resolved or pending TOC fragments");
     require(model.chapterBoundaryPosition(links, 2) == "/body/DocFragment[2]/body[1]/p[1]"
                     && !Probe::fragmentsPending(model, "second.xhtml"),
             "Requesting a chapter did not resolve its exact source fragment");

@@ -131,12 +131,12 @@ struct FragmentAnchors
     QHash<int, QString> positions;
     QHash<QString, int> order;
 
-    void publish(ReaderSource &source) const
+    void publish(ReaderSource::Boundaries &index) const
     {
         for (auto it = positions.constBegin(); it != positions.constEnd(); ++it)
-            source.tocAnchors[it.key()].position = it.value();
+            index.tocAnchors[it.key()].position = it.value();
         for (auto it = order.constBegin(); it != order.constEnd(); ++it)
-            source.boundaryElementOrder.insert(it.key(), it.value());
+            index.elementOrder.insert(it.key(), it.value());
     }
 };
 
@@ -345,11 +345,17 @@ void scanSpineItem(FragmentAnchors &anchors, int item, const QByteArray &bytes,
 }
 
 QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
-                               const QVector<bool> &nonLinear)
+                               const QVector<bool> &nonLinear, ReaderSource::Boundaries &index)
 {
+    const auto read = [&](const QString &path) {
+        auto bytes = resource(source, path);
+        if (bytes.isEmpty())
+            index.status = ReaderSource::Boundaries::Incomplete;
+        return bytes;
+    };
     QString package, nav, ncxId;
     QHash<QString, QString> ncx;
-    QXmlStreamReader container(resource(source, "META-INF/container.xml"));
+    QXmlStreamReader container(read("META-INF/container.xml"));
     while (!container.atEnd()) {
         nextToken(container);
         if (container.isStartElement() && container.name() == QStringLiteral("rootfile")) {
@@ -359,7 +365,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
     }
     if (package.isEmpty())
         return {};
-    QXmlStreamReader opf(resource(source, package));
+    QXmlStreamReader opf(read(package));
     QVector<Reference> refs;
     bool epub3 = false, guide = false;
     while (!opf.atEnd()) {
@@ -390,7 +396,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
     if (opf.hasError())
         return {};
     if (!nav.isEmpty()) {
-        QXmlStreamReader xml(resource(source, nav));
+        QXmlStreamReader xml(read(nav));
         bool landmarks = false, toc = false;
         QVector<int> parents;
         while (!xml.atEnd()) {
@@ -407,9 +413,9 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
             }
             if (toc && xml.name() == QStringLiteral("li")) {
                 if (xml.isStartElement()) {
-                    if (source.tocAnchors.size() < maximumChapterEntries) {
-                        parents.append(source.tocAnchors.size());
-                        source.tocAnchors.append(ReaderSource::TocAnchor{});
+                    if (index.tocAnchors.size() < maximumChapterEntries) {
+                        parents.append(index.tocAnchors.size());
+                        index.tocAnchors.append(ReaderSource::TocAnchor{});
                     } else
                         parents.append(-1);
                 } else if (xml.isEndElement() && !parents.isEmpty())
@@ -418,7 +424,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
             if (toc && !parents.isEmpty() && parents.last() >= 0 && xml.isStartElement()
                 && xml.name() == QStringLiteral("a")) {
                 const auto ref = reference(nav, xml.attributes().value("href").toString(), 0);
-                auto &anchor = source.tocAnchors[parents.last()];
+                auto &anchor = index.tocAnchors[parents.last()];
                 anchor.path = ref.path;
                 anchor.id = ref.id;
             }
@@ -429,27 +435,27 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
         }
         if (xml.hasError()) {
             refs.clear();
-            source.tocAnchors.clear();
+            index.tocAnchors.clear();
         }
     }
 
-    if (source.tocAnchors.isEmpty() && ncx.contains(ncxId)) {
+    if (index.tocAnchors.isEmpty() && ncx.contains(ncxId)) {
         const auto path = ncx.value(ncxId);
-        QXmlStreamReader xml(resource(source, path));
+        QXmlStreamReader xml(read(path));
         QVector<int> parents;
         while (!xml.atEnd()) {
             stopPoint();
             nextToken(xml);
             const auto name = xml.name().toString();
             if (xml.isStartElement() && name == "navPoint") {
-                if (source.tocAnchors.size() >= maximumChapterEntries)
+                if (index.tocAnchors.size() >= maximumChapterEntries)
                     break;
-                parents.append(source.tocAnchors.size());
-                source.tocAnchors.append(ReaderSource::TocAnchor{});
+                parents.append(index.tocAnchors.size());
+                index.tocAnchors.append(ReaderSource::TocAnchor{});
             } else if (xml.isEndElement() && name == "navPoint" && !parents.isEmpty())
                 parents.removeLast();
             else if (!parents.isEmpty() && xml.isStartElement()) {
-                auto &anchor = source.tocAnchors[parents.last()];
+                auto &anchor = index.tocAnchors[parents.last()];
                 if (name == "content") {
                     const auto ref = reference(path, xml.attributes().value("src").toString(), 0);
                     anchor.path = ref.path;
@@ -458,11 +464,11 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
             }
         }
         if (xml.hasError())
-            source.tocAnchors.clear();
+            index.tocAnchors.clear();
     }
     QHash<QString, QMultiHash<QString, int>> anchors;
-    for (int row = 0; row < source.tocAnchors.size(); ++row) {
-        const auto &anchor = source.tocAnchors[row];
+    for (int row = 0; row < index.tocAnchors.size(); ++row) {
+        const auto &anchor = index.tocAnchors[row];
         if (!anchor.id.isEmpty())
             anchors[anchor.path].insert(anchor.id, row);
     }
@@ -486,7 +492,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
         }
         const auto ids = anchors.value(path);
         if (epub3 || !targets.isEmpty()) {
-            const auto bytes = resource(source, path);
+            const auto bytes = read(path);
             // A namespace URI can contain character references. Include any
             // candidate prefixed type when TOC links used to force this parse.
             const bool mayHaveSemantics = bytes.contains(char(0))
@@ -500,13 +506,13 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
                               i + 1 < spine.size() ? fragment(i + 1) : QStringLiteral(""));
                 if (narrative.offset == before)
                     ++narrative.offset;
-                found.publish(source);
+                found.publish(index);
                 continue;
             }
         }
         ++narrative.offset;
         if (!ids.isEmpty()) {
-            auto &pending = source.pendingTocFragments[path];
+            auto &pending = index.pendingTocFragments[path];
             pending.ids = ids;
             pending.items.append(i);
         }
@@ -518,10 +524,10 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
 
 bool EngineDocument::resolveTocFragments(int item) const
 {
-    if (!source_ || source_->pendingTocFragments.isEmpty())
+    if (!source_ || source_->boundaries.pendingTocFragments.isEmpty())
         return true;
     const auto path = spineItems().value(item);
-    const auto pending = source_->pendingTocFragments.value(path);
+    const auto pending = source_->boundaries.pendingTocFragments.value(path);
     if (pending.items.isEmpty())
         return true;
     const auto scan = [&] {
@@ -534,8 +540,8 @@ bool EngineDocument::resolveTocFragments(int item) const
             scanSpineItem(found, index, bytes, {}, pending.ids, false, unused);
         if (engineCancellationRequested())
             return false;
-        found.publish(*source_);
-        source_->pendingTocFragments.remove(path);
+        found.publish(source_->boundaries);
+        source_->boundaries.pendingTocFragments.remove(path);
         return true;
     };
 #ifdef KOBLAZE_CANCEL_CHECK
@@ -553,17 +559,17 @@ QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &link
                                                 bool *deferred) const
 {
     const auto &link = links[index];
-    if (!source_ || source_->tocAnchors.isEmpty() || externalChapters_)
+    if (!source_ || source_->boundaries.tocAnchors.isEmpty() || externalChapters_)
         return link.position;
     const int item = spineItemIndex(link.position);
     const bool unloaded = windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_);
-    if (source_->tocAnchors.size() == links.size()) {
+    if (source_->boundaries.tocAnchors.size() == links.size()) {
         // A group without its own link inherits the destination of its first child.
         int target = index;
-        while (source_->tocAnchors[target].path.isEmpty() && target + 1 < links.size()
+        while (source_->boundaries.tocAnchors.at(target).path.isEmpty() && target + 1 < links.size()
                && links[target + 1].depth > link.depth)
             ++target;
-        const auto &anchor = source_->tocAnchors[target];
+        const auto &anchor = source_->boundaries.tocAnchors.at(target);
         if (!anchor.path.isEmpty() && spineItems().value(item) == anchor.path) {
             if (anchor.id.isEmpty())
                 return link.position;
@@ -572,8 +578,9 @@ QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &link
                     *deferred = true;
                 return {};
             }
-            if (!anchor.position.isEmpty())
-                return anchor.position;
+            const auto &position = source_->boundaries.tocAnchors.at(target).position;
+            if (!position.isEmpty())
+                return position;
         }
     }
     // A window placeholder cannot establish which fragment the publisher targeted.
@@ -584,10 +591,12 @@ QPair<QString, QString> EngineDocument::mainTextHints() const
 {
     if (!source_ || source_->parent || source_->container.isNull())
         return {};
-    if (!source_->mainTextChecked) {
-        source_->mainTextHints = detect(*source_, spineItems(), nonLinearSpineItems());
-        source_->mainTextChecked = true;
+    if (source_->boundaries.status == ReaderSource::Boundaries::Unchecked) {
+        ReaderSource::Boundaries index;
+        index.status = ReaderSource::Boundaries::Complete;
+        index.hints = detect(*source_, spineItems(), nonLinearSpineItems(), index);
+        source_->boundaries = std::move(index);
     }
-    return source_->mainTextHints;
+    return source_->boundaries.hints;
 }
 } // namespace kobalt

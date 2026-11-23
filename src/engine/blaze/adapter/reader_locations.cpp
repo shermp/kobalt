@@ -265,7 +265,7 @@ bool EngineDocument::validMainTextRange(const QString &first, const QString &aft
             return 0;
         if (!source_)
             return -1;
-        const auto &anchors = source_->boundaryElementOrder;
+        const auto &anchors = source_->boundaries.elementOrder;
         const auto known = anchors.constFind(position);
         if (known != anchors.constEnd())
             return known.value();

@@ -18,14 +18,17 @@
 using namespace kobalt;
 
 namespace {
-void openPublication(EngineDocument &model, const test::BookFiles &files)
+std::shared_ptr<ResourceCache> openPublication(EngineDocument &model, const test::BookFiles &files,
+                                               std::function<bool(const QString &)> allowRead = {})
 {
     QMap<QString, qint64> sizes;
     for (auto it = files.cbegin(); it != files.cend(); ++it)
         sizes[it.key()] = it.value().size();
     auto source = std::make_shared<ResourceCache>(
             files.keys(),
-            [files](const QString &name, const ResourceCache::Sink &sink, QString *) {
+            [files, allowRead](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                if (allowRead && !allowRead(name))
+                    return false;
                 const auto bytes = files.value(name);
                 return sink(bytes.constData(), bytes.size());
             },
@@ -35,6 +38,7 @@ void openPublication(EngineDocument &model, const test::BookFiles &files)
             });
     QString error;
     require(model.openResources(source, sizes, { 600, 800 }, {}, &error), qPrintable(error));
+    return source;
 }
 
 void checkChapterImageWrappers()
@@ -202,6 +206,45 @@ void checkUnloadedMainTextRange()
             "Omitting first-child indices invalidated the unloaded chapter range");
     require(!model.validMainTextRange(end, start) && !model.validMainTextRange(start, hints.first),
             "Equivalent first-child positions changed the order of the boundaries");
+}
+
+void checkBoundaryScanAcrossChapterMode()
+{
+    const auto files = test::publisherPackage(
+            "en", "Chapter boundaries",
+            { { "front.xhtml", test::publisherHtml("<p>Front</p>") },
+              { "story.xhtml",
+                test::publisherHtml("<section epub:type='bodymatter'><p>Main</p></section>"
+                                    "<section epub:type='backmatter'><p>Notes</p></section>") } },
+            "<itemref idref='front.xhtml'/><itemref idref='story.xhtml'/>");
+    const auto section = QStringLiteral("/body/DocFragment[2]/body[1]/section");
+    const auto expected = qMakePair(section + "[1]", section + "[2]");
+    for (bool failFirstScan : { false, true }) {
+        int reads = 0;
+        bool fail = false;
+        EngineDocument model(test::readerFonts());
+        auto resources = openPublication(model, files, [&](const QString &name) {
+            if (name != QStringLiteral("story.xhtml"))
+                return true;
+            ++reads;
+            return !fail;
+        });
+        require(!model.partOfBook(), "Boundary scan fixture did not start in whole-book mode");
+        resources->releaseBytes();
+        reads = 0;
+        fail = failFirstScan;
+        const auto first = model.mainTextHints();
+        require(reads > 0 && (failFirstScan ? first != expected : first == expected),
+                "The whole-book boundary scan did not exercise the selected resource");
+        fail = false;
+        require(model.setChapterMode(true, {}, {}) && model.partOfBook(),
+                "Could not switch the boundary fixture to its first chapter");
+        reads = 0;
+        require(model.mainTextHints() == expected,
+                "The chapter lost the complete boundaries of an unloaded spine item");
+        require(failFirstScan ? reads > 0 : reads == 0,
+                "The chapter must retry an incomplete scan and reuse a complete one");
+    }
 }
 
 void checkBoxedMainTextBoundaries()
@@ -747,6 +790,7 @@ int main(int argc, char **argv)
     checkChapterImageWrappers();
     checkChapterGlossary();
     checkUnloadedMainTextRange();
+    checkBoundaryScanAcrossChapterMode();
     checkBoxedMainTextBoundaries();
     checkUnresolvedSpineFallbacks();
     checkNcxPageListWithNavContents();

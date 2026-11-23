@@ -984,6 +984,13 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
         return;
     const auto &from = *source_;
     auto &to = *next.source_;
+    // The scan records source paths, including TOC anchors still awaiting resolution.
+    // A new layout of the same spine can use them without rereading its chapters.
+    if (from.boundaries.status == ReaderSource::Boundaries::Complete
+        && to.boundaries.status == ReaderSource::Boundaries::Unchecked && !from.parent && !to.parent
+        && from.fontIdentity == to.fontIdentity && spineItems() == next.spineItems()
+        && nonLinearSpineItems() == next.nonLinearSpineItems())
+        to.boundaries = from.boundaries;
     if (from.pageEstimate.map.items() == spineItemCount_) {
         // The weights that this book corrected, and the measured text.
         auto &map = next.pageMap();
