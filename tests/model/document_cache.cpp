@@ -7,6 +7,7 @@
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
 #include <lvtinydom.h>
+#include <lvfntman.h>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -139,6 +140,53 @@ static void nodeSaveYields()
             "The resumed cache changed the final page");
 }
 
+// Kobo extracts wrapped system fonts to a private directory on each start.
+static void temporaryFontCopies(const QByteArray &book)
+{
+    using namespace kobalt;
+    const auto original = test::readerFonts();
+    require(!original.sources.bundled.isEmpty(), "Missing a reading font");
+    const auto path = original.sources.bundled.first();
+    const auto name = QDir(test::readerAssets().file("fonts")).relativeFilePath(path);
+    QFile font(path);
+    require(font.open(QIODevice::ReadOnly), "Cannot read font for the cache test");
+    const auto bytes = font.readAll();
+    QTemporaryDir cache;
+    require(cache.isValid(), "Cannot create font cache test directory");
+    const auto open = [&](FontCopies &copies, const QByteArray &content, bool cold) {
+        auto inputs = original;
+        inputs.sources.bundled[0] = copies.file(name, content);
+        require(!inputs.sources.bundled.first().isEmpty(), "Cannot copy the reading font");
+        inputs.contentAddressedFontDirectory = copies.directory();
+        EngineDocument model(inputs);
+        model.setDocumentCache(cache.path(), QByteArray(64, 'a'), "copy-font-test", 1024 * 1024);
+        QString error;
+        require(model.open(book, { 1072, 1328 }, {}, &error), qPrintable(error));
+        require(model.openedFromCache() != cold && model.saveDocumentCache(),
+                "Unexpected document cache state with copied fonts");
+        return fontMan->GetFontListHash(-1);
+    };
+    FontCopies first, second;
+    require(first.directory() != second.directory(), "Test needs two different font directories");
+    const auto firstHash = open(first, bytes, true);
+    const auto files = QDir(cache.path()).entryList({ "*.cr3" }, QDir::Files);
+    require(files.size() == 1, "Cannot find the font cache test document");
+    const auto cacheFile = cache.filePath(files.first());
+    QFile saved(cacheFile);
+    const auto oldTime = QDateTime::fromSecsSinceEpoch(946684800);
+    require(saved.open(QIODevice::ReadWrite)
+                    && saved.setFileTime(oldTime, QFileDevice::FileModificationTime),
+            "Cannot set the cached layout timestamp");
+    saved.close();
+    require(open(second, bytes, false) == firstHash
+                    && QFileInfo(cacheFile).lastModified() == oldTime,
+            "Identical font bytes in another temporary directory invalidated the layout");
+    require(open(second, bytes + 'x', false) != firstHash,
+            "Replacing the bytes kept the same font list hash");
+    require(QFileInfo(cacheFile).lastModified() != oldTime,
+            "Replacing the font did not rewrite the document cache");
+}
+
 // Run the writer with the previous engine and the checker with its replacement.
 // The checker requires a real cache hit, then compares it with a fresh parse.
 static void checkCompatibility(const QByteArray &bytes, const QString &root, bool write)
@@ -245,6 +293,7 @@ int main(int argc, char **argv)
         return 0;
     }
     QString error;
+    temporaryFontCopies(bytes);
     parkedCache();
     nodeSaveYields();
     {

@@ -67,6 +67,8 @@ public:
     FontCopies(const FontCopies &) = delete;
     FontCopies &operator=(const FontCopies &) = delete;
     QString file(const QString &name, const QByteArray &bytes);
+    // Each path below this private directory starts with the SHA-256 of its contents.
+    QString directory() const;
 
 private:
     struct Data;

@@ -42,6 +42,18 @@ It helps only images that are drawn at half their size or less. Covers and photo
 
 **Upstream:** present upstream.
 
+### Cached pages survive a restart with temporary font copies
+
+**Summary:** the font-list hash can use a stable filename for a font that the host extracts on each start.
+
+Kobo supplies some system fonts in compressed files. Kobalt decompresses them into a private temporary directory. Each filename beneath that directory contains the SHA-256 of the decoded font and its logical name. Upstream includes the complete path in the font-list hash. After Nickel restarts, the temporary directory has a new name, so CREngine discards the cached page layout even when every font and rendering setting is the same.
+
+Blaze lets the host identify its content-addressed font directory before registering fonts. A face from that directory keeps its relative filename for the font-list hash. FreeType still opens the full path. Replacing the decoded bytes changes the relative filename and invalidates cached pages. Other font files keep their existing keys.
+
+**Code:** `SetContentAddressedFontDirectory` and `GetFontListHash` in [lvfntman.cpp](crengine/src/lvfntman.cpp).
+
+**Upstream:** present upstream. We checked the path hash in the pinned revision and reproduced the unnecessary pagination with Kobo firmware in VirtualNickel.
+
 ### PNG images decode one row at a time
 
 **Summary:** a PNG that is not interlaced needs one row of memory, not the whole image.

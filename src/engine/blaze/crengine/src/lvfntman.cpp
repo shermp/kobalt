@@ -7627,12 +7627,20 @@ private:
     std::vector<NominalFallback> _nominalFallback;
     FT_Library  _library;
     LVFontGlobalGlyphCache _globalCache;
+    lString8 _contentAddressedFontPrefix;
     lString32 _requiredChars;
     #if (DEBUG_FONT_MAN==1)
     FILE * _log;
     #endif
     LVMutex   _lock;
 public:
+
+    void SetContentAddressedFontDirectory(lString8 directory) override {
+        FONT_MAN_GUARD
+        _contentAddressedFontPrefix = directory;
+        if (!directory.empty() && !directory.endsWith("/"))
+            _contentAddressedFontPrefix << "/";
+    }
 
     /// get hash of installed fonts and fallback font
     lUInt32 GetFontListHash(int documentId) override {
@@ -7648,7 +7656,12 @@ public:
                 // Include global faces and faces belonging to this document.
                 if (documentId != -1 && face.documentId != -1 && face.documentId != documentId)
                     continue;
-                lUInt32 h = face.file_path.getHash();
+                // Blaze: private global font copies keep their digest and logical
+                // filename when the host extracts them under a new temporary root.
+                bool copied = face.documentId == -1 && !_contentAddressedFontPrefix.empty()
+                        && face.file_path.startsWith(_contentAddressedFontPrefix);
+                lUInt32 h = copied ? face.file_path.substr(_contentAddressedFontPrefix.length()).getHash()
+                                   : face.file_path.getHash();
                 h = h * 31 + (lUInt32)face.face_index;
                 h = h * 31 + face.typeface.getHash(); // family name: changes if a face is moved to another family
                 h = h * 31 + (lUInt32)(unsigned)(int)face._wght_min;

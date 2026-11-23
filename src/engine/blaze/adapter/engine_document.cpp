@@ -437,6 +437,9 @@ bool EngineDocument::initializeFonts()
         return false;
     if (!InitFontManager(lString8()))
         return false;
+    if (!fonts_.contentAddressedFontDirectory.isEmpty())
+        fontMan->SetContentAddressedFontDirectory(
+                lString8(fonts_.contentAddressedFontDirectory.toUtf8().constData()));
     QMap<QString, std::shared_ptr<const LVFontFace>> inspected;
     readingFonts =
             discoverReadingFonts(fonts_.sources, [&](const QString &file, FT_FaceRec_ *face) {

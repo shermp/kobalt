@@ -67,6 +67,8 @@ struct EngineFontInputs
     QStringList excludedHyphenation = {};
     QMap<QString, QByteArray> verifiedFontDigests = {};
     QMap<QString, QString> compiledHyphenation = {};
+    // Files below this temporary root are named by content digest and logical filename.
+    QString contentAddressedFontDirectory = {};
     bool operator==(const EngineFontInputs &other) const;
 };
 

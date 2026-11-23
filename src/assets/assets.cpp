@@ -489,6 +489,11 @@ FontCopies::FontCopies() : data(new Data) { }
 
 FontCopies::~FontCopies() = default;
 
+QString FontCopies::directory() const
+{
+    return data->directory.path();
+}
+
 QString FontCopies::file(const QString &name, const QByteArray &bytes)
 {
     if (name.isEmpty() || name.startsWith('/') || name.split('/').contains(".."))

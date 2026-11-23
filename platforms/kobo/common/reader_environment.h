@@ -239,6 +239,7 @@ struct ReaderEnvironment
             systemFontsReady = true;
         }
         inputs.sources.systemFiles = systemFonts;
+        inputs.contentAddressedFontDirectory = fontCopies.directory();
         return inputs;
     }
 

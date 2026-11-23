@@ -801,6 +801,8 @@ public:
     virtual int GetFontCount() = 0;
     /// get hash of installed fonts and fallback font
     virtual lUInt32 GetFontListHash(int /*documentId*/) { return 0; }
+    // Blaze: call before registering files from a temporary content-addressed directory.
+    virtual void SetContentAddressedFontDirectory(lString8 /*directory*/) {}
     /// clear glyph cache
     virtual void clearGlyphCache() { }
 
