@@ -1181,6 +1181,13 @@ void ReaderCoordinator::load(const QJsonObject &globalPreferences)
     const auto bookDefaults = kobalt::appearance::bookDefaults(preferences);
     const bool restart = run.diskBaseline.valid && run.diskBaseline.status == 2;
     run.session->setPublisherPageNumbers(preferences.value("publisher_page_numbers").toBool());
+    std::function<void(QImage)> openingCover;
+    if (preferences.value("show_opening_cover").toBool(true)) {
+        openingCover = [this](QImage cover) {
+            if (run.loading)
+                run.loading->setCover(std::move(cover));
+        };
+    }
     run.session->open(
             { run.identity,
               run.filePath,
@@ -1218,10 +1225,7 @@ void ReaderCoordinator::load(const QJsonObject &globalPreferences)
                 showReader();
             },
             [this](kobalt::OpeningStage stage, int percent) { updateOpening(stage, percent); },
-            [this](QImage cover) {
-                if (run.loading)
-                    run.loading->setCover(std::move(cover));
-            },
+            std::move(openingCover),
             [this] {
                 if (run.loading)
                     run.loading->setReopening();

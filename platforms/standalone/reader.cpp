@@ -256,6 +256,13 @@ void ReaderController::begin(BookOpen book)
 #endif
     request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->setPublisherPageNumbers(settings.value("publisher_page_numbers").toBool());
+    std::function<void(QImage)> openingCover;
+    if (settings.value("show_opening_cover").toBool(true)) {
+        openingCover = [guard](QImage cover) {
+            if (guard && guard->phase == Phase::Opening)
+                emit guard->openingCover(std::move(cover));
+        };
+    }
     opening->open(
             std::move(request),
             [guard, identity, statePath, pixels](const OpeningResult &result) {
@@ -365,10 +372,7 @@ void ReaderController::begin(BookOpen book)
                 painted.start();
                 emit guard->openingProgress(openingProgressPercent(stage, percent));
             },
-            [guard](QImage cover) {
-                if (guard && guard->phase == Phase::Opening)
-                    emit guard->openingCover(std::move(cover));
-            },
+            std::move(openingCover),
             [guard] {
                 if (guard && guard->phase == Phase::Opening)
                     emit guard->reopeningBook();

@@ -18590,11 +18590,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(live, 1);
     }
 
+    void openingProgressStages_data()
+    {
+        QTest::addColumn<bool>("showOpeningCover");
+        QTest::newRow("default-cover") << true;
+        QTest::newRow("cover-disabled") << false;
+    }
+
     // The opening bar reserves its last part for the window and presentation.
     void openingProgressStages()
     {
+        QFETCH(bool, showOpeningCover);
         QTemporaryDir directory;
         storage::Paths paths{ directory.path() };
+        if (!showOpeningCover)
+            QVERIFY(storage::writePreferences(paths.preferences(),
+                                              { { "show_opening_cover", false } }));
         standalone::ReaderController controller(
                 paths, fixtureFonts(), fixturePlaceholder(),
                 [] {
@@ -18611,9 +18622,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVector<int> progress;
         connect(&controller, &standalone::ReaderController::openingProgress, &controller,
                 [&](int percent) { progress.append(percent); });
+        QSignalSpy covers(&controller, &standalone::ReaderController::openingCover);
         QSignalSpy opened(&controller, &standalone::ReaderController::opened);
         controller.open(book, QSize(600, 800));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        if (showOpeningCover) {
+            QVERIFY(!covers.isEmpty());
+            QVERIFY(!covers.last().first().value<QImage>().isNull());
+        } else {
+            QCOMPARE(covers.size(), 0);
+        }
         QVERIFY(progress.contains(openingBarEngine) && progress.contains(openingBarWindow));
         QCOMPARE(openingProgressPercent(OpeningStage::Pages, 0), 19);
         QCOMPARE(openingProgressPercent(OpeningStage::Pages, 50), 54);
