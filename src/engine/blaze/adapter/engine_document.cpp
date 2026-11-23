@@ -2215,6 +2215,11 @@ QString chapterImage(ReaderSource &source, ldomNode *node)
     if (length <= 0 || length > maxWrapper || source.chapterImageProbes >= 128)
         return {};
     ++source.chapterImageProbes;
+    const auto previous = source.previousChapterImages.constFind(path);
+    if (previous != source.previousChapterImages.constEnd()) {
+        source.chapterImages.insert(path, previous.value());
+        return previous.value();
+    }
     QByteArray bytes;
     if (source.resources) {
         bytes = source.resources->readOptional(path, maxWrapper);
@@ -2281,6 +2286,8 @@ QString chapterImage(ReaderSource &source, ldomNode *node)
         if (xml.hasError())
             image.clear();
     }
+    if (bytes.isEmpty())
+        source.chapterImageReadFailed = true;
     source.chapterImages.insert(path, image);
     return image;
 }

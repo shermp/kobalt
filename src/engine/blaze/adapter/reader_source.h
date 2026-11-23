@@ -42,7 +42,8 @@ struct ReaderSource
     // page estimate its sizes.
     QVector<qint64> spineBytes;
     // Positive and negative image-only chapter lookups survive chapter-window changes.
-    QHash<QString, QString> chapterImages;
+    QHash<QString, QString> chapterImages, previousChapterImages;
+    bool chapterImageReadFailed = false;
     int chapterImageProbes = 0;
 
     struct TocAnchor

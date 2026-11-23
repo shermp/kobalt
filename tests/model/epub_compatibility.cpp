@@ -63,6 +63,59 @@ void checkChapterImageWrappers()
     require(chapters[3].labelImage.isEmpty(), "Chapter preview accepted a long entity declaration");
 }
 
+void checkChapterImageReuse()
+{
+    auto files = test::engineBook(true, 3, 1);
+    const auto plate = QStringLiteral("OEBPS/c3.xhtml");
+    files[plate] = test::publisherHtml("<img src='colors.png'/>");
+    for (bool failFirstRead : { false, true }) {
+        int reads = 0;
+        bool readable = true;
+        EngineDocument model(test::readerFonts());
+        auto resources = openPublication(model, files, [&](const QString &name) {
+            if (name != plate)
+                return true;
+            ++reads;
+            return readable;
+        });
+        resources->releaseBytes();
+        reads = 0;
+        readable = !failFirstRead;
+        const auto first = model.chapters();
+        require(first.size() == 3 && reads > 0
+                        && first.last().labelImage.isEmpty() == failFirstRead,
+                "The whole-book TOC did not probe the image wrapper");
+        readable = true;
+        require(model.setChapterMode(true, {}, {}), "Could not switch to the first chapter");
+        reads = 0;
+        const auto next = model.chapters();
+        require(next.size() == 3 && next.last().labelImage == "OEBPS/colors.png",
+                "A layout change lost the chapter image");
+        require(failFirstRead ? reads > 0 : reads == 0,
+                "A new layout must reuse a completed wrapper probe and retry a failed read");
+    }
+}
+
+void checkChapterImageProbeLimit()
+{
+    auto files = test::engineBook(true, 129, 0);
+    const auto prose = test::publisherHtml("<p>Prose</p>");
+    const auto plate = test::publisherHtml("<img src='colors.png'/>");
+    for (int i = 1; i <= 129; ++i)
+        files[QString("OEBPS/c%1.xhtml").arg(i)] = i < 128 ? prose : plate;
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto check = [&] {
+        const auto links = model.chapters();
+        require(links.size() == 129 && links[127].labelImage == "OEBPS/colors.png"
+                        && links[128].labelImage.isEmpty(),
+                "Chapter image lookup exceeded or fell short of its 128-file limit");
+    };
+    check();
+    require(model.setChapterMode(true, {}, {}), "Could not reopen the image probe fixture");
+    check();
+}
+
 void checkChapterGlossary()
 {
     const auto glossary =
@@ -788,6 +841,8 @@ int main(int argc, char **argv)
     checkDtbookChapterWindow();
     checkCodecs();
     checkChapterImageWrappers();
+    checkChapterImageReuse();
+    checkChapterImageProbeLimit();
     checkChapterGlossary();
     checkUnloadedMainTextRange();
     checkBoundaryScanAcrossChapterMode();
