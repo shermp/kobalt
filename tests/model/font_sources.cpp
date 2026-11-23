@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <lvfntman.h>
+#include <algorithm>
 
 using namespace kobalt;
 
@@ -138,6 +139,17 @@ int main(int argc, char **argv)
                    test::readerAssets().file("fonts/ebook-core/NV_Bitter-Regular.ttf"),
                    kfDirectory + "/KF_Bitter.ttf", "NV Bitter", "KF Bitter"),
            "create name-only KF catalog fixture");
+    expect(test::renamedFontFixture(
+                   test::readerAssets().file("fonts/ebook-core/NV_Bitter-Regular.ttf"),
+                   kfDirectory + "/KF_Libron.ttf", "NV Bitter", "KF Libron"),
+           "create registered legacy family for a live font choice");
+    // Optional core fonts can be absent from the installed bundle.
+    auto &bundled = inputs.sources.bundled;
+    bundled.erase(std::remove_if(bundled.begin(), bundled.end(),
+                                 [](const QString &path) {
+                                     return QFileInfo(path).fileName().startsWith("Libron-");
+                                 }),
+                  bundled.end());
     inputs.sources.sideloadDirectory = kfDirectory;
     EngineDocument model(inputs);
     bool registered = false;
@@ -166,12 +178,22 @@ int main(int argc, char **argv)
            "hidden KF family remains registered in the rendering catalog");
     book.seek(0);
     expect(model.open(book.readAll(), QSize(800, 1000),
-                      qt::object({ { "font_face", "KF Bitter" } }), &error),
+                      qt::object({ { "font_face", "KF Bitter" },
+                                   { "default_font_face", "KF Bitter" } }),
+                      &error),
            qPrintable(error));
     expect(model.fontFace() == "KF Bitter"
                    && model.state().value("font_face").toString() == "KF Bitter"
                    && !model.image(model.page()).isNull(),
            "saved KF choice retains its identity and renders");
+    expect(model.fontFaces().contains("KF Libron"), "legacy font is available in this bundle");
+    EngineDocument preview(inputs);
+    const appearance::Patch liveFont({ { "font_face", "KF Libron" } });
+    if (!preview.openPreview(model, QSize(800, 1000), &error, liveFont)) {
+        expect(preview.openPreview(model, QSize(800, 1000), &error), qPrintable(error));
+        expect(preview.applyAppearance(liveFont), "apply the registered face after opening");
+    }
+    expect(preview.fontFace() == "KF Libron", "cold preview preserves a live legacy font choice");
     auto changed = sources;
     changed.systemFiles.clear();
     expect(!(changed == sources), "prepared font paths participate in source identity");

@@ -2302,6 +2302,8 @@ bool EngineDocument::openPreview(Engine &other, QSize size, QString *error,
     if (!fields.isEmpty()
         && (fields.size() != 1
             || (!fields.contains("font_pixels") && fields.value("font_face").toString().isEmpty())
+            // Opening migrates this legacy saved name. Apply a live selection after opening.
+            || fields.value("font_face").toString() == "KF Libron"
             || !source.updateAppearance(fontEdit, size, {}, AppearanceAction::Validate)))
         return fail(strings::get("error.could_not_update_text"));
     auto *document = source.engine_->getDocument();
