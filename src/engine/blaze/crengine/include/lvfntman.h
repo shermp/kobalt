@@ -44,26 +44,8 @@ extern "C" {
 
 struct LVFontGlyphCacheItem;
 
-union GlyphCacheItemData {
-	lChar32 ch;
-#if USE_HARFBUZZ==1
-	lUInt32 gindex;
-#endif
-};
-
-#if USE_GLYPHCACHE_HASHTABLE == 1
-inline lUInt32 getHash(GlyphCacheItemData data)
-{
-    return getHash(*((lUInt32*)&data));
-}
-
-// Note: this may cause some issue when building on Win32 (or anywhere lChar32
-// is not 32bits), see https://github.com/buggins/coolreader/pull/117
-inline bool operator==(GlyphCacheItemData data1, GlyphCacheItemData data2)
-{
-    return (*((lUInt32*)&data1)) == (*((lUInt32*)&data2));
-}
-#endif
+// Blaze: both character codes and shaped glyph IDs are 32-bit lookup keys.
+using GlyphCacheItemData = lUInt32;
 
 class LVFontGlobalGlyphCache
 {
@@ -98,17 +80,18 @@ private:
 #if USE_GLYPHCACHE_HASHTABLE == 1
     LVHashTable<GlyphCacheItemData, struct LVFontGlyphCacheItem*> hashTable;
 #else
-    LVFontGlyphCacheItem * head;
-    LVFontGlyphCacheItem * tail;
+    // Reuse the glyphs' local list links for short chains within each bucket.
+    LVFontGlyphCacheItem * buckets[32] = {};
+    LVFontGlyphCacheItem *& bucket(lUInt32 key) {
+        return buckets[(key ^ (key >> 16)) & 31];
+    }
 #endif
     //int size;
 public:
     LVFontLocalGlyphCache( LVFontGlobalGlyphCache * globalCache )
-    : global_cache(globalCache),
+    : global_cache(globalCache)
 #if USE_GLYPHCACHE_HASHTABLE == 1
-    hashTable(GLYPHCACHE_TABLE_SZ)
-#else
-    head(NULL), tail(NULL)
+    , hashTable(GLYPHCACHE_TABLE_SZ)
 #endif
     {}
     ~LVFontLocalGlyphCache()
@@ -158,7 +141,7 @@ struct LVFontGlyphCacheItem
         LVFontGlyphCacheItem * item = (LVFontGlyphCacheItem *)malloc( offsetof(LVFontGlyphCacheItem, bmp)
                                                                         + (pitch * h) );
 	if (item) {
-	    item->data.ch = ch;
+	    item->data = ch;
 	    item->bmp_width = (lUInt16)w;
 	    item->bmp_height = (lUInt16)h;
 	    item->bmp_pitch = (lUInt16)pitch;
@@ -181,7 +164,7 @@ struct LVFontGlyphCacheItem
         LVFontGlyphCacheItem * item = (LVFontGlyphCacheItem *)malloc( offsetof(LVFontGlyphCacheItem, bmp)
                                                                         + (pitch * h) );
         if (item) {
-            item->data.gindex = glyph_index;
+            item->data = glyph_index;
             item->bmp_width = (lUInt16) w;
             item->bmp_height = (lUInt16) h;
             item->bmp_pitch = (lUInt16) pitch;

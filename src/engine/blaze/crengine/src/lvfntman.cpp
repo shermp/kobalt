@@ -1282,11 +1282,13 @@ void LVFontLocalGlyphCache::clear()
     }
     hashTable.clear();
 #else
-    while ( head ) {
-        LVFontGlyphCacheItem * ptr = head;
-        remove( ptr );
-        global_cache->remove( ptr );
-        LVFontGlyphCacheItem::freeItem( ptr );
+    for (auto &head : buckets) {
+        while (head) {
+            LVFontGlyphCacheItem *item = head;
+            head = item->next_local;
+            global_cache->remove(item);
+            LVFontGlyphCacheItem::freeItem(item);
+        }
     }
 #endif
 }
@@ -1296,14 +1298,13 @@ LVFontGlyphCacheItem * LVFontLocalGlyphCache::getByChar(lChar32 ch)
     FONT_LOCAL_GLYPH_CACHE_GUARD
 #if USE_GLYPHCACHE_HASHTABLE == 1
     LVFontGlyphCacheItem *ptr = 0;
-    GlyphCacheItemData data;
-    data.ch = ch;
+    GlyphCacheItemData data = ch;
     if (hashTable.get(data, ptr))
         return ptr;
 #else
-    LVFontGlyphCacheItem * ptr = head;
+    LVFontGlyphCacheItem * ptr = bucket(ch);
     for ( ; ptr; ptr = ptr->next_local ) {
-        if ( ptr->data.ch == ch ) {
+        if ( ptr->data == ch ) {
             global_cache->refresh( ptr );
             return ptr;
         }
@@ -1318,14 +1319,13 @@ LVFontGlyphCacheItem * LVFontLocalGlyphCache::getByIndex(lUInt32 index)
     FONT_LOCAL_GLYPH_CACHE_GUARD
 #if USE_GLYPHCACHE_HASHTABLE == 1
     LVFontGlyphCacheItem *ptr = 0;
-    GlyphCacheItemData data;
-    data.gindex = index;
+    GlyphCacheItemData data = index;
     if (hashTable.get(data, ptr))
         return ptr;
 #else
-    LVFontGlyphCacheItem *ptr = head;
+    LVFontGlyphCacheItem *ptr = bucket(index);
     for (; ptr; ptr = ptr->next_local) {
-        if (ptr->data.gindex == index) {
+        if (ptr->data == index) {
             global_cache->refresh( ptr );
             return ptr;
         }
@@ -1342,11 +1342,10 @@ void LVFontLocalGlyphCache::put( LVFontGlyphCacheItem * item )
 #if USE_GLYPHCACHE_HASHTABLE == 1
     hashTable.set(item->data, item);
 #else
+    auto &head = bucket(item->data);
     item->next_local = head;
     if ( head )
         head->prev_local = item;
-    if ( !tail )
-        tail = item;
     head = item;
 #endif
 }
@@ -1358,14 +1357,10 @@ void LVFontLocalGlyphCache::remove( LVFontGlyphCacheItem * item )
 #if USE_GLYPHCACHE_HASHTABLE == 1
     hashTable.remove(item->data);
 #else
-    if ( item==head )
-        head = item->next_local;
-    if ( item==tail )
-        tail = item->prev_local;
-    if ( !head || !tail )
-        return;
     if ( item->prev_local )
         item->prev_local->next_local = item->next_local;
+    else
+        bucket(item->data) = item->next_local;
     if ( item->next_local )
         item->next_local->prev_local = item->prev_local;
     item->next_local = NULL;
