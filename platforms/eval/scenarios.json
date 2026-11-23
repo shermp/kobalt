@@ -160,6 +160,94 @@
       "sample": {"event": "panel-open", "panel": "menu", "field": "total_ms", "stages": true}
     },
     {
+      "id": "panel.stats",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 1,
+      "paths": ["src/app/reader/panels/chapter_graph.cpp", "src/app/reader/window/", "src/ui/"],
+      "book": "benchmark",
+      "steps": [
+        {"press": "rrPage", "unless": "rrNavStats"}, {"visible": "rrNavStats"}, {"settle": true},
+        {"mark": true}, {"press": "rrNavStats"}, {"visible": "rrChapterGraph"}, {"mark_end": true}
+      ],
+      "after": [{"press": "rrNavStats"}, {"hidden": "rrChapterGraph"}],
+      "sample": {"timer": true}
+    },
+    {
+      "id": "panel.appearance.text.prepared",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 1,
+      "paths": ["src/app/reader/settings/appearance_panel.cpp", "src/app/reader/window/", "src/ui/"],
+      "book": "benchmark",
+      "setup": [
+        {"widget": "rrFont", "property": "objectName", "is": "rrFont", "timeout": 15000, "check": "Reader prepared the appearance controls"}
+      ],
+      "steps": [
+        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"}, {"settle": true},
+        {"mark": true}, {"press": "rrNavText"}, {"visible": "rrFont"}, {"mark_end": true}
+      ],
+      "after": [{"press": "rrNavText"}, {"hidden": "rrMenu"}, {"settle": true}],
+      "sample": {"timer": true}
+    },
+    {
+      "id": "panel.percentage-format",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 1,
+      "paths": ["src/app/reader/settings/", "src/ui/controls/options.cpp", "src/ui/dialogs/choice_sheet.cpp"],
+      "book": "benchmark",
+      "setup": [
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"},
+        {"visible": "rrSettingsSystem"}, {"press": "rrSettingsSystem"}, {"reveal": "rrPercentageFormat"},
+        {"settle": true}
+      ],
+      "steps": [
+        {"mark": true}, {"press": "rrPercentageFormat"}, {"visible": "rrPercentageFormat_decimal"}, {"mark_end": true}
+      ],
+      "after": [{"press": "rrPercentageFormatPopup", "at": [0.01, 0.01]}, {"hidden": "rrPercentageFormatPopup"}],
+      "teardown": [{"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"}],
+      "sample": {"timer": true}
+    },
+    {
+      "id": "panel.fonts.reader",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 1,
+      "paths": ["src/app/reader/panels/choice_screen.cpp", "src/app/reader/window/", "src/ui/"],
+      "book": "benchmark",
+      "setup": [
+        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"},
+        {"press": "rrNavText"}, {"visible": "rrFont"}, {"settle": true}
+      ],
+      "steps": [
+        {"mark": true}, {"press": "rrFont"}, {"visible": "rrChoices"}, {"mark_end": true}
+      ],
+      "after": [{"press": "rrFontClose"}, {"hidden": "rrChoices"}],
+      "sample": {"timer": true}
+    },
+    {
+      "id": "panel.fonts.header-footer",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 1,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/reader_settings.cpp", "src/ui/"],
+      "book": "benchmark",
+      "setup": [
+        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"},
+        {"press": "rrNavLayout"}, {"visible": "rrHeaderFooter"}, {"press": "rrHeaderFooter"},
+        {"visible": "rrHeaderFooterView"},
+        {"reveal": "rrStripFontPicker", "next": "rrHeaderFooterNext", "previous": "rrHeaderFooterPrevious"},
+        {"settle": true}
+      ],
+      "steps": [
+        {"mark": true}, {"press": "rrStripFontPicker"}, {"visible": "rrSettingsFontPopup"}, {"mark_end": true}
+      ],
+      "after": [{"press": "rrSettingsFontPopup", "at": [0.01, 0.01]}, {"hidden": "rrSettingsFontPopup"}],
+      "teardown": [{"press": "rrHeaderFooterClose"}, {"hidden": "rrHeaderFooterView"}],
+      "sample": {"timer": true}
+    },
+    {
       "id": "panel.dictionary.long",
       "kind": "e2e",
       "paths": ["src/app/reader/panels/dictionary_panel.cpp", "src/ui/", "src/app/reader/window/reader.cpp"],
