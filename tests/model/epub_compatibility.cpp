@@ -572,6 +572,20 @@ void checkInlinePrintedPages()
             "A missing passage cannot inherit a printed label");
 }
 
+bool hasSingleSearchHit(EngineDocument &model, const QString &query)
+{
+    int hits = 0;
+    SearchCursor cursor;
+    do {
+        const auto batch = model.searchText(query, cursor, 2 - hits);
+        hits += batch.hits.size();
+        if (batch.done)
+            return hits == 1;
+        cursor = batch.cursor;
+    } while (hits < 2);
+    return false;
+}
+
 void checkDtbookChapterWindow()
 {
     auto files = test::engineBook(false, 2, 25);
@@ -595,8 +609,7 @@ void checkDtbookChapterWindow()
             qPrintable(error));
     require(model.goTo(entries.last().position) && model.position() == expected,
             "DTBook fragment changed across chapter windows");
-    require(model.searchText("cormorant", {}, 2).hits.size() == 1,
-            "Text in nested DTBook section was lost");
+    require(hasSingleSearchHit(model, "cormorant"), "Text in nested DTBook section was lost");
 }
 
 // Present the fixture as a seekable archive with a zero-filled gap after mimetype.
@@ -843,7 +856,7 @@ int main(int argc, char **argv)
     require(publication.inspect(bytes, &error) && publication.zip64(), qPrintable(error));
     EngineDocument book(test::readerFonts());
     require(book.open(bytes, { 600, 800 }, {}, &error), qPrintable(error));
-    require(book.searchText("kingfisher", {}, 2).hits.size() == 1, "DTBook paragraph lost");
+    require(hasSingleSearchHit(book, "kingfisher"), "DTBook paragraph lost");
     const auto links = book.chapters();
     require(links.size() == 1 && links.first().title == "The passage"
                     && book.goTo(links.first().position),

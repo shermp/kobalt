@@ -13794,7 +13794,8 @@ static void flushFindTextCanonicalUnits(LVArray<EnhancedSearchCanonicalUnit> & u
     sortFindTextCanonicalUnits(units, markStart);
     for (int i = 0; i < units.length(); i++)
         appendFindTextOutputChar(units[i].ch, units[i].origin, searchFlags, output, origins);
-    units.clear();
+    // Blaze: reuse the allocation for the next segment in this text block.
+    units.reset();
 }
 
 class FindTextFoldContext {
@@ -13827,6 +13828,16 @@ public:
     void appendSourceChar(lChar32 sourceChar, const EnhancedSearchCharOrigin & origin, lString32 & output,
             LVArray<EnhancedSearchCharOrigin> * origins, LVArray<EnhancedSearchCanonicalUnit> & pendingCanonicalUnits) const
     {
+        // Blaze: printable ASCII has no decomposition or combining marks. After
+        // any preceding marks, emit it at its original offset. The output helper
+        // still handles consecutive spaces.
+        if ( sourceChar >= U' ' && sourceChar <= U'~' ) {
+            flushFindTextCanonicalUnits(pendingCanonicalUnits, _searchFlags, output, origins);
+            if ( _caseInsensitive && sourceChar >= U'A' && sourceChar <= U'Z' )
+                sourceChar += U'a' - U'A';
+            appendFindTextOutputChar(sourceChar, origin, _searchFlags, output, origins);
+            return;
+        }
         lChar32 decomposed[FIND_TEXT_MAX_DECOMPOSED_CODEPOINTS];
         int count;
         if ( _decompose ) {

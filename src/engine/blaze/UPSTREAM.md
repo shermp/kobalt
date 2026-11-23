@@ -232,6 +232,18 @@ It suits static faces only. A face registered this way has no variable axes, mat
 
 **Upstream:** not upstream.
 
+### Folding text for search
+
+**Summary:** Blaze reuses the buffer for combining marks and folds printable ASCII directly.
+
+Upstream frees the canonical segment buffer whenever it flushes a segment. In ordinary prose this can allocate and free a buffer for every letter. Blaze resets its length and keeps the allocation until the end of the block. Printable ASCII has no canonical or compatibility decomposition and has combining class zero. Blaze flushes any preceding marks, lowercases ASCII capitals for case-insensitive searches, and appends the character with its original source offset. The same output function still collapses consecutive spaces.
+
+On a Mac, preparing the search index for *Moby-Dick* took 68 ms before the change, 49 ms with buffer reuse, and 35 ms with both changes. For *War and Peace*, the same steps took 201, 146 and 107 ms.
+
+**Code:** `flushFindTextCanonicalUnits` and `FindTextFoldContext::appendSourceChar` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
+
+**Upstream:** present upstream. We checked the pinned source and measured the change in Blaze.
+
 ### Script lookup for ASCII
 
 **Summary:** ASCII characters get their script without a HarfBuzz call.

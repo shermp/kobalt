@@ -1892,6 +1892,11 @@ struct EngineDocument::SearchText
         int start, length;
         ldomNode *node;
         int offset;
+
+        ldomXPointerEx at(int index) const
+        {
+            return ldomXPointerEx(node, offset + (index - start));
+        }
     };
 
     struct Block
@@ -1899,12 +1904,31 @@ struct EngineDocument::SearchText
         QString text;
         QVector<Run> runs;
 
-        ldomXPointerEx at(int offset) const
+        QVector<Run>::const_iterator runAt(int index) const
         {
-            auto it = std::upper_bound(runs.begin(), runs.end(), offset,
-                                       [](int value, const Run &run) { return value < run.start; });
-            --it;
-            return ldomXPointerEx(it->node, it->offset + offset - it->start);
+            return std::upper_bound(runs.cbegin(), runs.cend(), index,
+                                    [](int value, const Run &run) { return value < run.start; })
+                    - 1;
+        }
+
+        ldomXPointerEx at(int index) const { return runAt(index)->at(index); }
+
+        QPair<ldomXPointerEx, ldomXPointerEx> sourceRange(int first, int last) const
+        {
+            auto run = runAt(first);
+            auto start = run->at(first);
+            auto end = run->at(qMin(last, run->start + run->length - 1));
+            // Each run has consecutive source offsets. Normalization can reorder runs.
+            for (++run; run != runs.cend() && run->start <= last; ++run) {
+                const auto left = run->at(run->start);
+                const auto right = run->at(qMin(last, run->start + run->length - 1));
+                if (left.compare(start) < 0)
+                    start = left;
+                if (right.compare(end) > 0)
+                    end = right;
+            }
+            end.setOffset(end.getOffset() + 1);
+            return { start, end };
         }
     };
 
@@ -2067,6 +2091,24 @@ QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, 
 {
     const auto &cache = *searchText_;
     auto *doc = engine_->getDocument();
+    // Each step within visible text changes only the code-point offset. Keep
+    // the character walk for crossing nodes and for a scope ending inside the run.
+    const auto skipInNode = [&](ldomXPointerEx &point, int count, bool backward) {
+        const int offset = point.getOffset();
+        if (!point.isText() || offset < 0 || !point.isVisible())
+            return 0;
+        const int available = backward ? offset : point.getNode()->getText().length() - offset;
+        const int steps = qMin(count, available);
+        if (steps <= 0)
+            return 0;
+        auto next = point;
+        next.setOffset(backward ? offset - steps : offset + steps);
+        if (scope != SearchScope::Book
+            && (backward ? next.compare(cache.lower) < 0 : next.compare(cache.upper) > 0))
+            return 0;
+        point = next;
+        return steps;
+    };
     for (auto &hit : hits) {
         ldomXPointerEx start(doc->createXPointer(cre(hit.start)));
         ldomXPointerEx end(doc->createXPointer(cre(hit.end)));
@@ -2074,14 +2116,14 @@ QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, 
             continue;
         ldomXRange match(start, end);
         auto before = start, after = end;
-        for (int n = 0; n < 48; ++n) {
+        for (int n = skipInNode(before, 48, true); n < 48; ++n) {
             auto previous = before;
             if (!previous.prevVisibleChar(true)
                 || (scope != SearchScope::Book && previous.compare(cache.lower) < 0))
                 break;
             before = previous;
         }
-        for (int n = 0; n < 96; ++n) {
+        for (int n = skipInNode(after, 96, false); n < 96; ++n) {
             auto next = after;
             if (!next.nextVisibleChar(true)
                 || (scope != SearchScope::Book && next.compare(cache.upper) > 0))
@@ -2122,6 +2164,20 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
         result.done = true;
         return result;
     }
+    // Search origins are text offsets. Reuse the path to the last text node
+    // while scanning this batch, including for the other end of a match.
+    ldomNode *lastTextNode = nullptr;
+    QString textPrefix;
+    const auto anchorFor = [&](ldomXPointerEx &point) {
+        auto *node = point.getNode();
+        if (!point.isText() || point.getOffset() < 0)
+            return qstring(point.toString());
+        if (node != lastTextNode) {
+            textPrefix = qstring(ldomXPointer(node, -1).toString()) + QLatin1Char('.');
+            lastTextNode = node;
+        }
+        return textPrefix + QString::number(point.getOffset());
+    };
     QElapsedTimer budget;
     budget.start();
     while (budget.elapsed() < 8 && result.hits.size() < maximum) {
@@ -2158,27 +2214,21 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
         }
         // CREngine's literal search includes overlapping matches.
         cursor.offset = found + 1;
-        auto start = block.at(found), end = block.at(found + cache.pattern.size() - 1);
-        // Canonical normalization reorders combining marks. The folded
-        // endpoints can therefore occur in the opposite order in the source.
-        for (int index = 0; index < cache.pattern.size(); ++index) {
-            const auto origin = block.at(found + index);
-            if (origin.compare(start) < 0)
-                start = origin;
-            if (origin.compare(end) > 0)
-                end = origin;
-        }
-        end.setOffset(end.getOffset() + 1);
+        auto range = block.sourceRange(found, found + cache.pattern.size() - 1);
+        auto &start = range.first;
+        auto &end = range.second;
         if (scope != SearchScope::Book
             && (start.compare(cache.lower) < 0 || end.compare(cache.upper) > 0))
             continue;
-        SearchHit hit{ qstring(start.toString()), qstring(end.toString()), {}, {}, {}, -1 };
+        SearchHit hit{ anchorFor(start), anchorFor(end), {}, {}, {}, -1 };
         if (hit.start == cursor.previousStart && hit.end == cursor.previousEnd)
             continue;
         cursor.previousStart = hit.start;
         cursor.previousEnd = hit.end;
-        if (details)
+        if (details) {
             hit = searchDetailsLoaded({ hit }, scope).first();
+            lastTextNode = nullptr;
+        }
         result.hits.append(std::move(hit));
     }
     result.cursor = cursor;
@@ -2464,8 +2514,9 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
                         && document->sliceEnd_ < document->spineItemText()))
                     continue;
             }
-            // Only the document that has the text knows its chapter.
-            document->labelChapterHit(hit);
+            // Deferred rows get their page and chapter in searchDetails().
+            if (details)
+                document->labelChapterHit(hit);
             result.hits.append(std::move(hit));
         }
         cursor.block = batch.cursor.block;

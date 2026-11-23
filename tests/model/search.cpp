@@ -1,8 +1,10 @@
+#include "book_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QFile>
 #include <QGuiApplication>
 #include <QSet>
+#include <QTemporaryDir>
 #include <cstdio>
 #include "check.h"
 
@@ -29,6 +31,9 @@ static void chapterScopes()
         for (int pass = 0; !batch.done; ++pass) {
             require(pass < 10000, "Scoped query failed to finish");
             batch = reader.searchText("the", batch.cursor, 11, scope, origin, false);
+            for (const auto &hit : batch.hits)
+                require(hit.page == -1 && hit.chapter.isNull() && hit.text.isNull(),
+                        "Deferred search calculated details for a hidden row");
             hits += batch.hits;
         }
         return reader.searchDetails(hits, scope, origin);
@@ -74,10 +79,61 @@ static void chapterScopes()
     require(compare(SearchScope::After) == 0, "Search after the last page must be empty");
 }
 
+// Combining marks can move across an inline element when search normalizes them.
+static void reorderedMarks()
+{
+    using namespace kobalt;
+    QTemporaryDir root;
+    auto files = test::songbook(1);
+    files["songs.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body>"
+                           "<p>A&#x0315;<em>&#x0300;</em>B</p><p>"
+            + QByteArray(60, 'x') + "&#x1F4D8; needle &#x1F4D8;" + QByteArray(110, 'y')
+            + "</p></body></html>";
+    require(root.isValid() && test::writeBook(root.path(), "marks.epub", files),
+            "Cannot create the reordered marks fixture");
+    QFile file(root.filePath("marks.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read the reordered marks fixture");
+    EngineDocument model(test::readerFonts());
+    QString error;
+    require(model.open(file.readAll(), { 360, 700 }, {}, &error), qPrintable(error));
+    const auto singleMatch = [&](const QString &query) {
+        QVector<SearchHit> hits;
+        SearchCursor cursor;
+        for (;;) {
+            const auto batch = model.searchText(query, cursor, 8, SearchScope::Book, {}, false);
+            hits += batch.hits;
+            if (batch.done)
+                break;
+            cursor = batch.cursor;
+        }
+        require(hits.size() == 1, "Expected one search match");
+        return hits.first();
+    };
+    const QString first(QChar(0x0315)), second(QChar(0x0300));
+    const auto both = singleMatch(second + first);
+    require(both.start == singleMatch(first).start && both.end == singleMatch(second).end,
+            "Search lost the outer source offsets of reordered marks");
+    const auto needle = singleMatch("needle");
+    const auto book = model.searchDetails({ needle }, SearchScope::Book, {}).first();
+    const auto symbol = QString::fromUtf8("📘");
+    require(book.before == QString(46, 'x') + symbol + " " && book.text == "needle"
+                    && book.after == " " + symbol + QString(94, 'y'),
+            "Excerpt limits must count Unicode code points");
+    model.setChapters({ { "Needle", needle.start, -1, 0 }, { "Following", needle.end, -1, 0 } },
+                      {});
+    const auto chapter =
+            model.searchDetails({ needle }, SearchScope::Chapter, needle.start).first();
+    require(chapter.before.isEmpty() && chapter.after.isEmpty() && chapter.text == book.text
+                    && chapter.page == book.page && chapter.start == needle.start
+                    && chapter.end == needle.end,
+            "An excerpt crossed chapter boundaries inside a text node");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     chapterScopes();
+    reorderedMarks();
     require(argc == 2, "Pass the synthetic dictionary EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Missing fixture");
