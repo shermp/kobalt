@@ -1043,7 +1043,14 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
         to.selectionEndpoints = from.selectionEndpoints;
     merge(to.textFractions, from.textFractions);
     merge(to.textWordPrefixes, from.textWordPrefixes);
-    merge(to.linkTargets, from.linkTargets);
+    if (to.linkTargets.isEmpty())
+        to.linkTargets = from.linkTargets;
+    else {
+        for (auto it = from.linkTargets.cbegin();
+             it != from.linkTargets.cend() && to.linkTargets.size() < ReaderSource::maxLinkTargets;
+             ++it)
+            to.linkTargets.insert(it.key(), it.value());
+    }
     if (!to.searchTexts)
         to.searchTexts = from.searchTexts;
 }

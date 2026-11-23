@@ -389,6 +389,9 @@ private:
     ChapterSelection chapterAround(const QVector<ChapterLink> &links,
                                    const QString &position) const;
     int chapterEndPage(const ChapterLink &next) const;
+    struct OffPageLink;
+    LinkDetails inspectLink(const QString &source, bool preview,
+                            const std::function<bool()> &current, OffPageLink *offPage);
     void markKoboLinkDecorations();
     enum class PageNoteLayout { Chapters, WholeBook, Interrupted };
     PageNoteLayout pageNoteLayout();

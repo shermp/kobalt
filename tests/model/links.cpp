@@ -1,6 +1,7 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/column_view.h"
+#include "engine/blaze/adapter/reader_source.h"
 #include "book_fixtures.h"
 #include <QTemporaryDir>
 #include "support/qt_compat.h"
@@ -20,6 +21,10 @@ struct ReaderFootnoteProbe
         return document.ahead_ ? document.ahead_->engine_.get() : nullptr;
     }
     static ColumnView &view(EngineDocument &document) { return *document.engine_; }
+
+    static auto &container(EngineDocument &document) { return document.source_->container; }
+
+    static auto &linkTargets(EngineDocument &document) { return document.source_->linkTargets; }
 };
 } // namespace kobalt
 
@@ -650,6 +655,137 @@ void linksOutsideCurrentLayout()
     }
 }
 
+void nearbyNoteTargets()
+{
+    using namespace kobalt;
+    const QByteArray longId(160, 'z');
+    QByteArray notes = "<p id='first'>First</p><p id='duplicate'>Passage</p><p>"
+            + QByteArray(17000, 'x')
+            + "</p><aside role='doc-endnote'><p id='trigger'>Note</p>"
+              "<a name='sibling'>Next</a><p id='duplicate'>Later duplicate</p><p id='"
+            + longId + "'>Long</p></aside>";
+    for (int i = 0; i < 700; ++i)
+        notes += "<p id='row" + QByteArray::number(i) + "'>Row</p>";
+    notes += "<p id='last'>Last</p>";
+    const auto grouped = "<p id='early'>Early</p><p id='duplicate'>Passage</p><p>"
+            + QByteArray(17000, 'x')
+            + "</p><aside role='doc-endnote'><a name='middle'>Middle</a>"
+              "<p id='duplicate'>Later note</p></aside><p>"
+            + QByteArray(17000, 'y') + "</p><p id='late'>Late</p>";
+    const auto files = test::publisherPackage(
+            "en", "Shared endnotes",
+            { { "text.xhtml",
+                test::publisherHtml(
+                        "<p><a href='notes.xhtml#first'>First</a></p>"
+                        "<p style='page-break-before:always'><a href='notes.xhtml#trigger'>"
+                        "Trigger</a></p><p style='page-break-before:always'>"
+                        "<a href='notes.xhtml#last'>Last</a> <a href='broken.xhtml#missing'>Broken</a></p>"
+                        "<p style='page-break-before:always'><a href='group.xhtml#early'>Early</a> "
+                        "<a href='group.xhtml#middle'>Middle</a> <a href='group.xhtml#late'>Late</a> "
+                        "<a href='group.xhtml#duplicate'>Duplicate</a> "
+                        "<a href='group.xhtml#absent'>Absent</a> <a href='group.xhtml#middle'>Middle again</a></p>"
+                        "<p style='page-break-before:always'><a href='broken.xhtml#partial'>Before error</a> "
+                        "<a href='broken.xhtml#other'>After error</a></p>") },
+              { "notes.xhtml", test::publisherHtml(notes) },
+              { "broken.xhtml", test::publisherHtml("<p id='partial'>Before error</wrong>") },
+              { "group.xhtml", test::publisherHtml(grouped) } },
+            "<itemref idref='text.xhtml'/><itemref idref='notes.xhtml'/><itemref idref='broken.xhtml'/><itemref idref='group.xhtml'/>");
+    QTemporaryDir directory;
+    require(directory.isValid() && test::writeBook(directory.path(), "book.epub", files),
+            "Cannot write shared note fixture");
+    QFile file(directory.filePath("book.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read shared note fixture");
+    EngineDocument model(test::readerFonts());
+    QString error;
+    require(model.open(file.readAll(), { 900, 900 },
+                       { { "koblaze_first_spine_item", 0 }, { "koblaze_last_spine_item", 0 } },
+                       &error),
+            qPrintable(error));
+    using Target = ReaderSource::LinkTarget;
+    const auto &known = ReaderFootnoteProbe::linkTargets(model);
+    const auto target = [&](const QString &id) {
+        return known.value("_doc_fragment_1_ " + id, Target::Unknown);
+    };
+    auto links = model.pageLinks();
+    require(links.size() == 1 && links.first().kind == LinkKind::Passage
+                    && target("first") == Target::Passage && target("duplicate") == Target::Unknown,
+            "An early link parsed past its own ID");
+    require(model.go(1), "Could not reach the shared notes");
+    int checks = 0;
+    model.setLayoutInterrupt([&] { return ++checks == 2; });
+    model.pageLinks();
+    model.setLayoutInterrupt({});
+    require(checks >= 2 && target("duplicate") == Target::Unknown
+                    && target("trigger") == Target::Unknown,
+            "An interrupted scan published partial note classifications");
+    links = model.pageLinks();
+    require(links.size() == 1 && links.first().kind == LinkKind::Footnote
+                    && target("duplicate") == Target::Passage
+                    && target("sibling") == Target::Footnote
+                    && target(QString::fromLatin1(longId)) == Target::Unknown,
+            "Shared notes lost the first ID, ancestor semantics, or the limit on nearby ID length");
+    require(model.linkDetails(links.first().source).kind == LinkKind::Footnote,
+            "A cached note disagreed with its preview");
+    require(model.go(2), "Could not reach the last note");
+    links = model.pageLinks();
+    require(links.size() == 2 && links.first().kind == LinkKind::Passage
+                    && !known.contains("_doc_fragment_2_ partial")
+                    && !known.contains("_doc_fragment_2_ missing")
+                    && target("last") == Target::Passage && known.size() <= 514,
+            "A dense chapter displaced requested links or exceeded the nearby ID limit");
+    require(model.go(3), "Could not reach the links to a shared chapter");
+    auto &container = ReaderFootnoteProbe::container(model);
+    const auto available = container;
+    container = LVContainerRef();
+    links = model.pageLinks();
+    container = available;
+    require(links.size() == 6 && links[1].kind == LinkKind::Passage
+                    && !known.contains("_doc_fragment_3_ middle")
+                    && !known.contains("_doc_fragment_3_ absent"),
+            "An unavailable chapter published guesses for the whole group");
+    checks = 0;
+    model.setLayoutInterrupt([&] { return ++checks >= 2; });
+    links = model.pageLinks();
+    model.setLayoutInterrupt({});
+    require(links.size() == 6 && links.first().kind == LinkKind::Passage
+                    && known.value("_doc_fragment_3_ early", Target::Unknown) == Target::Passage
+                    && !known.contains("_doc_fragment_3_ middle")
+                    && !known.contains("_doc_fragment_3_ absent"),
+            "An interruption lost the early target or published unread IDs");
+    checks = 0;
+    model.setLayoutInterrupt([&] {
+        ++checks;
+        return false;
+    });
+    links = model.pageLinks();
+    model.setLayoutInterrupt({});
+    const QVector<LinkKind> kinds{ LinkKind::Passage, LinkKind::Footnote,    LinkKind::Passage,
+                                   LinkKind::Passage, LinkKind::Unavailable, LinkKind::Footnote };
+    require(links.size() == kinds.size()
+                    && checks == (test::publisherHtml(grouped).size() + 16383) / 16384,
+            "Visible links to one chapter read an XML chunk more than once");
+    for (int i = 0; i < links.size(); ++i) {
+        require(links[i].kind == kinds[i] && !links[i].rectangles.isEmpty()
+                        && model.linkDetails(links[i].source, false).kind == kinds[i],
+                "Grouped links changed order, geometry, duplicate IDs, or note classification");
+    }
+    auto &full = ReaderFootnoteProbe::linkTargets(model);
+    full.clear();
+    for (int i = 0; i < ReaderSource::maxLinkTargets - 1; ++i)
+        full.insert(QString::number(i), Target::Passage);
+    links = model.pageLinks();
+    require(links.size() == kinds.size() && full.size() <= ReaderSource::maxLinkTargets,
+            "A group of requested IDs exceeded the target cache limit");
+    for (int i = 0; i < links.size(); ++i)
+        require(links[i].kind == kinds[i], "Cache rollover lost a target in the current group");
+    require(model.go(4), "Could not reach the broken chapter links");
+    links = model.pageLinks();
+    require(links.size() == 2 && links.first().kind == LinkKind::Passage
+                    && known.value("_doc_fragment_2_ partial", Target::Unknown) == Target::Passage
+                    && !known.contains("_doc_fragment_2_ other"),
+            "Malformed source lost an earlier ID or cached an unresolved link as missing");
+}
+
 void remoteNoteSemantics()
 {
     using namespace kobalt;
@@ -919,6 +1055,7 @@ int main(int argc, char **argv)
     interruptPageNoteCheck();
     noteMatching();
     remoteNoteSemantics();
+    nearbyNoteTargets();
     linksOutsideCurrentLayout();
     const auto origin = model.position();
     for (const bool dark : { false, true }) {

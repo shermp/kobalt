@@ -89,6 +89,7 @@ struct ReaderSource
     // Whether a linked target exists, checked on demand without loading its
     // chapter. Unknown or interrupted checks are not retained.
     enum class LinkTarget { Unknown, Missing, Passage, Footnote };
+    static constexpr int maxLinkTargets = 4096;
     QHash<QString, LinkTarget> linkTargets;
 
     // The estimated pages of the book, for rough page numbers. They are for

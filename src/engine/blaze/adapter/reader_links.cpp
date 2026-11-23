@@ -73,14 +73,23 @@ lString32 domText(const QString &value)
 
 bool pageNoteMarker(const QXmlStreamAttribute &attribute);
 
+using Target = ReaderSource::LinkTarget;
+
+void rememberTarget(ReaderSource &source, const QString &target, Target kind)
+{
+    if (source.linkTargets.size() >= ReaderSource::maxLinkTargets
+        && !source.linkTargets.contains(target))
+        source.linkTargets.clear();
+    source.linkTargets.insert(target, kind);
+}
+
 // An interrupted or unavailable source leaves the target unknown.
-// Read only the linked chapter, and stop as soon as its id is found. Chunked
-// reads keep cancellation checks between storage reads, also for a long note.
+// Read only the linked chapter. When several visible links share it, stop after their IDs.
 ReaderSource::LinkTarget linkTargetKind(ReaderSource &source, const QString &path,
                                         const QString &id, const QString &target,
-                                        const std::function<bool()> &interrupted)
+                                        const std::function<bool()> &interrupted,
+                                        QHash<QString, Target> *wanted = nullptr)
 {
-    using Target = ReaderSource::LinkTarget;
     const auto known = source.linkTargets.constFind(target);
     if (known != source.linkTargets.cend())
         return known.value();
@@ -91,24 +100,41 @@ ReaderSource::LinkTarget linkTargetKind(ReaderSource &source, const QString &pat
         return Target::Unknown;
     QXmlStreamReader xml;
     QVector<bool> noteParents;
+    constexpr int nearbyLimit = 512, maxNearbyIdLength = 128;
+    constexpr int chunkSize = 16384;
+    const QString prefix = target.left(target.size() - id.size());
+    // Only publish these when the scan succeeds. A missing chunk or interruption can retry.
+    const int room = nearbyLimit - source.linkTargets.size();
+    QHash<QString, Target> encountered;
     const auto remember = [&](Target kind) {
-        if (source.linkTargets.size() >= 4096)
-            source.linkTargets.clear();
-        source.linkTargets.insert(target, kind);
+        for (auto it = encountered.constBegin(); it != encountered.constEnd(); ++it)
+            source.linkTargets.insert(it.key(), it.value());
+        rememberTarget(source, target, kind);
         return kind;
     };
     const lvsize_t total = stream->GetSize();
     lvsize_t received = 0;
+    Target match = Target::Unknown;
+    int remaining = wanted ? wanted->size() : 0;
+    const auto incomplete = [&] {
+        // A later read can retry each outstanding link. The first link might already
+        // have reached its ID before the group needed another chunk.
+        if (wanted)
+            wanted->clear();
+        if (match != Target::Unknown)
+            rememberTarget(source, target, match);
+        return match;
+    };
     while (received < total) {
         engineActivity().checkpoint();
         stopPoint();
         if (interrupted && interrupted())
-            return Target::Unknown;
+            return incomplete();
         QByteArray chunk;
-        chunk.resize(int(qMin<lvsize_t>(16384, total - received)));
+        chunk.resize(int(qMin<lvsize_t>(chunkSize, total - received)));
         lvsize_t count = 0;
         if (stream->Read(chunk.data(), chunk.size(), &count) != LVERR_OK || !count)
-            return Target::Unknown;
+            return incomplete();
         received += count;
         chunk.resize(int(count));
         xml.addData(chunk);
@@ -123,17 +149,48 @@ ReaderSource::LinkTarget linkTargetKind(ReaderSource &source, const QString &pat
             noteParents.append(
                     (!noteParents.isEmpty() && noteParents.last())
                     || std::any_of(attributes.cbegin(), attributes.cend(), pageNoteMarker));
-            for (const auto &attribute : attributes)
-                if ((attribute.name() == QLatin1String("id")
-                     || (xml.name() == QLatin1String("a")
+            for (const auto &attribute : attributes) {
+                if (attribute.name() != QLatin1String("id")
+                    && !(xml.name() == QLatin1String("a")
                          && attribute.name() == QLatin1String("name")))
-                    && attribute.value() == id)
-                    return remember(noteParents.last() ? Target::Footnote : Target::Passage);
+                    continue;
+                const Target kind = noteParents.last() ? Target::Footnote : Target::Passage;
+                if (remaining) {
+                    auto it = wanted->find(attribute.value().toString());
+                    if (it != wanted->end() && it.value() == Target::Unknown) {
+                        it.value() = kind;
+                        --remaining;
+                    }
+                }
+                if (match == Target::Unknown && attribute.value() == id) {
+                    // Early targets cost no extra XML tokens. For a deeper target, finish
+                    // this chunk so the next note can reuse its ID without another scan.
+                    if (!remaining && (received <= chunkSize || encountered.size() >= room))
+                        return remember(kind);
+                    match = kind;
+                }
+                if (encountered.size() < room && !attribute.value().isEmpty()
+                    && attribute.value().size() <= maxNearbyIdLength) {
+                    const QString key = prefix + attribute.value().toString();
+                    if (!source.linkTargets.contains(key) && !encountered.contains(key))
+                        encountered.insert(key, kind);
+                }
+            }
         }
+        if (match != Target::Unknown && !remaining)
+            return remember(match);
         if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
-            return Target::Unknown;
+            return incomplete();
     }
-    return xml.hasError() ? Target::Unknown : remember(Target::Missing);
+    if (xml.hasError())
+        return incomplete();
+    if (wanted) {
+        for (auto it = wanted->begin(); it != wanted->end(); ++it) {
+            if (it.value() == Target::Unknown)
+                it.value() = Target::Missing;
+        }
+    }
+    return remember(match == Target::Unknown ? Target::Missing : match);
 }
 
 lString32 attributeOf(ldomNode *node, const char *name, bool anyNamespace = false)
@@ -179,6 +236,16 @@ bool noteElement(ldomNode *node)
 }
 
 enum class NoteMatch { Unmarked, Explicit, Passage };
+
+LinkKind remoteKind(NoteMatch reference, Target target)
+{
+    if (target == Target::Missing)
+        return LinkKind::Unavailable;
+    return reference == NoteMatch::Explicit
+                    || (reference == NoteMatch::Unmarked && target == Target::Footnote)
+            ? LinkKind::Footnote
+            : LinkKind::Passage;
+}
 
 NoteMatch noteReference(ldomNode *node)
 {
@@ -763,6 +830,13 @@ void EngineDocument::markPageNotes()
     }
 }
 
+struct EngineDocument::OffPageLink
+{
+    int item = -1, link = -1;
+    QString id, target;
+    NoteMatch reference = NoteMatch::Unmarked;
+};
+
 QVector<PageLink> EngineDocument::pageLinks()
 {
     QVector<PageLink> result;
@@ -823,6 +897,7 @@ QVector<PageLink> EngineDocument::pageLinks()
             }
         }
     }
+    QVector<OffPageLink> pending;
     for (int i = 0; i < links.length(); ++i) {
         engineActivity().checkpoint();
         auto *range = links[i];
@@ -831,15 +906,55 @@ QVector<PageLink> EngineDocument::pageLinks()
             continue;
         const auto rectangles = rangeRects(text(range->getStart().toString()),
                                            text(range->getEnd().toString()), true);
-        if (!rectangles.isEmpty())
-            result.append({ text(source.toString()), rectangles,
-                            linkDetails(text(source.toString()), false).kind });
+        if (rectangles.isEmpty())
+            continue;
+        const auto position = text(source.toString());
+        OffPageLink request;
+        const auto kind = inspectLink(position, false, {}, &request).kind;
+        if (request.item >= 0) {
+            request.link = result.size();
+            pending.append(std::move(request));
+        }
+        result.append({ position, rectangles, kind });
+    }
+    // A contents page can point to several IDs in one XHTML file. Classify those
+    // visible targets in one scan, preserving their order and the work bound per group.
+    const auto items = pending.isEmpty() ? QStringList() : spineItems();
+    for (int first = 0; first < pending.size();) {
+        const auto &request = pending[first];
+        int end = first + 1;
+        while (end < pending.size() && end - first < 32 && pending[end].item == request.item)
+            ++end;
+        QHash<QString, Target> wanted;
+        if (end - first > 1) {
+            for (int i = first; i < end; ++i)
+                wanted.insert(pending[i].id, Target::Unknown);
+        }
+        const auto path = items.value(request.item);
+        for (int i = first; i < end; ++i) {
+            const auto &link = pending[i];
+            auto kind = wanted.value(link.id, Target::Unknown);
+            if (kind == Target::Unknown) {
+                kind = linkTargetKind(*source_, path, link.id, link.target, interrupt_,
+                                      i == first && wanted.size() > 1 ? &wanted : nullptr);
+            } else {
+                rememberTarget(*source_, link.target, kind);
+            }
+            result[link.link].kind = remoteKind(link.reference, kind);
+        }
+        first = end;
     }
     return result;
 }
 
 LinkDetails EngineDocument::linkDetails(const QString &source, bool preview,
                                         const std::function<bool()> &current)
+{
+    return inspectLink(source, preview, current, nullptr);
+}
+
+LinkDetails EngineDocument::inspectLink(const QString &source, bool preview,
+                                        const std::function<bool()> &current, OffPageLink *offPage)
 {
     LinkDetails result;
     if (!engine_ || (current && !current()))
@@ -884,17 +999,26 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview,
         // The kind of a link on the page needs no layout. A missing target
         // stays unavailable; a note without markup remains a guess.
         if (!preview) {
-            const auto targetKind = source_
-                    ? linkTargetKind(*source_, spineItems().value(item),
-                                     text(id).mid(found.capturedLength()), text(id), interrupt_)
-                    : ReaderSource::LinkTarget::Unknown;
-            if (targetKind == ReaderSource::LinkTarget::Missing)
+            const auto target = text(id);
+            Target kind = Target::Unknown;
+            if (source_) {
+                kind = source_->linkTargets.value(target, Target::Unknown);
+                if (kind == Target::Unknown) {
+                    const auto rawId = target.mid(found.capturedLength());
+                    if (offPage) {
+                        offPage->item = item;
+                        offPage->id = rawId;
+                        offPage->target = target;
+                        offPage->reference = match;
+                        return result;
+                    }
+                    kind = linkTargetKind(*source_, spineItems().value(item), rawId, target,
+                                          interrupt_);
+                }
+            }
+            result.kind = remoteKind(match, kind);
+            if (result.kind == LinkKind::Unavailable)
                 return result;
-            result.kind = match == NoteMatch::Explicit
-                            || (match == NoteMatch::Unmarked
-                                && targetKind == ReaderSource::LinkTarget::Footnote)
-                    ? LinkKind::Footnote
-                    : LinkKind::Passage;
             result.error.clear();
             return result;
         }
