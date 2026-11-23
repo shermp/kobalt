@@ -2,6 +2,7 @@
 #include "reader_alignment.h"
 #include "stop_point.h"
 #include <lvtinydom.h>
+#include <fb2def.h>
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
@@ -30,19 +31,20 @@ bool hasText(ldomNode *node)
     return false;
 }
 
-bool preserve(ldomNode *node, const QString &name, const lString32 &type)
+bool preserve(ldomNode *node, lUInt16 tag, const lString32 &type)
 {
-    static const QSet<QString> elements{ "h1",     "h2",     "h3",     "h4",         "h5",
-                                         "h6",     "header", "figure", "figcaption", "caption",
-                                         "table",  "img",    "image",  "svg",        "picture",
-                                         "object", "video",  "audio",  "canvas",     "iframe",
-                                         "pre",    "code",   "head",   "style",      "script" };
+    static const QSet<lUInt16> elements{
+        el_h1,      el_h2,         el_h3,      el_h4,    el_h5,     el_h6,     el_header,
+        el_figure,  el_figcaption, el_caption, el_table, el_img,    el_image,  el_svg,
+        el_picture, el_object,     el_video,   el_audio, el_canvas, el_iframe, el_pre,
+        el_code,    el_head,       el_style,   el_script
+    };
     // Computed publisher styles cover arbitrary class names and inherited centering.
     const auto style = node->getStyle();
     if (!style.isNull() && style->text_align == css_ta_center) {
         return true;
     }
-    if (elements.contains(name))
+    if (elements.contains(tag))
         return true;
     const auto &role = node->getAttributeValue("role");
     if (!role.empty() && text(role).split(' ', kobalt::qt::skipEmptyParts).contains("heading"))
@@ -78,24 +80,23 @@ void markBodyAlignment(ldomDocument *document)
     const auto attribute = document->getAttrNameIndex("data-kobalt-prose");
     const auto paragraphAttribute = document->getAttrNameIndex("data-kobalt-paragraph");
     const auto typeAttribute = document->getAttrNameIndex("type");
-    static const QSet<QString> blocks{ "p",          "li",  "dt",      "dd",
-                                       "blockquote", "div", "section", "article" };
+    static const QSet<lUInt16> blocks{ el_p,          el_li,  el_dt,      el_dd,
+                                       el_blockquote, el_div, el_section, el_article };
     std::vector<Frame> stack{ { document->getRootNode() } };
     while (!stack.empty()) {
         stopPoint();
         auto &frame = stack.back();
         auto *node = frame.node;
         if (!frame.child && node->isElement()) {
-            const auto name = text(node->getNodeName());
-            frame.paragraph = name == "p";
-            frame.block = blocks.contains(name);
+            const auto tag = node->getNodeId();
+            frame.paragraph = tag == el_p;
+            frame.block = blocks.contains(tag);
             const auto &type = node->getAttributeValue(LXML_NS_ANY, typeAttribute);
-            frame.blocked = frame.blocked || preserve(node, name, type);
+            frame.blocked = frame.blocked || preserve(node, tag, type);
             // Paragraph gaps must not flatten verse, quotations, lists or notes.
             // Alignment has a broader scope, so keep this safeguard separate.
-            static const QSet<QString> special{
-                "blockquote", "ul", "ol", "dl", "aside", "address"
-            };
+            static const QSet<lUInt16> special{ el_blockquote, el_ul,    el_ol,
+                                                el_dl,         el_aside, el_address };
             static const QRegularExpression specialClass(
                     "(?:^|[\\s_-])(?:verse|poem|poetry|stanza|caption|epigraph|dedication|footnote|endnote)(?:$|[\\s_-])",
                     QRegularExpression::CaseInsensitiveOption);
@@ -103,7 +104,7 @@ void markBodyAlignment(ldomDocument *document)
                 return !value.empty() && specialClass.match(text(value)).hasMatch();
             };
             frame.paragraphBlocked = frame.paragraphBlocked || frame.blocked
-                    || special.contains(name) || matchesSpecial(node->getAttributeValue("class"))
+                    || special.contains(tag) || matchesSpecial(node->getAttributeValue("class"))
                     || matchesSpecial(type);
             const auto style = node->getStyle();
             // Publisher exports can leave a border style on a zero-width frame.

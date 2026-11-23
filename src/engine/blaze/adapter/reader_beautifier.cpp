@@ -14,14 +14,14 @@ QString text(const lString32 &value)
     return QString::fromUtf8(UnicodeToUtf8(value).c_str());
 }
 
-bool special(ldomNode *node)
+bool special(ldomNode *node, const QString &name)
 {
     static const QSet<QString> tags{ "blockquote", "aside", "address", "figure", "figcaption",
                                      "table",      "ul",    "ol",      "dl",     "pre",
                                      "code",       "math",  "ruby",    "nav",    "header",
                                      "footer",     "h1",    "h2",      "h3",     "h4",
                                      "h5",         "h6" };
-    if (tags.contains(text(node->getNodeName())))
+    if (tags.contains(name))
         return true;
     static const QRegularExpression names(
             "(?:^|[\\s_-])(?:quote|quotation|blockquote|letter|signature|verse|poem|poetry|stanza|caption|epigraph|dedication|footnote|endnote|noteref|title|subtitle|heading|scene|break|separator|copyright|toc)(?:$|[\\s_-])",
@@ -41,9 +41,9 @@ bool special(ldomNode *node)
                 || style->white_space == css_ws_pre_wrap);
 }
 
-bool initial(ldomNode *node)
+bool initial(ldomNode *node, const QString &tag)
 {
-    if (text(node->getNodeName()) != "span")
+    if (tag != "span")
         return false;
     static const QRegularExpression name("drop.?cap|initial",
                                          QRegularExpression::CaseInsensitiveOption);
@@ -106,22 +106,22 @@ void markBeautifierContent(ldomDocument *document)
             node->setAttributeValue(0, firstLetterAttribute, U"");
         // Text initials are independent of prose spacing and indentation. A
         // subtitle, leading gap or quotation must not keep a drop cap enlarged.
-        if (initial(node))
+        const auto name = text(node->getNodeName());
+        if (initial(node, name))
             node->setAttributeValue(0, initialAttribute, U"1");
         static const QRegularExpression opener("drop.?cap|stickupcap",
                                                QRegularExpression::CaseInsensitiveOption);
         bool firstLetter = node->hasAttribute(engineFirstLetter);
-        if (!firstLetter && text(node->getNodeName()) == "p") {
+        if (!firstLetter && name == "p") {
             const auto &classes = node->getAttributeValue("class");
             firstLetter = !classes.empty() && opener.match(text(classes)).hasMatch();
         }
         if (firstLetter)
             node->setAttributeValue(0, firstLetterAttribute, U"1");
-        const bool blocked = frame.blocked || special(node);
+        const bool blocked = frame.blocked || special(node, name);
         for (int i = node->getChildCount() - 1; i >= 0; --i)
             stack.push_back({ node->getChildNode(i), blocked });
-        if (blocked || text(node->getNodeName()) != "p"
-            || text(node->getAttributeValue("data-kobalt-paragraph")) != "1")
+        if (blocked || name != "p" || text(node->getAttributeValue("data-kobalt-paragraph")) != "1")
             continue;
         const auto style = node->getStyle();
         if (style.isNull() || style->text_indent.value < 0 || style->margin[0].value
@@ -144,7 +144,8 @@ void markBeautifierContent(ldomDocument *document)
             auto *child = children.back();
             children.pop_back();
             if (child->isText()) {
-                precedingText |= !text(child->getText()).trimmed().isEmpty();
+                if (!precedingText)
+                    precedingText = !text(child->getText()).trimmed().isEmpty();
                 continue;
             }
             if (!child->isElement())
@@ -156,11 +157,11 @@ void markBeautifierContent(ldomDocument *document)
             // reflow updates their rendering when the source float is disabled.
             const bool leadingBox =
                     !precedingText && (name == "floatBox" || (firstLetter && name == "pseudoElem"));
-            if ((!inlineTags.contains(name) && !leadingBox) || special(child)) {
+            if ((!inlineTags.contains(name) && !leadingBox) || special(child, name)) {
                 safe = false;
                 break;
             }
-            if (!precedingText && initial(child)) {
+            if (!precedingText && initial(child, name)) {
                 initials.push_back(child);
             } else if (const auto s = child->getStyle();
                        !leadingBox && !s.isNull() && s->float_ != css_f_none) {
