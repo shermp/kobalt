@@ -140,6 +140,16 @@ The default upstream configuration searches one linked list per local cache. Bla
 
 **Upstream:** present upstream.
 
+### Stop at the first ink when checking word overlap
+
+**Summary:** the horizontal overlap check stops scanning a glyph row once it finds the edge.
+
+The formatter checks the distance between words from different text nodes. It scans each bitmap row from the edge facing the other word, updating that row and the nearby rows used for vertical clearance. Upstream continues scanning if another glyph already set a more extreme edge on the current row. Later pixels cannot improve any of the affected rows once the first qualifying pixel has been applied.
+
+**Code:** `LVHorizontalOverlapMeasurementDrawBuf::Draw` in [lvdrawbuf.h](crengine/include/lvdrawbuf.h).
+
+**Upstream:** present upstream. Both row scans in the pinned header stop only when the current row sets a new extremum.
+
 ### Reuse short right-to-left shaping runs
 
 **Summary:** a font face reuses HarfBuzz results for complete right-to-left runs of two to eight characters.

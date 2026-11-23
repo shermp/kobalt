@@ -792,10 +792,10 @@ public:
                                         right_min_x[y-i] = x;
                                 }
                             }
-                            if (*bucket > x) {
+                            if (*bucket > x)
                                 *bucket = x;
-                                break; // No need to scan more of this line
-                            }
+                            // Later pixels cannot improve this row or its neighbours.
+                            break;
                         }
                         tmp++;
                     }
@@ -819,10 +819,10 @@ public:
                                         left_max_x[y-i] = x;
                                 }
                             }
-                            if (*bucket < x) {
+                            if (*bucket < x)
                                 *bucket = x;
-                                break; // No need to scan more of this line
-                            }
+                            // Later pixels cannot improve this row or its neighbours.
+                            break;
                         }
                         tmp--;
                     }
