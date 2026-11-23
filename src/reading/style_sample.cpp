@@ -376,11 +376,14 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
         if (!apply(*engine, request, value))
             return {};
         QVector<QImage> spread;
-        const int drawn = request.firstPageOnly && !pages ? 1 : 2;
+        const int drawn = !pages && (request.firstPageOnly || request.thumbnail.isEmpty()) ? 1 : 2;
         for (int index = result.page; index < qMin(result.page + drawn, engine->pages()); ++index) {
             const auto image = engine->image(index);
             if (index == 0 && !pages) {
-                result.crops.append(image.copy(QRect(request.cropOrigin, request.crop)));
+                const auto crop = image.copy(QRect(request.cropOrigin, request.crop));
+                if (crop.isNull())
+                    return {};
+                result.crops.append(crop);
                 if (paragraphs) {
                     const auto gaps = paragraphGaps(*engine, paragraphArea, paragraphTexts);
                     QVector<QRect> extra;
@@ -416,10 +419,12 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
                 result.spare.append(spare);
             }
             // Scale right away so only one full page is held at a time.
-            spread.append(
-                    image.scaled(request.thumbnail, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            if (!request.thumbnail.isEmpty())
+                spread.append(image.scaled(request.thumbnail, Qt::KeepAspectRatio,
+                                           Qt::SmoothTransformation));
         }
-        result.spreads.append(spread);
+        if (!spread.isEmpty())
+            result.spreads.append(spread);
     }
     if (!pages) {
         // One height for every option keeps the preview steady while choosing.
@@ -442,8 +447,11 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
             }
         } else {
             const int height = wholeLineHeight(result.crops.first());
-            for (auto &crop : result.crops)
+            for (auto &crop : result.crops) {
                 crop = crop.copy(0, 0, crop.width(), height);
+                if (crop.isNull())
+                    return {};
+            }
         }
         result.differs = request.key == "paragraph_spacing";
         for (const auto &crop : result.crops)

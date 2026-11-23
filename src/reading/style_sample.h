@@ -26,7 +26,7 @@ struct StyleSampleRequest
     QVector<QJsonValue> values;
     // The reading page size. The sample paginates exactly as a book would.
     QSize page;
-    // Each page is scaled to fit this size after drawing.
+    // Each page is scaled to fit this size. Leave it empty to draw only the crop.
     QSize thumbnail;
     // A full-resolution crop of the first page, from the start of its text,
     // for settings whose effect is too small to see in a scaled page. It ends
@@ -77,7 +77,7 @@ struct StyleSample
     QRect detailArea;
     QVector<QVector<QRect>> spare;
 
-    bool valid() const { return !spreads.isEmpty(); }
+    bool valid() const { return !spreads.isEmpty() || !crops.isEmpty(); }
 };
 
 // Lays out the sample on the shared engine worker and calls `finished` on

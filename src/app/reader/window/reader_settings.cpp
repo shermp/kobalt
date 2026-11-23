@@ -856,7 +856,8 @@ void Reader::renderStylingSamples(int requested)
             request.marginGuides = true;
             request.cropRatio = ratio;
         }
-        request.thumbnail = panel->stylingPageSize(request.page, vertical);
+        if (entry.feature != Feature::Tracking)
+            request.thumbnail = panel->stylingPageSize(request.page, vertical);
         if (vertical) {
             request.readingArea = styleSampleReadingArea();
             request.detail = panel->stylingEdgeSize(request.page);

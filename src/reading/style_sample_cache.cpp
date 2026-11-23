@@ -128,8 +128,11 @@ QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleReques
     QJsonArray values;
     for (const auto &value : request.values)
         values.append(value);
+    // The renderer replaces this setting with each option in turn.
+    auto settings = request.settings;
+    settings.remove(request.key);
     stream << QByteArray(KOBALT_RENDERING_POLICY)
-           << QJsonDocument(request.settings).toJson(QJsonDocument::Compact) << request.key
+           << QJsonDocument(settings).toJson(QJsonDocument::Compact) << request.key
            << QJsonDocument(values).toJson(QJsonDocument::Compact) << request.page
            << request.thumbnail << request.crop << request.cropOrigin << request.marginGuides
            << double(request.cropRatio) << request.readingArea << request.detail

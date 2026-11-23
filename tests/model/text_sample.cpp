@@ -4,7 +4,9 @@
 #include "reading/style_sample.h"
 #include "reading/text_presets.h"
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QGuiApplication>
+#include <QTimer>
 #include <cstdio>
 
 using namespace kobalt;
@@ -32,6 +34,37 @@ bool hasInk(const QImage &image)
             if (qGray(image.pixel(x, y)) < 128)
                 return true;
     return false;
+}
+
+StyleSample renderTracking(const StyleSampleRequest &request)
+{
+    QEventLoop loop;
+    StyleSample result;
+    renderStyleSample(test::readerFonts(), request, &loop, [&](StyleSample sample) {
+        result = std::move(sample);
+        loop.quit();
+    });
+    loop.exec();
+    require(result.valid(), "Tracking sample did not render");
+    return result;
+}
+
+void trackingCrops()
+{
+    StyleSampleRequest request;
+    request.key = "justification_tracking";
+    request.values = { 0, 5, 15 };
+    request.settings = { { "font_pixels", 40 }, { "text_alignment", "justify" } };
+    request.page = { 640, 800 };
+    request.crop = { 560, 250 };
+    request.thumbnail = { 120, 150 };
+    const auto withPages = renderTracking(request);
+    request.thumbnail = {};
+    const auto cropped = renderTracking(request);
+    require(cropped.spreads.isEmpty() && cropped.crops.size() == request.values.size(),
+            "A crop-only request should keep one crop per option");
+    require(cropped.crops == withPages.crops && cropped.differs == withPages.differs,
+            "Leaving out thumbnails changed the tracking preview");
 }
 
 // Text preset tiles are drawn with the engine's fonts and no sample document.
@@ -75,6 +108,8 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     examplesDraw();
+    trackingCrops();
     std::printf("PASS: text preset samples without a document\n");
-    return 0;
+    QTimer::singleShot(0, &app, &QCoreApplication::quit);
+    return app.exec();
 }

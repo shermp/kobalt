@@ -65,6 +65,10 @@ int main(int argc, char **argv)
     require(installedKey != styleSampleKey(fonts, request, discoverReadingFonts(fonts.sources)),
             "Replacing a reading font reused the old preset thumbnail");
     require(key == styleSampleKey(fonts, request), "The same request gave two keys");
+    auto selected = request;
+    selected.settings[request.key] = 120;
+    require(styleSampleKey(fonts, selected) == key,
+            "Selecting a displayed option discarded its sample");
     // Every input of a sample changes the key.
     const auto differs = [&](const char *what, std::function<void(StyleSampleRequest &)> change) {
         auto other = request;
