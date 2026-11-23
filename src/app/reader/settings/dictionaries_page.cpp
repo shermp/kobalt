@@ -451,14 +451,13 @@ void DictionariesPage::redraw()
                                 : QString());
         const int percent =
                 totalBytes > 0 ? qBound(0, int(100.0 * receivedBytes / totalBytes), 100) : 0;
-        row->setAccessory(ui::ListRow::Caption{
-                active ? strings::localizedPercent(percent)
-                       : bytes(installed ? installedSizes.value(entry.id) : entry.size),
-                ui::px(180) });
         if (compact)
             row->setAccessory(ui::ListRow::None{});
-        line->name->setVisible(compact);
-        line->metadata->setVisible(compact);
+        else
+            row->setAccessory(ui::ListRow::Caption{
+                    active ? strings::localizedPercent(percent)
+                           : bytes(installed ? installedSizes.value(entry.id) : entry.size),
+                    ui::px(180) });
         line->name->setText(entry.name);
         line->name->setObjectName(QString("rrDictionaryName%1").arg(index));
         line->metadata->setObjectName(QString("rrDictionaryMetadata%1").arg(index));
@@ -466,16 +465,24 @@ void DictionariesPage::redraw()
                 entry.id == failedId ? strings::get("dictionaries.download_failed")
                         : active     ? strings::localizedPercent(percent)
                                  : bytes(installed ? installedSizes.value(entry.id) : entry.size));
-        const int nameHeight =
-                ui::wrappedInterfaceTextHeight(entry.name, line->name->font(), nameWidth);
-        line->name->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-        const int metadataHeight = ui::interfaceLineHeight(line->metadata->font());
-        const int textTop = qMax(0, (item.height - nameHeight - ui::px(6) - metadataHeight) / 2);
-        line->name->setGeometry(chrome::inset, textTop, nameWidth, nameHeight);
-        line->metadata->setGeometry(chrome::inset, line->name->geometry().bottom() + 1 + ui::px(6),
-                                    nameWidth, metadataHeight);
-        line->name->raise();
-        line->metadata->raise();
+        if (compact) {
+            line->name->ensurePolished();
+            line->metadata->ensurePolished();
+            const int nameHeight =
+                    ui::wrappedInterfaceTextHeight(entry.name, line->name->font(), nameWidth);
+            line->name->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+            const int metadataHeight = ui::interfaceLineHeight(line->metadata->font());
+            const int textTop =
+                    qMax(0, (item.height - nameHeight - ui::px(6) - metadataHeight) / 2);
+            line->name->setGeometry(chrome::inset, textTop, nameWidth, nameHeight);
+            line->metadata->setGeometry(chrome::inset,
+                                        line->name->geometry().bottom() + 1 + ui::px(6), nameWidth,
+                                        metadataHeight);
+            line->name->raise();
+            line->metadata->raise();
+        }
+        line->name->setVisible(compact);
+        line->metadata->setVisible(compact);
         row->trailingLabel()->setObjectName(QString("rrDictionarySize%1").arg(index));
         auto *action = created ? nullptr : static_cast<ui::Button *>(layout->itemAt(1)->widget());
         if (created)

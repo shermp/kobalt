@@ -62,10 +62,11 @@ public:
         room = qMax(1, availableHeight - card->height() - int(metrics::chrome::actionHeight));
         starts.append(0);
         int wanted = previous, used = 0;
-        for (int index = 0; index < list->options().size(); ++index) {
+        const auto heights = list->rowHeights(rowsWidth);
+        for (int index = 0; index < heights.size(); ++index) {
             if (previous < 0 && list->options()[index]->isChecked())
                 wanted = index;
-            const int height = list->rowHeight(index, rowsWidth);
+            const int height = heights[index];
             if (used && used + height > room) {
                 starts.append(index);
                 used = 0;

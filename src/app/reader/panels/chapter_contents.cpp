@@ -617,13 +617,14 @@ void ChapterContents::redraw()
         auto *disclosure = disclosures[row];
         auto *label = labels[row];
         const bool hasImage = index >= 0 && !items[index].labelImage.isEmpty();
-        previews[row]->setVisible(hasImage);
-        button->setVisible(index >= 0);
-        disclosure->setVisible(collapsible && hasChildren(index));
         button->setObjectName({});
         disclosure->setObjectName({});
-        if (index < 0)
+        if (index < 0) {
+            button->hide();
+            disclosure->hide();
+            previews[row]->hide();
             continue;
+        }
         const auto &item = items[index];
         const bool active = item.name == current;
         button->setObjectName(item.name);
@@ -701,6 +702,9 @@ void ChapterContents::redraw()
                 (listMode != ContentsList::Chapters)
                         ? item.label
                         : strings::get("common.numbered_title").arg(index + 1).arg(title));
+        button->show();
+        disclosure->setVisible(collapsible && hasChildren(index));
+        previews[row]->setVisible(hasImage);
     }
     if (changed && isVisible())
         changed();

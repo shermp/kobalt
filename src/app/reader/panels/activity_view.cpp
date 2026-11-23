@@ -932,14 +932,14 @@ private:
         const int yearHeight = ui::px(150);
         const bool showYear =
                 height() - cellsBottom - legendHeight - header - yearHeight >= ui::px(420);
-        yearBand->setVisible(showYear);
-        year->setVisible(showYear);
         const int gridHeight =
                 height() - cellsBottom - legendHeight - (showYear ? header + yearHeight : 0);
         grid->setGeometry(0, cellsBottom, width(), gridHeight);
         legend->setGeometry(0, cellsBottom + gridHeight, width(), legendHeight);
         yearBand->setGeometry(0, cellsBottom + gridHeight + legendHeight, width(), header);
         year->setGeometry(0, cellsBottom + gridHeight + legendHeight + header, width(), yearHeight);
+        yearBand->setVisible(showYear);
+        year->setVisible(showYear);
         update();
     }
 
@@ -1360,8 +1360,8 @@ private:
             bands[index]->hide();
         for (int index = rowsUsed; index < rows.size(); ++index)
             rows[index]->hide();
-        empty->setVisible(pages.isEmpty());
         empty->setGeometry(chrome::inset, 0, width() - 2 * chrome::inset, height());
+        empty->setVisible(pages.isEmpty());
         pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
         pager->setPage(page, qMax(1, int(pages.size())));
         // Only the shown rows ask for covers. A new request replaces an older
@@ -1884,8 +1884,6 @@ private:
             // A short landscape screen, such as a phone's, keeps the three
             // records whole: the milestones give way to their link.
             const bool badgesShown = height() - header - ui::px(220) - link >= header + 3 * row;
-            milestonesBand->setVisible(badgesShown);
-            badges->setVisible(badgesShown);
             const int badgeHeight = badgesShown ? int(ui::px(220)) : 0;
             const int upper = height() - (badgesShown ? header + badgeHeight : 0) - link;
             const int half = width() / 2;
@@ -1898,13 +1896,13 @@ private:
                                             width() - half - border, row);
             milestonesBand->setGeometry(0, upper, width(), header);
             badges->setGeometry(0, upper + header, width(), badgeHeight);
+            milestonesBand->setVisible(badgesShown);
+            badges->setVisible(badgesShown);
             badges->setMilestones(picks, qMax(1, int(picks.size())), true);
             all->setGeometry(0, height() - link, width(), link);
             update();
             return;
         }
-        milestonesBand->show();
-        badges->show();
         const int badgeHeight = ui::px(400);
         badges->setMilestones(picks, qMax(1, (int(picks.size()) + 1) / 2), true);
         const int chart = qMax(ui::px(150), height() - 3 * header - 3 * row - badgeHeight - link);
@@ -1923,6 +1921,8 @@ private:
         milestonesBand->setGeometry(0, y, width(), header);
         y += header;
         badges->setGeometry(0, y, width(), qMax(ui::px(120), height() - y - link));
+        milestonesBand->show();
+        badges->show();
         all->setGeometry(0, height() - link, width(), link);
         update();
     }
@@ -2127,11 +2127,12 @@ private:
                 rowTops[row] = room * row / rows;
         for (int kind = 0; kind < 4; ++kind) {
             const bool shown = kind / perPage == page;
-            bands[kind]->setVisible(shown);
-            ladders[kind]->setVisible(shown);
-            phrases[kind]->setVisible(shown);
-            if (!shown)
+            if (!shown) {
+                bands[kind]->hide();
+                ladders[kind]->hide();
+                phrases[kind]->hide();
                 continue;
+            }
             const int slot = kind % perPage;
             const int column = slot % columns, row = slot / columns;
             const int left = width() * column / columns + (column ? border : 0);
@@ -2149,8 +2150,10 @@ private:
                                                - sizes::milestoneGap - bottomGap);
             phrases[kind]->setGeometry(left + chrome::inset, bottom - phraseHeight - bottomGap,
                                        textWidth, phraseHeight);
+            bands[kind]->show();
+            ladders[kind]->show();
+            phrases[kind]->show();
         }
-        pager->setVisible(pages > 1);
         pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
         pager->setPage(page, pages);
         update();
@@ -3102,8 +3105,8 @@ void ActivityView::arrange()
     const int tabsLeft = width() - cell * (sub ? 1 + actions : 1 + int(tabs.size()));
     title->setGeometry(sub ? cell : 0, 0, tabsLeft - (sub ? cell : 0), cellHeight);
     for (int index = 0; index < tabs.size(); ++index) {
-        tabs[index]->setVisible(!sub);
         tabs[index]->setGeometry(tabsLeft + index * cell, 0, cell, cellHeight);
+        tabs[index]->setVisible(!sub);
         tabs[index]->setChecked(int(current) == index);
         tabs[index]->setEnabled(ready);
     }

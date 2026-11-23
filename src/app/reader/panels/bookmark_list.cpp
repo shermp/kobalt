@@ -1071,10 +1071,9 @@ void BookmarkList::redraw()
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = pageStarts.value(page, 0) + row;
         const bool shown = row < rows && index < items.size();
-        buttons[row]->setVisible(shown);
-        removes[row]->setVisible(shown);
-
         if (!shown) {
+            buttons[row]->hide();
+            removes[row]->hide();
             if (lazy) {
                 buttons[row]->setEnabled(false);
                 removes[row]->setAccessibleName({});
@@ -1192,6 +1191,8 @@ void BookmarkList::redraw()
                 label,
                 qMax(numberWidth,
                      ui::interfaceTextWidth(label, ui::interfaceFont(chrome::captionText))) });
+        button->show();
+        removes[row]->show();
         y += itemHeight;
     }
     update();

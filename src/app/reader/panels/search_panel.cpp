@@ -587,11 +587,9 @@ void SearchPanel::redraw()
                           qMax(1, width() - 2 * chrome::cellWidth),
                           pager->height() - metrics::control::border);
     pageJump->setAccessibleName(strings::get("search_panel.go_to_page") + ". " + pageCaption);
-    original->setVisible(returning);
     original->setGeometry(0, scopeBottom, width(), metrics::list::twoLines);
+    original->setVisible(returning);
     const bool waiting = shownCount == 0 && !scanning;
-    empty->setVisible(waiting);
-    hint->setVisible(waiting);
     empty->setText(submittedQuery.isEmpty()
                            ? strings::get("search_panel.find_a_word_or_phrase")
                            : strings::get("search_panel.empty_query").arg(submittedQuery));
@@ -603,6 +601,8 @@ void SearchPanel::redraw()
                        emptyHeight);
     hint->setGeometry(chrome::inset, empty->geometry().bottom() + 1 + chrome::textGap, textWidth,
                       hintHeight);
+    empty->setVisible(waiting);
+    hint->setVisible(waiting);
     auto family = font.family();
     family.replace('\\', "\\\\");
     family.replace('"', "\\\"");
@@ -666,11 +666,13 @@ void SearchPanel::redraw()
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = resultPage * pageSize + row;
         const bool visible = row < pageSize && index < shownCount;
-        buttons[row]->setVisible(visible);
-        if (!visible)
+        if (!visible) {
+            buttons[row]->hide();
             continue;
+        }
         buttons[row]->setObjectName(QString("rrSearchResult%1").arg(index));
         buttons[row]->setGeometry(0, listTop + row * rowHeight, width(), rowHeight);
+        buttons[row]->show();
         // An estimated page label can arrive before the excerpt, and a
         // resolved excerpt can be opened before its book page is known.
         const bool ready = row < visibleHits.size() && !visibleHits[row].text.isEmpty();

@@ -1927,6 +1927,8 @@ public:
         choices = new ui::RadioList(card());
         choices->setObjectName("rrSettingsFontChoices");
         choices->setMinimumRowHeight(metrics::list::oneLine);
+        // fit() selects the first page after the entire catalog is available.
+        choices->showRows(0, 0);
         rows->addWidget(choices);
         pager = new ui::PagerBar(card(), "rrSettingsFont");
         rows->addWidget(pager);

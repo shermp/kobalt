@@ -353,10 +353,11 @@ void WordList::redraw()
     glossFont.setPixelSize(chrome::descriptionText);
     for (int row = 0; row < buttons.size(); ++row) {
         const bool shown = row < rows;
-        buttons[row]->setVisible(shown);
-        removes[row]->setVisible(shown);
-        if (!shown)
+        if (!shown) {
+            buttons[row]->hide();
+            removes[row]->hide();
             continue;
+        }
         const int index = first + row;
         const auto &word = items[index];
         auto *item = buttons[row];
@@ -385,6 +386,8 @@ void WordList::redraw()
         item->setAccessibleName(word.word);
         const auto label = scope == Scope::Book ? pageLabel(word.position) : QString();
         item->setAccessory(ui::ListRow::Caption{ label, numberWidth });
+        item->show();
+        removes[row]->show();
         y += height;
     }
     update();

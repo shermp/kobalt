@@ -448,15 +448,16 @@ void ChoiceScreen::layoutChoices()
 
 void ChoiceScreen::redraw()
 {
-    for (auto *row : sizeRows)
-        row->setVisible(mode == Mode::Sizes);
-    fontHeader->setVisible(mode == Mode::Fonts);
-    fontPager->setVisible(mode == Mode::Fonts);
-    fontSectionBar->setVisible(mode == Mode::Fonts);
+    if (mode != Mode::Sizes)
+        for (auto *row : sizeRows)
+            row->hide();
     if (mode == Mode::Fonts) {
         redrawFonts();
         return;
     }
+    fontHeader->hide();
+    fontPager->hide();
+    fontSectionBar->hide();
     if (mode == Mode::Chapters) {
         for (auto *button : buttons)
             button->hide();
@@ -482,9 +483,12 @@ void ChoiceScreen::redraw()
     }
     for (int index = 0; index < sizeRows.size(); ++index) {
         auto *row = sizeRows[index];
-        row->setVisible(index < items.size());
-        if (index >= items.size())
+        if (index >= items.size()) {
+            row->hide();
             continue;
+        }
+        row->setGeometry(2, 2 + index * metrics::list::oneLine, width() - 4,
+                         metrics::list::oneLine);
         row->setObjectName(items[index].name);
         row->titleLabel()->setObjectName(items[index].name + "Title");
         const bool current = items[index].value == selectedValue;
@@ -492,8 +496,7 @@ void ChoiceScreen::redraw()
         row->setChecked(current);
         row->setAccessory(current ? ui::ListRow::Accessory{ ui::ListRow::Check{} }
                                   : ui::ListRow::Accessory{ ui::ListRow::None{} });
-        row->setGeometry(2, 2 + index * metrics::list::oneLine, width() - 4,
-                         metrics::list::oneLine);
+        row->show();
     }
     navigation.setPage(0, 1);
     navigation.setPagingVisible(false);
@@ -532,6 +535,8 @@ void ChoiceScreen::redrawFonts()
     fontSection->setText(first < 0 ? QString() : items[first].section.toUpper());
     fontPager->setGeometry(0, height() - pager, width(), pager);
     fontPager->setPage(page, pageCount(), {}, true);
+    fontHeader->show();
+    fontSectionBar->show();
     fontPager->show();
     while (buttons.size() < pageSize) {
         const int row = buttons.size();
@@ -565,9 +570,10 @@ void ChoiceScreen::redrawFonts()
         auto *label = labels[row];
         auto *fontCell = static_cast<FontCell *>(button);
         const bool visible = row < pageSize && index >= 0 && index < items.size();
-        button->setVisible(visible);
-        if (!visible)
+        if (!visible) {
+            button->hide();
             continue;
+        }
         const auto &item = items[index];
         const bool selectedItem = !item.placeholder && item.value == selectedValue;
         fontCell->fontMode = true;
@@ -652,6 +658,7 @@ void ChoiceScreen::redrawFonts()
         detail->setGeometry(inset, top + titleHeight + ui::px(8), detailWidth, detailHeight);
         detail->setVisible(!item.detail.isEmpty());
         label->setVisible(!item.placeholder);
+        button->show();
     }
     for (auto *button : buttons)
         if (!button->isHidden())

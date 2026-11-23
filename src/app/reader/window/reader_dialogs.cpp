@@ -810,9 +810,10 @@ void Reader::syncPinnedBookmarks()
             && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog
             && !(fieldChooser && fieldChooser->isVisible())
             && !(headerFooterView && headerFooterView->isVisible());
-    pinnedBookmarks->setVisible(visible);
-    if (!visible)
+    if (!visible) {
+        pinnedBookmarks->hide();
         return;
+    }
     const int padding = ui::px(12), edgeGap = ui::px(20);
     const int top = topControls->geometry().bottom() + 1;
     int bottom = navigation               ? navigation->navigationTop()
@@ -864,9 +865,10 @@ void Reader::syncPinnedBookmarks()
     const int trayTop = (pinnedBookmarks->height() - trayHeight) / 2;
     for (int i = 0; i < pinnedButtons.size(); ++i) {
         auto *button = pinnedButtons[i];
-        button->setVisible(i < count);
-        if (i >= count)
+        if (i >= count) {
+            button->hide();
             continue;
+        }
         const auto &pin = items[pins[i]];
         const int column = i / columnRows;
         const int rows = qMin(columnRows, count - column * columnRows);
@@ -885,7 +887,9 @@ void Reader::syncPinnedBookmarks()
         button->setEnabled(bookmarks->bookPage(pins[i]) >= 0
                            || (session->state().contains("book_fraction")
                                && session->state().value("rough_pages").toInt() <= 0));
+        button->show();
     }
+    pinnedBookmarks->show();
     pinnedBookmarks->update();
     pinnedBookmarks->raise();
 }

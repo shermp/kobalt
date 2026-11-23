@@ -242,7 +242,8 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
     chapterCaption = new ui::InterfaceLabel(this);
     chapterCaption->setObjectName("rrGraphChapterNumber");
     ui::captionLabel(chapterCaption);
-    chapterCaption->setVisible(!phoneLayout);
+    if (phoneLayout)
+        chapterCaption->hide();
     // The page in the chapter follows the contents position on the caption line.
     positionSeparator = new ui::InterfaceLabel(QStringLiteral("·"), this);
     positionSeparator->setObjectName("rrGraphPositionSeparator");
@@ -319,6 +320,7 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
                 activityRequested();
         });
     refreshCells();
+    arrangeWords();
     hide();
 }
 
@@ -371,6 +373,7 @@ void ChapterGraph::setReading(int minutes, qint64 total, qint64 chapterMilliseco
     chapterTime = chapterMilliseconds;
     bookTime = bookMilliseconds;
     refreshCells();
+    arrangeWords();
 }
 
 // The time left at the session's pace. With shortForm, hours and minutes use a
@@ -444,7 +447,6 @@ void ChapterGraph::refreshCells()
             ? strings::get(wholeVolume ? "stats.volume_words" : "stats.main_words")
                       .arg(wordTotal(words))
             : QString();
-    arrangeWords();
 }
 
 QString ChapterGraph::activitySummary() const
@@ -459,7 +461,6 @@ void ChapterGraph::setActivity(const QString &summary)
     if (activityAvailable == bool(activityRequested))
         return;
     activityAvailable = bool(activityRequested);
-    arrange();
     redraw();
 }
 
@@ -578,7 +579,6 @@ void ChapterGraph::open()
 void ChapterGraph::resizeEvent(QResizeEvent *event)
 {
     Panel::resizeEvent(event);
-    arrange();
     redraw();
 }
 
@@ -670,10 +670,12 @@ void ChapterGraph::arrangeWords()
     const int bookWidth =
             qMin((inner - gap) / 2, ui::interfaceTextWidth(bookWordsText, metrics) + 2);
     const int chapterWidth = qMax(1, inner - bookWidth - gap);
-    chapterWords->setVisible(!wordsInCells());
-    bookWords->setVisible(!wordsInCells());
-    chapterWords->setGeometry(chrome::inset, top, chapterWidth, wordsRowHeight());
-    bookWords->setGeometry(width() - chrome::inset - bookWidth, top, bookWidth, wordsRowHeight());
+    const int rowHeight = wordsRowHeight();
+    chapterWords->setGeometry(chrome::inset, top, chapterWidth, rowHeight);
+    bookWords->setGeometry(width() - chrome::inset - bookWidth, top, bookWidth, rowHeight);
+    const bool showWords = !wordsInCells();
+    chapterWords->setVisible(showWords);
+    bookWords->setVisible(showWords);
     chapterWords->setText(ui::elideInterfaceText(chapterWordsText, metrics, chapterWidth));
     bookWords->setText(ui::elideInterfaceText(bookWordsText, metrics, bookWidth));
 }
@@ -731,9 +733,9 @@ void ChapterGraph::arrange()
             : qBound(0, ui::interfaceTextWidth(chapterCaption->text(), captionMetrics) + 2,
                      titleWidth - pageWidth - separatorWidth);
     chapterCaption->setGeometry(chrome::inset, headingTop, captionWidth, captionHeight);
-    positionSeparator->setVisible(both);
     positionSeparator->setGeometry(chrome::inset + captionWidth, headingTop, separatorWidth,
                                    captionHeight);
+    positionSeparator->setVisible(both);
     chapterPage->setGeometry(chrome::inset + captionWidth + separatorWidth, headingTop, pageWidth,
                              captionHeight);
     chapterTitle->setGeometry(chrome::inset, headingTop + captionHeight + chapters::headingGap,
@@ -755,9 +757,8 @@ void ChapterGraph::arrange()
     arrangeWords();
     const int cells = top + chart + wordsHeight() + pagerHeight();
     const bool row = activityRowShown();
-    activityRow->setVisible(row);
     activityRow->setGeometry(0, cells + chapters::cellHeight, width(), chapters::activityHeight);
-    activityCell->setVisible(activityAvailable && !row);
+    activityRow->setVisible(row);
     const int cellsWidth = this->cellsWidth();
     for (int column = 0; column < 3; ++column) {
         auto *cell = QVector<StatsCell *>{ chapterCell, bookCell, sessionCell }[column];
@@ -765,6 +766,7 @@ void ChapterGraph::arrange()
         cell->setGeometry(left, cells, cellsWidth * (column + 1) / 3 - left, chapters::cellHeight);
     }
     activityCell->setGeometry(cellsWidth, cells, width() - cellsWidth, chapters::cellHeight);
+    activityCell->setVisible(activityAvailable && !row);
 }
 
 int ChapterGraph::cellsWidth() const
@@ -782,13 +784,13 @@ void ChapterGraph::redraw(bool paging)
     anchor = qBound(0, anchor, qMax(0, int(chapters.size()) - 1));
     const int first = graphPage() * capacity();
     const bool available = ready && error.isEmpty() && !chapters.isEmpty();
-    bars->setVisible(available);
-    message->setVisible(!available);
     message->setText(!error.isEmpty()
                              ? strings::get("chapter_graph.chapter_lengths_are_unavailable")
                              : !ready ? strings::get("stats.counting")
                                       : strings::get("chapter_graph.no_chapter_lengths_available"));
     arrange();
+    bars->setVisible(available);
+    message->setVisible(!available);
     pager->setPage(graphPage(), available ? graphPages() : 1);
     const int columns = qMin(capacity(), int(chapters.size()));
     bars->chapters = chapters;

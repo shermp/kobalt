@@ -110,6 +110,7 @@ void DescribedOption::setPreview(QWidget *widget, QSize size)
     previewSize = size;
     preview->setParent(this);
     preview->setAttribute(Qt::WA_TransparentForMouseEvents);
+    placePreview();
     preview->show();
     updateGeometry();
     placeTitleLabel();
@@ -120,8 +121,8 @@ void DescribedOption::setTitleLabel(QLabel *label)
 {
     titleLabel = label;
     label->setAttribute(Qt::WA_TransparentForMouseEvents);
-    label->show();
     placeTitleLabel();
+    label->show();
     update();
 }
 
@@ -227,11 +228,16 @@ void DescribedOption::resizeEvent(QResizeEvent *event)
 {
     QCheckBox::resizeEvent(event);
     setMinimumHeight(heightForWidth(event->size().width()));
+    placePreview();
+    placeTitleLabel();
+}
+
+void DescribedOption::placePreview()
+{
     if (preview)
         preview->setGeometry(width() - appearance.horizontalInset - previewSize.width(),
                              (height() - previewSize.height()) / 2, previewSize.width(),
                              previewSize.height());
-    placeTitleLabel();
 }
 
 bool DescribedOption::hitButton(const QPoint &position) const
@@ -518,7 +524,10 @@ DescribedOption *RadioList::add(const QString &name, const QString &label,
             callback(index);
     });
     rows.append(option);
-    arrange();
+    if (count == 0)
+        option->hide();
+    else
+        arrange();
     updateGeometry();
     return option;
 }
@@ -592,15 +601,27 @@ int RadioList::rowHeight(int width) const
     return height;
 }
 
+QVector<int> RadioList::rowHeights(int width) const
+{
+    const int commonHeight = uniformRows ? rowHeight(width) : 0;
+    QVector<int> heights(rows.size());
+    for (int index = 0; index < rows.size(); ++index)
+        if (index >= leftOut.size() || !leftOut[index])
+            heights[index] = uniformRows ? commonHeight : rowHeight(index, width);
+    return heights;
+}
+
 int RadioList::heightForWidth(int width) const
 {
     const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
-    if (twoColumns) {
+    if (twoColumns || uniformRows) {
         int visible = 0;
         for (int index = first; index < last; ++index)
             if (index >= leftOut.size() || !leftOut[index])
                 ++visible;
-        return ((visible + 1) / 2) * rowHeight(width / 2);
+        if (visible == 0)
+            return 0;
+        return twoColumns ? ((visible + 1) / 2) * rowHeight(width / 2) : visible * rowHeight(width);
     }
     int height = 0;
     for (int index = first; index < last; ++index)
@@ -640,18 +661,20 @@ void RadioList::resizeEvent(QResizeEvent *)
 
 void RadioList::arrange()
 {
-    const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
+    int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
+    while (last > first && last <= leftOut.size() && leftOut[last - 1])
+        --last;
     const int cellWidth = twoColumns ? width() / 2 : width();
     const int uniformHeight = uniformRows || twoColumns ? rowHeight(cellWidth) : 0;
     int top = 0, visible = 0;
-    DescribedOption *lastShown = nullptr;
     for (int index = 0; index < rows.size(); ++index) {
         auto *row = rows[index];
         const bool shown =
                 index >= first && index < last && !(index < leftOut.size() && leftOut[index]);
-        row->setVisible(shown);
-        if (!shown)
+        if (!shown) {
+            row->hide();
             continue;
+        }
         const bool right = twoColumns && visible % 2 == 1;
         auto look = row->presentation();
         look.dividers = Edges(Qt::BottomEdge)
@@ -662,14 +685,13 @@ void RadioList::arrange()
         const int height = uniformRows || twoColumns ? uniformHeight : rowHeight(index, width());
         // Replace the minimum measured at the old width before Qt constrains the new geometry.
         row->setMinimumHeight(height);
-        row->setGeometry(right ? cellWidth : 0, top, right ? width() - cellWidth : cellWidth,
-                         height);
+        const int left = right ? cellWidth : 0;
+        const int rightEdge = right || index + 1 == last ? width() : cellWidth;
+        row->setGeometry(left, top, rightEdge - left, height);
+        row->show();
         if (!twoColumns || right)
             top += height;
-        lastShown = row;
         ++visible;
     }
-    if (twoColumns && visible % 2 == 1)
-        lastShown->resize(width(), lastShown->height());
 }
 } // namespace kobalt::ui

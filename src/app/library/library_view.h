@@ -108,7 +108,7 @@ private:
     QTimer *throttle;
     bool scanning = false, searching = false, dark = false;
     int found = 0;
-    void arrange();
+    void arrange(bool showPager);
     void rebuild(bool keepPage = true);
     void applySettings(const Settings &settings);
     void showBookMenu(const QString &key);

@@ -232,10 +232,13 @@ void PagerBar::setBlankArea(const QRect &bounds)
 
 void PagerBar::updateHint()
 {
-    const auto hint = continuationHint->sizeHint();
-    const int minimumHeight = qMax(ui::px(48), hint.height() + 2 * ui::px(8));
-    const bool fits = blankArea.height() >= minimumHeight && blankArea.width() >= hint.width();
-    if (page + 1 >= count || !fits) {
+    bool fits = page + 1 < count && blankArea.height() >= ui::px(48) && blankArea.width() > 0;
+    if (fits) {
+        const auto hint = continuationHint->sizeHint();
+        fits = blankArea.height() >= hint.height() + 2 * ui::px(8)
+                && blankArea.width() >= hint.width();
+    }
+    if (!fits) {
         // Hide at the old bounds so Qt5 invalidates every painted hint pixel.
         // Resizing to an empty blank area first can leave those pixels behind.
         continuationHint->hide();

@@ -759,9 +759,10 @@ public:
             rows.append(row);
         }
         for (int i = 0; i < rows.size(); ++i) {
-            rows[i]->setVisible(i < index.folders.size());
-            if (i >= index.folders.size())
+            if (i >= index.folders.size()) {
+                rows[i]->hide();
                 continue;
+            }
             rows[i]->setTitle(index.folders[i].label);
             rows[i]->setDetail(index.folders[i].key.startsWith('/') ? index.folders[i].key
                                                                     : QString());
@@ -804,6 +805,7 @@ private:
         QVector<QPair<int, int>> items;
         for (int i = 0; i < rows.size() && i < index.folders.size(); ++i) {
             rows[i]->setGeometry(0, y, width(), ui::metrics::list::twoLines);
+            rows[i]->show();
             items.append({ y, y + int(ui::metrics::list::twoLines) });
             y += ui::metrics::list::twoLines;
         }
@@ -1193,6 +1195,7 @@ void LibraryView::applySettings(const Settings &settings)
 void LibraryView::setSearching(bool value)
 {
     searching = value;
+    arrange(!pager->isHidden());
     query->setVisible(value);
     closeSearch->setVisible(value);
     search->setVisible(!value);
@@ -1210,7 +1213,6 @@ void LibraryView::setSearching(bool value)
         else
             QGuiApplication::inputMethod()->hide();
     }
-    arrange();
     rebuild(false);
 }
 
@@ -1218,9 +1220,6 @@ void LibraryView::rebuild(bool keepPage)
 {
     const auto &settings = index.settings;
     const bool noLibrary = index.folders.isEmpty() && index.visibleCount() == 0 && !scanning;
-    empty->setVisible(noLibrary);
-    if (noLibrary && !(about && about->isVisible()))
-        empty->raise();
     const auto text = searching ? query->text() : QString();
     const bool home = settings.view == View::Home;
     // Home shows the largest covers; the cover grid uses the chosen size.
@@ -1268,22 +1267,23 @@ void LibraryView::rebuild(bool keepPage)
         const int available = qMax(1, height() - chrome::actionHeight - chrome::toolStripHeight);
         const auto cells = listCells(size(), available);
         const int capacity = cells.width() * cells.height();
-        pager->setVisible(pages->books.size() > capacity);
-        arrange();
+        arrange(pages->books.size() > capacity);
     }
     const int count = pages->pageCount();
     pager->setPage(pages->page, count, {}, true);
-    pager->setVisible(count > 1);
+    arrange(count > 1);
+    empty->setVisible(noLibrary);
+    if (noLibrary && !(about && about->isVisible()))
+        empty->raise();
     sort->setVisible(!noLibrary);
     for (auto *mode : modes)
         mode->setVisible(!noLibrary);
-    arrange();
     sort->update();
     pages->QWidget::update();
     QWidget::update();
 }
 
-void LibraryView::arrange()
+void LibraryView::arrange(bool showPager)
 {
     const int bar = chrome::actionHeight - chrome::heavyRule;
     int x = width();
@@ -1311,14 +1311,15 @@ void LibraryView::arrange()
     // way to a caption that large text makes too wide to sit beside it.
     const bool squares = sortButton->busy && sortButton->fitsBeside(hint.width());
     sortButton->progressWidth = squares ? hint.width() : 0;
-    progress->setVisible(squares);
     progress->setGeometry(chrome::inset, toolbarTop + (chrome::toolStripHeight - hint.height()) / 2,
                           hint.width(), hint.height());
+    progress->setVisible(squares);
     const int top = toolbarTop + chrome::toolStripHeight;
-    const int bottom = !pager->isHidden() ? height() - chrome::actionHeight : height();
+    const int bottom = showPager ? height() - chrome::actionHeight : height();
     const int gap = pages->view == View::List ? 0 : ui::px(8);
     pages->setGeometry(0, top + gap, width(), qMax(1, bottom - top - gap));
     pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
+    pager->setVisible(showPager);
     empty->setGeometry(0, chrome::actionHeight, width(), qMax(1, height() - chrome::actionHeight));
     if (folderPage)
         folderPage->setGeometry(rect());
@@ -1331,7 +1332,7 @@ void LibraryView::arrange()
 void LibraryView::resizeEvent(QResizeEvent *)
 {
     pages->dirty = true;
-    arrange();
+    arrange(!pager->isHidden());
     rebuild(true);
     if (keyboard)
         keyboard->place();

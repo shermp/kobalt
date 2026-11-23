@@ -115,6 +115,7 @@ private:
     QFont labelFont() const;
     // Moves the title label to its place in the title line.
     void placeTitleLabel();
+    void placePreview();
 };
 
 // A pick-one list: a row per choice with a radio on the left, its label and
@@ -140,6 +141,7 @@ public:
     void setTwoColumns(bool enabled);
     int rowHeight(int width) const;
     int rowHeight(int index, int width) const;
+    QVector<int> rowHeights(int width) const;
     // Shows the next count choices in row-major order.
     void showRows(int first, int count);
     // A left-out row stays in options() but is never shown and takes no

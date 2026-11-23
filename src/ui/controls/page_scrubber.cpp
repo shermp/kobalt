@@ -920,9 +920,7 @@ void PageScrubber::resizeEvent(QResizeEvent *)
 
 int PageScrubber::actionsHeight() const
 {
-    return linksAction->isHidden() && returnAction->isHidden() && imageAction->isHidden()
-            ? 0
-            : int(scrubber::actionTop + scrubber::actionHeight);
+    return actions->isHidden() ? 0 : actions->height();
 }
 
 void PageScrubber::setLinksAction(const QString &label)
@@ -954,7 +952,6 @@ void PageScrubber::syncActions()
     if (linksAction->text() != requestedLinksLabel) {
         linksAction->setText(requestedLinksLabel);
         linksAction->setAccessibleName(requestedLinksLabel);
-        linksAction->setVisible(!requestedLinksLabel.isEmpty());
         changed = true;
     }
     if (returnAction->text() != requestedReturnLabel
@@ -963,8 +960,6 @@ void PageScrubber::syncActions()
         returnAction->setCaption(requestedReturnNote);
         returnAction->setAccessibleName(requestedReturnLabel);
         returnAction->setAccessibleDescription(requestedReturnNote);
-        returnAction->setVisible(!requestedReturnLabel.isEmpty());
-        stay->setVisible(!requestedReturnLabel.isEmpty());
         changed = true;
     }
     if (imageLabel != requestedImageLabel) {
@@ -989,7 +984,8 @@ void PageScrubber::setBarVisible(bool visible)
 void PageScrubber::arrange()
 {
     const int edge = metrics::control::border;
-    const bool hasLinks = !linksAction->isHidden(), hasReturn = !returnAction->isHidden();
+    const bool hasLinks = !linksAction->text().isEmpty(),
+               hasReturn = !returnAction->text().isEmpty();
     const int idealLinks = hasLinks ? linksAction->sizeHint().width() + 2 * edge : 0;
     const int idealReturn = hasReturn ? returnAction->sizeHint().width() + edge : 0;
     const int closeWidth = hasReturn ? int(scrubber::closeWidth) : 0;
@@ -1003,47 +999,25 @@ void PageScrubber::arrange()
             && (!(hasLinks || hasReturn)
                 || idealImage + imageGap + idealLinks + gap + idealReturn + closeWidth
                         <= available);
-    imageAction->setVisible(hasImage);
-    dismissImage->setVisible(hasImage);
     const int imageWidth = hasImage ? qMin(idealImage, available) : 0;
     const int imageSpace = hasImage ? imageWidth + imageGap : 0;
     const int button = metrics::chrome::cellWidth;
     const bool mapVisible = barVisible && overviewExpanded && zoomAvailable();
     const QRect bar = barBounds();
-    const QRect center = previewBounds();
-    const QSize side(qMax(1, qRound(center.width() * .92)), qMax(1, qRound(center.height() * .92)));
-    const int y = center.center().y() - side.height() / 2;
-    preceding->setGeometry(center.left() - int(scrubber::gap) - side.width(), y, side.width(),
-                           side.height());
-    following->setGeometry(center.right() + 1 + int(scrubber::gap), y, side.width(), side.height());
-    preceding->setVisible(selecting() && candidate > 0);
-    following->setVisible(selecting() && candidate < totalPages - 1);
-    barRule->setVisible(mapVisible);
-    previous->setVisible(barVisible);
-    next->setVisible(barVisible);
-    position->setVisible(barVisible && !chapterBar);
-    indicator->setVisible(barVisible && chapterBar);
-    overviewRule->setVisible(barVisible && zoomAvailable());
-    overviewToggle->setVisible(barVisible && zoomAvailable());
     buttonIcon(overviewToggle, overviewExpanded ? ControlIcon::Down : ControlIcon::Up);
     overviewToggle->setAccessibleName(
             strings::get(overviewExpanded ? "reader.collapse_book_map" : "reader.expand_book_map"));
-    zoomOut->setVisible(mapVisible);
-    zoomIn->setVisible(mapVisible);
-    rangeLabel->setVisible(barVisible);
-    overview->setVisible(mapVisible);
     overview->setEnabled(zoomLevel > 0);
-    overviewLabel->setVisible(mapVisible);
-    rangeStart->setVisible(barVisible && !chapterBar);
-    rangeEnd->setVisible(barVisible && !chapterBar);
-    overviewStart->setVisible(mapVisible);
-    overviewEnd->setVisible(mapVisible);
     barRule->setGeometry(0, bar.top(), width(), metrics::control::border);
     previous->setGeometry(0, bar.top(), button, bar.height());
     next->setGeometry(qMax(0, width() - button), bar.top(), button, bar.height());
     zoomOut->setGeometry(0, bar.top() - int(scrubber::overviewHeight), button,
                          scrubber::overviewHeight);
     zoomIn->setGeometry(qMax(0, width() - button), zoomOut->y(), button, scrubber::overviewHeight);
+    previous->setVisible(barVisible);
+    next->setVisible(barVisible);
+    zoomOut->setVisible(mapVisible);
+    zoomIn->setVisible(mapVisible);
     const int x = previous->geometry().right() + 1 + int(scrubber::gap);
     const int trackWidth = qMax(1, next->x() - int(scrubber::gap) - x);
     position->setGeometry(x, bar.top() + int(scrubber::verticalPadding), trackWidth,
@@ -1069,8 +1043,19 @@ void PageScrubber::arrange()
                            label == rangeEnd ? rangeLabel->y() : overviewLabel->y(), endpointWidth,
                            scrubber::rangeLabelHeight);
     }
-    const int rowHeight = actionsHeight();
-    actions->setVisible(rowHeight > 0);
+    barRule->setVisible(mapVisible);
+    position->setVisible(barVisible && !chapterBar);
+    indicator->setVisible(barVisible && chapterBar);
+    rangeLabel->setVisible(barVisible);
+    overview->setVisible(mapVisible);
+    overviewLabel->setVisible(mapVisible);
+    rangeStart->setVisible(barVisible && !chapterBar);
+    rangeEnd->setVisible(barVisible && !chapterBar);
+    overviewStart->setVisible(mapVisible);
+    overviewEnd->setVisible(mapVisible);
+    const int rowHeight = hasImage || hasLinks || hasReturn
+            ? int(scrubber::actionTop + scrubber::actionHeight)
+            : 0;
     const int room = qMax(0, available - imageSpace - closeWidth - gap);
     const int labels = idealLinks + idealReturn;
     const int linksWidth = labels ? qMin(idealLinks, room * idealLinks / labels) : 0;
@@ -1104,6 +1089,20 @@ void PageScrubber::arrange()
     returnRule->setGeometry(returnLeft, top, returnWidth + closeWidth, body);
     linksRule->setVisible(hasLinks);
     returnRule->setVisible(hasReturn);
+    imageAction->setVisible(hasImage);
+    dismissImage->setVisible(hasImage);
+    linksAction->setVisible(hasLinks);
+    returnAction->setVisible(hasReturn);
+    stay->setVisible(hasReturn);
+    actions->setVisible(rowHeight > 0);
+    const QRect center = previewBounds();
+    const QSize side(qMax(1, qRound(center.width() * .92)), qMax(1, qRound(center.height() * .92)));
+    const int y = center.center().y() - side.height() / 2;
+    preceding->setGeometry(center.left() - int(scrubber::gap) - side.width(), y, side.width(),
+                           side.height());
+    following->setGeometry(center.right() + 1 + int(scrubber::gap), y, side.width(), side.height());
+    preceding->setVisible(selecting() && candidate > 0);
+    following->setVisible(selecting() && candidate < totalPages - 1);
     barRule->setSoftEdges(true);
     updateCaption();
     updateMask();
@@ -1189,6 +1188,8 @@ void PageScrubber::updateCaption()
             int(scrubber::captionHeight - metrics::chrome::heavyRule - metrics::control::border));
     overviewRule->setGeometry(
             overviewToggle->geometry().adjusted(-int(metrics::control::border), 0, 0, 0));
+    overviewToggle->setVisible(toggleWidth > 0);
+    overviewRule->setVisible(toggleWidth > 0);
     const int room = qMax(1, width() - 2 * (int(scrubber::padding) + toggleWidth));
     const auto text = elideInterfaceText(label, chapterLabel->font(), room);
     // Keep the caption's backing-store damage around the text.

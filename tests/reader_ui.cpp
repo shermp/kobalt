@@ -318,7 +318,23 @@ private slots:
                              QString("chapter%1").arg(i) });
         int selected = 0;
         chapters->selected = [&](const QString &) { ++selected; };
+
+        struct RowShows : QObject
+        {
+            QHash<QObject *, QRect> firstBounds;
+
+            bool eventFilter(QObject *object, QEvent *event) override
+            {
+                if (event->type() == QEvent::ShowToParent && !firstBounds.contains(object))
+                    if (auto *row = dynamic_cast<ui::ListRow *>(object))
+                        firstBounds.insert(row, row->geometry());
+                return false;
+            }
+        } shows;
+
+        qApp->installEventFilter(&shows);
         chapters->showChapters("Test book", choices, {});
+        qApp->removeEventFilter(&shows);
         QCoreApplication::processEvents();
         auto *counter = chapters->findChild<QLabel *>("rrContentsPage");
         auto *next = chapters->findChild<QPushButton *>("rrContentsNext");
@@ -327,6 +343,7 @@ private slots:
         const auto first = counter->text();
         auto *row = chapters->findChild<QPushButton *>("chapter0");
         QVERIFY(row && row->isVisible());
+        QCOMPARE(shows.firstBounds.value(row), row->geometry());
         auto swipe = [&](bool forward) {
             const QPoint center = row->mapTo(chapters, row->rect().center());
             const QPoint travel(ui::px(160), 0);

@@ -235,6 +235,15 @@ void AppearanceSheet::setTopSection(QWidget *section)
 int AppearanceSheet::fitHeight(int width, int availableHeight)
 {
     ensurePolished();
+    QMargins margins = topSection ? QMargins(metrics::panel::margins) : layout()->contentsMargins();
+    const int innerWidth = qMax(1, width - margins.left() - margins.right());
+    auto *rows = pages->currentWidget()->layout();
+    const int contentHeight = qMax(rows->minimumSize().height(),
+                                   rows->hasHeightForWidth() ? rows->totalHeightForWidth(innerWidth)
+                                                             : rows->sizeHint().height());
+    const int note = message->isHidden()
+            ? 0
+            : qMax(0, message->heightForWidth(innerWidth)) + layout()->spacing();
     int sectionHeight = 0;
     if (topSection) {
         // Phones in landscape have no room for presets. E-readers keep them
@@ -242,39 +251,19 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
         const auto *screen = window();
         bool shown = pages->currentIndex() == int(AppearancePage::Typography)
                 && !isShortHeight(screen->height(), ui::density());
-        if (shown && screen->height() >= screen->width()) {
-            const auto base = metrics::panel::margins;
-            auto *rows = pages->currentWidget()->layout();
-            const int inner = qMax(1, width - base.left() - base.right());
-            const int content = qMax(rows->minimumSize().height(),
-                                     rows->hasHeightForWidth() ? rows->totalHeightForWidth(inner)
-                                                               : rows->sizeHint().height());
-            const int note = message->isHidden()
-                    ? 0
-                    : qMax(0, message->heightForWidth(inner)) + layout()->spacing();
-            shown = content + base.top() + base.bottom() + note + int(metrics::list::headerHeight)
+        if (shown && screen->height() >= screen->width())
+            shown = contentHeight + margins.top() + margins.bottom() + note
+                            + int(metrics::list::headerHeight)
                     <= availableHeight;
+        if (shown) {
+            sectionHeight = topSection->sizeHint().height();
+            topSection->setGeometry(0, metrics::chrome::heavyRule, width, sectionHeight);
         }
         topSection->setVisible(shown);
-        if (shown)
-            sectionHeight = topSection->sizeHint().height();
-        QMargins margins = metrics::panel::margins;
         margins.setTop(margins.top() + sectionHeight);
         layout()->setContentsMargins(margins);
     }
-    const auto margins = layout()->contentsMargins();
-    const int innerWidth = qMax(1, width - margins.left() - margins.right());
-    auto *rows = pages->currentWidget()->layout();
-    auto measure = [rows](int width) {
-        return qMax(rows->minimumSize().height(),
-                    rows->hasHeightForWidth() ? rows->totalHeightForWidth(width)
-                                              : rows->sizeHint().height());
-    };
-    const int messageHeight =
-            message->isHidden() ? 0 : qMax(0, message->heightForWidth(innerWidth));
-    const int extra = margins.top() + margins.bottom()
-            + (message->isHidden() ? 0 : messageHeight + layout()->spacing());
-    const int contentHeight = measure(innerWidth);
+    const int extra = margins.top() + margins.bottom() + note;
     const bool overflow = contentHeight + extra > availableHeight;
     // Keep the ordinary hierarchy when everything fits, so a row that
     // updates its layout hint does not repaint rows on another page.
@@ -284,6 +273,7 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
         if (overflow) {
             sheetRows->removeWidget(pages);
             pages->setParent(clip);
+            pages->setGeometry(0, 0, innerWidth, contentHeight);
         } else {
             pages->clearMask();
             pages->setParent(this);
@@ -324,10 +314,8 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
     }
     const int height = overflow ? qMax(1, availableHeight) : contentHeight + extra;
     resize(width, height);
-    if (topSection && sectionHeight) {
-        topSection->setGeometry(0, metrics::chrome::heavyRule, width, sectionHeight);
+    if (topSection && sectionHeight)
         topSection->raise();
-    }
     layout()->activate();
     if (overflow)
         showRows(rowPage);

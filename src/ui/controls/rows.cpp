@@ -456,9 +456,6 @@ void ListRow::arrange()
     title->setGeometry(start, top, textWidth, lineHeight);
     title->setText(title->elidedText(titleText, qMax(0, textWidth - titleInset)));
     int y = top + titleGap + lineHeight;
-    detail->setVisible(!detailText.isEmpty());
-    caption->setVisible(!captionText.isEmpty());
-    note->setVisible(noteLines > 0 && !noteText.isEmpty());
     for (const auto &item : { qMakePair(detail, detailText), qMakePair(note, noteText),
                               qMakePair(caption, captionText) }) {
         if (item.first == note) {
@@ -481,14 +478,17 @@ void ListRow::arrange()
         item.first->setText(count > 1 ? item.second
                                       : item.first->elidedText(item.second, item.first->width()));
     }
-    leading->setVisible(!hasLeadingIcon && !leadingText.isEmpty());
+    detail->setVisible(!detailText.isEmpty());
+    caption->setVisible(!captionText.isEmpty());
+    note->setVisible(noteLines > 0 && !noteText.isEmpty());
     leading->setText(leadingText);
     leading->setGeometry(contentsMargins().left() + metrics::list::inset, 0, lead,
                          height() - metrics::control::border);
-    trailing->setVisible(trailingCaption != nullptr);
+    leading->setVisible(!hasLeadingIcon && !leadingText.isEmpty());
     trailing->setText(trailingCaption ? trailingCaption->text : QString());
     trailing->setGeometry(qMax(start, end - trail), top, qMax(0, qMin(trail, end - start)),
                           lineHeight);
+    trailing->setVisible(trailingCaption != nullptr);
     if (action) {
         const QPoint origin = action->parentWidget() == this ? QPoint() : pos();
         action->setGeometry(origin.x() + width() - metrics::chrome::cellWidth, origin.y(),

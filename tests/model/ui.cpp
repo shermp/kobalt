@@ -3448,6 +3448,41 @@ int main(int argc, char **argv)
     optionsHost.show();
     option.show();
     app.processEvents();
+    {
+        kobalt::ui::RadioList list(&optionsHost);
+        list.resize(700, 300);
+        list.showRows(0, 0);
+        auto *row = list.add("pagedRadio", "A choice");
+        list.show();
+
+        struct FirstShow : QObject
+        {
+            QSize size;
+
+            bool eventFilter(QObject *object, QEvent *event) override
+            {
+                if (event->type() == QEvent::Show)
+                    size = static_cast<QWidget *>(object)->size();
+                return false;
+            }
+        } firstShow;
+
+        row->installEventFilter(&firstShow);
+        list.showRows(0, 1);
+        require(firstShow.size == row->size() && row->width() == list.width(),
+                "A radio row must have its list geometry on first show");
+        list.setTwoColumns(true);
+        list.resize(701, 300);
+        auto *right = list.add("rightRadio", "Second");
+        auto *last = list.add("lastRadio", "Third");
+        list.add("excludedRadio", "Fourth");
+        list.setLeftOut(3, true);
+        list.showRows(0, -1);
+        require(row->width() == 350 && right->x() == 350 && right->width() == 351
+                        && last->width() == 701 && last->y() == row->height()
+                        && list.options().last()->isHidden(),
+                "An unpaired radio row must span both columns when the last choice is excluded");
+    }
     for (int width : { 240, 900, 1250 }) {
         option.resize(width, option.heightForWidth(width));
         const auto reference = option.grab().toImage();
