@@ -5,6 +5,7 @@
     <key>CFBundleIdentifier</key><string>@KOBALT_BUNDLE_IDENTIFIER@</string>
     <key>CFBundleName</key><string>@KOBALT_BUNDLE_NAME@</string>
     <key>CFBundleDisplayName</key><string>@KOBALT_BUNDLE_NAME@</string>
+    <key>CFBundleIconFile</key><string>Kobalt</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>@KOBALT_BUNDLE_VERSION@</string>
     <key>CFBundleVersion</key><string>@KOBALT_BUNDLE_VERSION@</string>

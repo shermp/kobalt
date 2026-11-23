@@ -224,6 +224,21 @@ if(APPLE)
         VERBATIM)
     add_custom_target(kobalt-runtime-assets DEPENDS "${bundle_assets}/manifest.json")
     add_dependencies(Kobalt kobalt-runtime-assets)
+
+    # The app icon uses the reader's own SVG library, so it needs no other image tools.
+    add_executable(kobalt-icon icon.cpp)
+    target_include_directories(kobalt-icon SYSTEM PRIVATE "${KOBALT_TEST_DEPENDENCIES}/include")
+    target_link_libraries(kobalt-icon PRIVATE Qt6::Gui "${KOBALT_TEST_DEPENDENCIES}/lib/liblunasvg.a")
+    set(app_iconset "${CMAKE_CURRENT_BINARY_DIR}/Kobalt.iconset")
+    set(app_icon "${CMAKE_CURRENT_BINARY_DIR}/Kobalt.app/Contents/Resources/Kobalt.icns")
+    add_custom_command(OUTPUT "${app_icon}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/Kobalt.app/Contents/Resources"
+        COMMAND kobalt-icon "${resources}/kobalt-mac.svg" "${app_iconset}"
+        COMMAND iconutil -c icns -o "${app_icon}" "${app_iconset}"
+        DEPENDS kobalt-icon "${resources}/kobalt-mac.svg"
+        VERBATIM)
+    add_custom_target(kobalt-app-icon DEPENDS "${app_icon}")
+    add_dependencies(Kobalt kobalt-app-icon)
 endif()
 
 # Explicit compatibility checks do not run during ordinary desktop builds.
