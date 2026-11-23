@@ -1,33 +1,20 @@
 #pragma once
 #include "ui/controls/buttons.h"
+#include "ui/controls/paged_text.h"
 #include "ui/controls/rows.h"
 #include "ui/controls/paging.h"
 #include <QFrame>
 #include <QJsonArray>
 #include <QLabel>
 #include <QPushButton>
-#include "ui/style/rich_text.h"
 #include <functional>
 
 namespace kobalt {
-class LicenseText : public QWidget
+class LicenseText : public ui::PagedText
 {
 public:
     explicit LicenseText(QWidget *parent);
     void setText(const QString &text);
-    // Lays the notice out first if its text or size changed.
-    int pages();
-    int page = 0;
-
-protected:
-    void paintEvent(QPaintEvent *) override;
-    void resizeEvent(QResizeEvent *) override;
-    void changeEvent(QEvent *event) override;
-
-private:
-    ui::PrivateRichText document;
-    bool stale = true;
-    void ensureLayout();
 };
 
 // The project list and each license page use the header geometry: a caption

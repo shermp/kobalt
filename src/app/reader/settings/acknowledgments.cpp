@@ -41,7 +41,7 @@ QString groupTitle(const QString &id)
 }
 } // namespace
 
-LicenseText::LicenseText(QWidget *parent) : QWidget(parent)
+LicenseText::LicenseText(QWidget *parent) : ui::PagedText(parent)
 {
     setObjectName("rrLicenseText");
     // License text is laid out in columns. Firmware 4 ships no fixed-width
@@ -49,7 +49,7 @@ LicenseText::LicenseText(QWidget *parent) : QWidget(parent)
     // keep their own line breaks.
     const QFont font = kobalt::ui::chromeFont(metrics::acknowledgments::noticeText);
     setFont(font);
-    document.setFont(font);
+    setTextFont(font);
 }
 
 void LicenseText::setText(const QString &text)
@@ -63,53 +63,7 @@ void LicenseText::setText(const QString &text)
             ++first;
         line.remove(0, first);
     }
-    page = 0;
-    document.setPlainText(lines.join('\n'));
-    stale = true;
-    update();
-}
-
-void LicenseText::changeEvent(QEvent *event)
-{
-    // The document keeps the faces of its font. See refreshInterfaceText().
-    if (event->type() == QEvent::FontChange) {
-        document.setFont(kobalt::ui::renewedFont(document.font()));
-        stale = true;
-        update();
-    }
-    QWidget::changeEvent(event);
-}
-
-int LicenseText::pages()
-{
-    ensureLayout();
-    return document.pages();
-}
-
-void LicenseText::resizeEvent(QResizeEvent *)
-{
-    stale = true;
-}
-
-void LicenseText::ensureLayout()
-{
-    if (!stale)
-        return;
-    stale = false;
-    const int margin = metrics::acknowledgments::textMargin;
-    document.layout(qMax(1, width() - 2 * margin), qMax(1, height() - 2 * margin));
-    page = qBound(0, page, document.pages() - 1);
-}
-
-void LicenseText::paintEvent(QPaintEvent *)
-{
-    ensureLayout();
-    QPainter painter(this);
-    painter.fillRect(rect(), palette().color(QPalette::Window));
-    const int margin = metrics::acknowledgments::textMargin;
-    const int pageHeight = qMax(1, height() - 2 * margin), start = page * pageHeight;
-    painter.translate(margin, margin - start);
-    document.draw(painter, QRectF(0, start, qMax(1, width() - 2 * margin), pageHeight), palette());
+    setPlainText(lines.join('\n'));
 }
 
 Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent)
@@ -212,7 +166,6 @@ void Acknowledgments::select(int index)
     version->setText(item.value("version").toString());
     license->setText(item.value("license").toString());
     url->setText(item.value("url").toString());
-    text->page = 0;
     text->setText(body);
     redraw();
     timing.field("chars", body.size());
@@ -237,9 +190,9 @@ void Acknowledgments::paintEvent(QPaintEvent *event)
 void Acknowledgments::turnPage(int direction)
 {
     if (entry >= 0) {
-        text->page = qBound(0, text->page + direction, text->pages() - 1);
-        text->update();
-        pager->setPage(text->page, text->pages());
+        const int count = text->pages();
+        text->setPage(qBound(0, text->page() + direction, count - 1));
+        pager->setPage(text->page(), count);
     } else {
         listPage = pager->turnTarget(direction);
         redraw(true);
@@ -266,11 +219,6 @@ void Acknowledgments::redraw(bool paging)
                              : strings::get("settings.about"));
     detail->setText(reading ? item.value("license").toString()
                             : strings::get("acknowledgments.projects").arg(entries.size()));
-    intro->setVisible(!reading);
-    for (auto *label : { static_cast<QWidget *>(description), static_cast<QWidget *>(version),
-                         static_cast<QWidget *>(license), static_cast<QWidget *>(url),
-                         static_cast<QWidget *>(text) })
-        label->setVisible(reading);
     int count = 1;
     if (reading) {
         int y = chrome::headerHeight() + chrome::blockTop;
@@ -292,21 +240,23 @@ void Acknowledgments::redraw(bool paging)
                                  + chrome::textGap);
         divider = url->geometry().bottom() + 1 + chrome::blockTop;
         // The document supplies its own margin; line its text up with the inset.
-        const int top = divider + metrics::control::border + chrome::blockTop
-                - metrics::acknowledgments::textMargin;
-        const int side = chrome::inset - metrics::acknowledgments::textMargin, wanted = text->page;
-        // Measuring without the pager can clamp the page; restore it afterwards.
-        text->setGeometry(side, top, qMax(1, width() - 2 * side), qMax(1, height() - top));
-        if (text->pages() > 1)
-            text->setGeometry(side, top, qMax(1, width() - 2 * side),
-                              qMax(1, height() - chrome::actionHeight - top));
-        text->page = wanted;
+        const int margin = metrics::acknowledgments::textMargin;
+        const int top = divider + metrics::control::border + chrome::blockTop - margin;
+        const int side = chrome::inset - margin;
+        text->setMargins({ margin, margin, margin, margin });
+        text->fitWithPager({ side, top, qMax(1, width() - 2 * side), qMax(1, height() - top) },
+                           chrome::actionHeight);
         count = text->pages();
     } else {
         intro->setGeometry(chrome::inset, chrome::headerHeight() + chrome::blockTop, textWidth,
                            intro->heightForWidth(textWidth));
         divider = intro->geometry().bottom() + 1 + chrome::blockTop;
     }
+    intro->setVisible(!reading);
+    for (auto *label : { static_cast<QWidget *>(description), static_cast<QWidget *>(version),
+                         static_cast<QWidget *>(license), static_cast<QWidget *>(url),
+                         static_cast<QWidget *>(text) })
+        label->setVisible(reading);
     const int rowsTop = divider + metrics::control::border;
     // Page the list by height. A group heading always has a row below it, and
     // a group that continues on the next page repeats its heading there.
@@ -341,10 +291,10 @@ void Acknowledgments::redraw(bool paging)
             if (listPages.at(i).contains(listEntry))
                 listPage = i;
     }
-    if (!reading)
+    if (!reading) {
         count = qMax(1, int(listPages.size()));
-    int &page = reading ? text->page : listPage;
-    page = qBound(0, page, count - 1);
+        listPage = qBound(0, listPage, count - 1);
+    }
     const auto shown = reading || listPages.isEmpty() ? QVector<int>() : listPages.at(listPage);
     for (int index : shown)
         if (index >= 0) {
@@ -395,7 +345,7 @@ void Acknowledgments::redraw(bool paging)
         rows.at(row)->hide();
     for (; heading < headings.size(); ++heading)
         headings.at(heading)->hide();
-    pager->setPage(page, count, {}, !reading);
+    pager->setPage(reading ? text->page() : listPage, count, {}, !reading);
     if (!reading)
         pager->setBlankArea({ chrome::inset, y, width() - 2 * chrome::inset, pager->y() - y });
     if (reading)

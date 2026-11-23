@@ -305,7 +305,6 @@ void DictionaryPanel::open(const QString &word, const DictionaryResult &result,
     place(selection);
     show();
     raise();
-    arrange();
 }
 
 void DictionaryPanel::dismiss()
@@ -529,15 +528,7 @@ void DictionaryPanel::arrange()
 {
     // A narrow sheet keeps the word whole: edit, search and save share one menu.
     const bool compact = !editing && isNarrowWidth(width(), ui::density());
-    headword->setVisible(!editing);
-    edit->setVisible(!editing && !compact);
-    actions->setVisible(compact);
-    query->setVisible(editing);
-    editHint->setVisible(editing);
-    submit->setVisible(editing);
-    search->setVisible(!editing && !compact);
     const bool saving = !editing && saveAvailable && !compact;
-    save->setVisible(saving);
     close->setAccessibleName(strings::get(editing ? "dictionary_panel.cancel_edit"
                                                   : "dictionary_panel.close_definition"));
     dictionary->setEnabled(!editing && options.size() > 1);
@@ -575,15 +566,17 @@ void DictionaryPanel::arrange()
         editHint->setGeometry(chrome::inset, textTop + chrome::textGap, hintWidth, hintHeight);
         textTop = editHint->geometry().bottom() + 1 + chrome::textGap;
     }
-    // A single page needs no pager, so it can use the whole sheet. Measuring
-    // without the pager can clamp the page; restore it afterwards.
     updateDefinition();
-    const int wanted = text->page();
-    text->setGeometry(0, textTop, width(), qMax(1, bottom - textTop));
-    if (text->pages() > 1)
-        text->setGeometry(0, textTop, width(), qMax(1, bottom - chrome::actionHeight - textTop));
-    text->setPage(wanted);
+    text->fitWithPager({ 0, textTop, width(), qMax(1, bottom - textTop) }, chrome::actionHeight);
     pages->setGeometry(0, bottom - chrome::actionHeight, width(), chrome::actionHeight);
+    headword->setVisible(!editing);
+    edit->setVisible(!editing && !compact);
+    actions->setVisible(compact);
+    query->setVisible(editing);
+    editHint->setVisible(editing);
+    submit->setVisible(editing);
+    search->setVisible(!editing && !compact);
+    save->setVisible(saving);
     refresh();
     if (dropdown->isVisible())
         redrawChoices();

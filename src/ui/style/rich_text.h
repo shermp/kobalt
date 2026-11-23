@@ -21,6 +21,9 @@ public:
     void setFont(const QFont &font);
     QFont font() const;
     void layout(int width, int pageHeight = 0, int minimumLineHeight = 0);
+    // Use the full page if the content fits. Otherwise lay it out with the
+    // shorter page height and return true. A nonpositive full height disables pagination.
+    bool layoutWithPager(int width, int pageHeight, int reducedHeight, int minimumLineHeight);
     int pages() const;
     int height() const;
     int naturalWidth() const;

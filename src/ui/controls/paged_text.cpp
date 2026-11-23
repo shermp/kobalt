@@ -34,6 +34,15 @@ void PagedText::setHtml(const QString &html)
     update();
 }
 
+void PagedText::setPlainText(const QString &text)
+{
+    source.clear();
+    document.setPlainText(text);
+    current = 0;
+    stale = true;
+    update();
+}
+
 void PagedText::setTextFont(const QFont &font)
 {
     document.setFont(font);
@@ -46,7 +55,6 @@ void PagedText::setMinimumLineHeight(int percent)
     if (minimumLineHeight == percent)
         return;
     minimumLineHeight = percent;
-    document.setHtml(source);
     stale = true;
     update();
 }
@@ -56,7 +64,8 @@ void PagedText::changeEvent(QEvent *event)
     // Rebuild inherited font attributes after interface settings change.
     if (event->type() == QEvent::FontChange) {
         document.setFont(renewedFont(document.font()));
-        document.setHtml(source);
+        if (!source.isEmpty())
+            document.setHtml(source);
         stale = true;
         update();
     }
@@ -65,6 +74,8 @@ void PagedText::changeEvent(QEvent *event)
 
 void PagedText::setMargins(const QMargins &value)
 {
+    if (margins == value)
+        return;
     margins = value;
     stale = true;
     update();
@@ -76,31 +87,67 @@ int PagedText::pages() const
     return document.pages();
 }
 
-int PagedText::contentHeight() const
-{
-    ensureLayout();
-    return document.height() + margins.top() + margins.bottom();
-}
-
 void PagedText::setPage(int number)
 {
     // A stale layout clamps the page when it is next laid out.
-    current = stale ? qMax(0, number) : qBound(0, number, pages() - 1);
+    current = qMax(0, number);
+    if (!stale && layoutSize == textSize(size()))
+        current = qMin(current, document.pages() - 1);
     update();
 }
 
-void PagedText::resizeEvent(QResizeEvent *)
+void PagedText::fitWithPager(const QRect &available, int pagerHeight)
 {
-    stale = true;
+    fitGeometry(available, pagerHeight);
+}
+
+void PagedText::fitToContent(const QRect &available)
+{
+    fitGeometry(available, 0);
+}
+
+QSize PagedText::textSize(QSize size) const
+{
+    return { qMax(1, size.width() - margins.left() - margins.right()),
+             qMax(1, size.height() - margins.top() - margins.bottom()) };
+}
+
+void PagedText::fitGeometry(const QRect &available, int pagerHeight)
+{
+    ensurePolished();
+    if (stale || fitSize != available.size() || fitPagerHeight != pagerHeight) {
+        const auto full = textSize(available.size());
+        fitHeight = available.height();
+        if (pagerHeight > 0) {
+            const int reduced = qMax(1, fitHeight - pagerHeight);
+            if (document.layoutWithPager(full.width(), full.height(),
+                                         textSize({ available.width(), reduced }).height(),
+                                         minimumLineHeight))
+                fitHeight = reduced;
+        } else {
+            document.layout(full.width(), full.height(), minimumLineHeight);
+            // All laid-out lines fit above this new bottom, so they keep their positions.
+            if (document.pages() == 1)
+                fitHeight = qMin(fitHeight, document.height() + margins.top() + margins.bottom());
+        }
+        fitSize = available.size();
+        fitPagerHeight = pagerHeight;
+        layoutSize = textSize({ available.width(), fitHeight });
+        stale = false;
+        current = qBound(0, current, document.pages() - 1);
+    }
+    setGeometry(QRect(available.topLeft(), QSize(available.width(), fitHeight)));
 }
 
 void PagedText::ensureLayout() const
 {
-    if (!stale)
+    const auto wanted = textSize(size());
+    if (!stale && layoutSize == wanted)
         return;
     stale = false;
-    document.layout(qMax(1, width() - margins.left() - margins.right()),
-                    qMax(1, height() - margins.top() - margins.bottom()), minimumLineHeight);
+    fitSize = {};
+    layoutSize = wanted;
+    document.layout(wanted.width(), wanted.height(), minimumLineHeight);
     current = qBound(0, current, document.pages() - 1);
 }
 

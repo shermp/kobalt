@@ -19,6 +19,7 @@ class PagedText : public QWidget
 public:
     explicit PagedText(QWidget *parent = nullptr);
     void setHtml(const QString &html);
+    void setPlainText(const QString &text);
     void clear();
     void setTextFont(const QFont &font);
     // Minimum leading relative to the font. Zero keeps the source formatting.
@@ -31,25 +32,30 @@ public:
     // set its text and font before it has its final size. The page is
     // clamped by that layout, so read pages() before relying on page().
     int pages() const;
+    // The pager takes space from the text only if it needs multiple pages.
+    void fitWithPager(const QRect &available, int pagerHeight);
+    // A single page takes only the height of its content and margins.
+    void fitToContent(const QRect &available);
 
     int page() const { return current; }
 
     void setPage(int number);
-    // The height the laid-out text needs at the current width, with margins.
-    int contentHeight() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;
-    void resizeEvent(QResizeEvent *) override;
     void changeEvent(QEvent *event) override;
 
 private:
     mutable PrivateRichText document;
     mutable int current = 0;
     mutable bool stale = true;
+    mutable QSize layoutSize, fitSize;
+    int fitPagerHeight = 0, fitHeight = 0;
     int minimumLineHeight = 0;
     QMargins margins;
     QString source;
+    QSize textSize(QSize size) const;
+    void fitGeometry(const QRect &available, int pagerHeight);
     void ensureLayout() const;
 };
 } // namespace kobalt::ui

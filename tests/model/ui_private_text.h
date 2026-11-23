@@ -19,6 +19,37 @@ inline void checkPrivateRichText()
 {
     using namespace kobalt::ui;
     const auto font = chromeFont(28);
+    {
+        // Compare the first-page probe with ordinary pagination, including
+        // cases where a line, a table cell or an explicit break overflows.
+        const QString shortNote = "<p style='margin:0'>A short note.</p>";
+        const QString wrapped = QStringLiteral("Some words in a long note. ").repeated(20);
+        const QStringList examples{
+            shortNote, shortNote + "<hr>", "<p>" + wrapped + "</p>",
+            shortNote + "<p style='page-break-before:always'>Continued.</p>",
+            shortNote + "<table><tr><td>" + wrapped + "</td><td>Aside.</td></tr></table>"
+        };
+        for (const auto &html : examples) {
+            for (const int height : { -30, 0, 1, 60, 170, 1200 }) {
+                constexpr int width = 260;
+                const int withPager = qMax(1, height - 30);
+                PrivateRichText expected, fitted;
+                for (auto *document : { &expected, &fitted }) {
+                    document->setFont(font);
+                    document->setHtml(html);
+                }
+                expected.layout(width, height, 120);
+                const bool needsPager = expected.pages() > 1;
+                if (needsPager)
+                    expected.layout(width, withPager, 120);
+                require(fitted.layoutWithPager(width, height, withPager, 120) == needsPager
+                                && fitted.pages() == expected.pages()
+                                && fitted.height() == expected.height()
+                                && fitted.lineRectangles() == expected.lineRectangles(),
+                        "First-page probe changed rich-text pagination");
+            }
+        }
+    }
     for (const bool dark : { false, true }) {
         for (const auto &container :
              { QStringLiteral("span"), QStringLiteral("paragraph"), QStringLiteral("cell") }) {

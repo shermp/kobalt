@@ -96,6 +96,13 @@ struct PrivateRichText::Data
     // leading move lines without changing where they break.
     QHash<QPair<int, int>, QVector<int>> breaks;
     qreal unitAdvance = 0;
+    bool firstPageOnly = false, overflow = false;
+
+    bool beyondFirstPage(qreal bottom)
+    {
+        overflow = firstPageOnly && bottom > pageHeight;
+        return overflow;
+    }
 
     QFont fragmentFont(const QTextCharFormat &format) const
     {
@@ -197,7 +204,9 @@ struct PrivateRichText::Data
             available = qMax(1, available - inset);
         }
         if (format.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth)) {
-            rules.append({ x, y + base.pixelSize() / 2.0, qreal(available), 1 });
+            const QRectF rule(x, y + base.pixelSize() / 2.0, available, 1);
+            if (!beyondFirstPage(rule.bottom()))
+                rules.append(rule);
             return y + base.pixelSize();
         }
         auto &lineEnds = breaks[qMakePair(block.position(), available)];
@@ -267,6 +276,12 @@ struct PrivateRichText::Data
             }
             height = qMax(height, metrics.lineHeight * qMax(100, leading) / 100.0);
             y = fitLine(y, height);
+            if (beyondFirstPage(y + height)) {
+                // An interrupted block has no complete set of break points.
+                if (!known)
+                    lineEnds.clear();
+                return y;
+            }
             const auto alignment = format.alignment();
             const qreal offset = alignment & Qt::AlignHCenter ? (lineWidth - metrics.advance) / 2.0
                     : alignment & Qt::AlignRight              ? lineWidth - metrics.advance
@@ -310,7 +325,7 @@ struct PrivateRichText::Data
                qreal y)
     {
         bool afterFrame = false;
-        for (auto it = begin; it != end; ++it) {
+        for (auto it = begin; it != end && !overflow; ++it) {
             if (auto *frame = it.currentFrame()) {
                 if (auto *table = dynamic_cast<QTextTable *>(frame))
                     y = tableLayout(table, x, available, y);
@@ -373,6 +388,8 @@ struct PrivateRichText::Data
                     const qreal cellBottom = flow(cell.begin(), cell.end(), left + padding,
                                                   qMax(1, spanWidth - 2 * padding), y + padding)
                             + padding;
+                    if (overflow)
+                        return y;
                     const int lastRow = qMin(table->rows() - 1, row + cell.rowSpan() - 1);
                     reservedBottom[lastRow] = qMax(reservedBottom[lastRow], cellBottom);
                     if (cell.rowSpan() == 1)
@@ -383,6 +400,26 @@ struct PrivateRichText::Data
             y = qMax(bottom, reservedBottom[row]) + gap;
         }
         return y;
+    }
+
+    void layout(int textWidth, int height, int minimumLineHeight, bool probe)
+    {
+        // A fresh estimate keeps each layout independent of earlier ones.
+        unitAdvance = 0;
+        width = qMax(1, textWidth);
+        pageHeight = qMax(0, height);
+        leading = minimumLineHeight;
+        firstPageOnly = probe;
+        overflow = false;
+        lines.clear();
+        rules.clear();
+        flow(document.rootFrame()->begin(), document.rootFrame()->end(), 0, width, 0);
+        // A final margin or table gap must not add an empty page.
+        bottom = 0;
+        for (const auto &line : lines)
+            bottom = qMax(bottom, line.bounds.bottom());
+        for (const auto &rule : rules)
+            bottom = qMax(bottom, rule.bottom());
     }
 };
 
@@ -427,22 +464,21 @@ QFont PrivateRichText::font() const
 
 void PrivateRichText::layout(int width, int pageHeight, int minimumLineHeight)
 {
-    // A fresh estimate keeps each layout independent of earlier ones.
-    data->unitAdvance = 0;
-    data->width = qMax(1, width);
-    data->pageHeight = qMax(0, pageHeight);
-    data->leading = minimumLineHeight;
-    data->lines.clear();
-    data->rules.clear();
-    data->flow(data->document.rootFrame()->begin(), data->document.rootFrame()->end(), 0,
-               data->width, 0);
-    // Margins place subsequent content. A final margin or table gap must not
-    // manufacture an empty page after the last line.
-    data->bottom = 0;
-    for (const auto &line : data->lines)
-        data->bottom = qMax(data->bottom, line.bounds.bottom());
-    for (const auto &rule : data->rules)
-        data->bottom = qMax(data->bottom, rule.bottom());
+    data->layout(width, pageHeight, minimumLineHeight, false);
+}
+
+bool PrivateRichText::layoutWithPager(int width, int pageHeight, int reducedHeight,
+                                      int minimumLineHeight)
+{
+    if (pageHeight <= 0 || pageHeight == reducedHeight) {
+        layout(width, pageHeight, minimumLineHeight);
+        return pages() > 1;
+    }
+    data->layout(width, pageHeight, minimumLineHeight, true);
+    if (!data->overflow)
+        return false;
+    layout(width, reducedHeight, minimumLineHeight);
+    return true;
 }
 
 int PrivateRichText::pages() const

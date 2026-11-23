@@ -77,7 +77,6 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     if (!details.error.isEmpty())
         html = "<p>" + details.error.toHtmlEscaped() + "</p>";
     passage->setEnabled(true);
-    passage->setVisible(!destination.isEmpty());
     // Headings such as "Footnotes:" or "Chapter I." read as a fragment after "In".
     QString chapter = details.chapter.trimmed();
     while (chapter.endsWith(':') || chapter.endsWith('.'))
@@ -98,11 +97,11 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     // Anchor the sheet to the edge opposite the reference.
     lower = reference.center().y() < area.center().y();
     setEdges(lower ? Qt::TopEdge : Qt::BottomEdge);
-    setGeometry(area.left(), lower ? area.bottom() + 1 - h : area.top(), area.width(), h);
     text->setHtml(html);
+    setGeometry(area.left(), lower ? area.bottom() + 1 - h : area.top(), area.width(), h);
+    arrange();
     show();
     raise();
-    arrange();
 }
 
 void LinkPanel::dismiss()
@@ -127,24 +126,20 @@ void LinkPanel::arrange()
     close->setGeometry(width() - chrome::cellWidth, top, chrome::cellWidth, chrome::actionHeight);
     const int textTop = top + chrome::actionHeight + metrics::control::border;
     int textBottom = bottom;
-    if (!passage->isHidden()) {
+    if (!destination.isEmpty()) {
         textBottom -= metrics::links::returnHeight;
         passage->setGeometry(0, textBottom, width(), metrics::links::returnHeight);
     }
-    // A single page needs no pager, so it can use the whole sheet. Measuring
-    // without the pager can clamp the page; restore it afterwards.
-    const int wanted = text->page();
-    text->setGeometry(0, textTop, width(), qMax(1, textBottom - textTop));
-    if (text->pages() > 1) {
-        textBottom -= chrome::actionHeight;
-        text->setGeometry(0, textTop, width(), qMax(1, textBottom - textTop));
-        passage->move(0, textBottom);
-    }
-    text->setPage(wanted);
+    text->fitWithPager({ 0, textTop, width(), qMax(1, textBottom - textTop) },
+                       chrome::actionHeight);
+    const bool paginated = text->pages() > 1;
+    if (paginated)
+        passage->move(0, textBottom - chrome::actionHeight);
     // A lower sheet has no edge where it meets the footer strip, so the row
     // closes it. The pager and an upper sheet's heavy rule have their own.
-    passage->setRule(lower && text->pages() <= 1 ? ui::Edges(Qt::TopEdge) | Qt::BottomEdge
-                                                 : ui::Edges(Qt::TopEdge));
+    passage->setRule(lower && !paginated ? ui::Edges(Qt::TopEdge) | Qt::BottomEdge
+                                         : ui::Edges(Qt::TopEdge));
+    passage->setVisible(!destination.isEmpty());
     pages->setGeometry(0, bottom - chrome::actionHeight, width(), chrome::actionHeight);
     refresh();
 }

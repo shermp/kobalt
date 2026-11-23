@@ -172,8 +172,6 @@ void WordPage::open(const SavedWord &word, const QString &action, const QString 
         html.replace(found.capturedStart(), found.capturedLength(),
                      "<b><u>" + found.captured() + "</u></b>");
     context->setText(html);
-    context->setVisible(!word.context.isEmpty());
-    contextHeading->setVisible(!word.context.isEmpty() || !word.chapter.isEmpty());
     this->action = action;
     passage->setText(action);
     passageCell->setAccessibleName(action);
@@ -190,9 +188,9 @@ void WordPage::open(const SavedWord &word, const QString &action, const QString 
                                                            .date(),
                                                    "d MMM yyyy"));
     facts->setText(details.join(QStringLiteral(" · ")));
+    arrange();
     show();
     raise();
-    arrange();
 }
 
 void WordPage::resizeEvent(QResizeEvent *)
@@ -215,13 +213,14 @@ void WordPage::arrange()
     // A short screen keeps the definition and the sentence; the action moves
     // into the bar and the lookup details leave.
     const bool compact = isShortHeight(height(), ui::density());
-    passage->setVisible(!compact && !action.isEmpty());
-    passageCell->setVisible(compact && !action.isEmpty());
-    missing->setVisible(action.isEmpty());
+    const bool hasPassage = !action.isEmpty(), showPassage = !compact && hasPassage;
+    const bool showPassageCell = compact && hasPassage;
+    const bool showContext = !current.context.isEmpty();
+    const bool showContextHeading = showContext || !current.chapter.isEmpty();
     backButton->setGeometry(0, 0, chrome::cellWidth, bar);
     remove->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, bar);
     passageCell->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, bar);
-    const int cells = passageCell->isVisible() ? 3 : 2;
+    const int cells = showPassageCell ? 3 : 2;
     const int wordLeft = chrome::cellWidth + chrome::inset,
               wordWidth = qMax(1, width() - cells * chrome::cellWidth - 2 * chrome::inset);
     headword->setGeometry(wordLeft, 0, wordWidth, bar);
@@ -231,27 +230,22 @@ void WordPage::arrange()
     // Lay out the sentence and the button from the bottom up. The definition
     // takes the space that is left and pages when it needs more.
     const int pagerTop = height() - chrome::actionHeight;
-    int bottom = pagerTop;
     const int factsHeight = compact || facts->text().isEmpty() ? 0 : facts->heightForWidth(inner);
-    const int actionHeight = passage->isVisible() || missing->isVisible()
+    const int actionHeight = showPassage || !hasPassage
             ? qMax(passage->sizeHint().height(), int(chrome::actionHeight))
             : 0;
-    const int contextHeight = context->isVisible() ? context->heightForWidth(inner) : 0;
+    const int contextHeight = showContext ? context->heightForWidth(inner) : 0;
     int y = definitionHeading->geometry().bottom() + 1;
-    const int lower = (contextHeading->isVisible() ? header : 0)
+    const int lower = (showContextHeading ? header : 0)
             + (contextHeight ? chrome::blockTop + contextHeight : 0)
             + (actionHeight ? chrome::blockTop + actionHeight : 0)
             + (factsHeight ? chrome::textGap + factsHeight : 0) + chrome::blockTop;
-    int definitionHeight = qMax(int(chrome::actionHeight), bottom - y - lower);
-    definition->setGeometry(0, y, width(), definitionHeight);
     // A definition that fits keeps the sentence right below it.
-    if (definition->pages() == 1) {
-        definitionHeight = qMin(definitionHeight, definition->contentHeight());
-        definition->setGeometry(0, y, width(), definitionHeight);
-    }
-    y += definitionHeight;
+    definition->fitToContent(
+            { 0, y, width(), qMax(int(chrome::actionHeight), pagerTop - y - lower) });
+    y += definition->height();
     contextHeading->setGeometry(0, y, width(), header);
-    if (contextHeading->isVisible())
+    if (showContextHeading)
         y += header;
     if (contextHeight) {
         y += chrome::blockTop;
@@ -268,10 +262,15 @@ void WordPage::arrange()
         y += chrome::textGap;
         facts->setGeometry(chrome::inset, y, inner, factsHeight);
     }
-    facts->setVisible(factsHeight > 0);
     const int pages = definition->pages();
     pager->setGeometry(0, pagerTop, width(), chrome::actionHeight);
     pager->setPage(definition->page(), pages);
+    passage->setVisible(showPassage);
+    passageCell->setVisible(showPassageCell);
+    missing->setVisible(!hasPassage);
+    context->setVisible(showContext);
+    contextHeading->setVisible(showContextHeading);
+    facts->setVisible(factsHeight > 0);
     pager->setVisible(pages > 1);
     update();
 }
