@@ -378,16 +378,15 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         // The reader hides after handing its sleep frame to Nickel, but still
         // owns this book and the clean backdrop needed for power-off.
         const bool readerOwnsScreen = run.reader && !busy && !BrowserHandoff::activeFor(run.reader);
-        if (lifecycle->sleepRequested()
-            && homeSleep->keepPresentedForPowerOff(
-                    readerOwnsScreen ? run.reader->presentedSleepSnapshot() : sleep::Snapshot{}))
-            return;
         if (readerOwnsScreen)
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
         else if (bindings_.enabled())
             homeSleep->prepareHomeScreen(true, busy || run.reader ? run.identity : QString());
         else
             homeSleep->clear();
+        // Nickel can keep the existing power view visible through shutdown.
+        if (lifecycle->sleepRequested())
+            homeSleep->present();
     };
     lifecycle->prepareShutdown = [this](NativeLifecycle::Shutdown mode,
                                         std::function<void()> ready) {

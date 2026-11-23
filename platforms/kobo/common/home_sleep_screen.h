@@ -19,7 +19,6 @@ public:
     void forget();
     void prepare(bool enabled, bool powerOff = false);
     void preparePowerOff(sleep::Snapshot);
-    bool keepPresentedForPowerOff(sleep::Snapshot shown = {});
     // Rebuild from the last book's durable privacy choice, never a cached image.
     bool preparePrivateScreen(bool powerOff = false, const QString &identity = {});
     // Kobalt's own screen outside the reader, when Kobalt opened the last book.
@@ -52,9 +51,11 @@ private:
     sleep::Snapshot snapshot, shutdownBackdrop, fontBackdrop;
     // What lies under the status, so a battery change repaints only that.
     QVector<QImage> underlay;
+    // Nickel Home before its sleep view covers it, for a page-based power-off design.
+    QImage homePage;
     NativeBatteryStatus paintedBattery;
     void save(const sleep::Snapshot &, const QString &identity);
-    bool poweredOff = false, presented = false, invalidated = false;
+    bool poweredOff = false, invalidated = false;
     std::function<bool()> prepareFonts;
     void finishFonts(bool ready);
     sleep::Design statusPick(const QJsonObject &preferences, bool powerOff);

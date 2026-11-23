@@ -633,44 +633,16 @@ sleep::Snapshot Reader::powerScreenSnapshot()
     if (lifecycleHidden && !sleepImage.isNull()) {
         auto shot = sleepShot;
         shot.dark = darkTheme;
-        shot.dimPage = false;
-        // Designs that draw over the whole backdrop, and every Custom screen,
-        // get a fresh backdrop for power-off, so the sleeping status is not
-        // drawn twice and a separate power-off look or wallpaper shows.
-        if (sleep::design(preferences) == sleep::Design::Custom || !sleep::tiled(shot.design)) {
-            const auto off = sleep::look(preferences, true, sleepStatusPick(true));
-            shot.design = off.design;
-            shot.tile = off.tile;
-            shot.place = sleep::place(preferences, book->sleepPositions(), off);
-            sleepBackdrop(off, sleepImage.size(), shot, true);
-            if (!shot.image.isNull()) {
-                if (!sleep::followsReading(preferences))
-                    portraitSleepSnapshot(shot);
-                return shot;
-            }
-            // Without a clean backdrop, keep the sleeping screen as it is.
-            shot = sleepShot;
-            shot.dark = darkTheme;
-            shot.dimPage = false;
-            shot.design = sleep::Design::Cover;
-            shot.tile = sleep::Tile::None;
-        }
-        shot.image = sleepImage;
+        const auto off = sleep::look(preferences, true, sleepStatusPick(true));
+        shot.design = off.design;
+        shot.tile = off.tile;
+        shot.place = sleep::place(preferences, book->sleepPositions(), off);
+        sleepBackdrop(off, sleepImage.size(), shot, true);
+        if (!sleep::followsReading(preferences) && !shot.image.isNull())
+            portraitSleepSnapshot(shot);
         return shot;
     }
     return captureSleepScreen(true);
-}
-
-sleep::Snapshot Reader::presentedSleepSnapshot() const
-{
-    if (!lifecycleHidden || (!sleepFramePresented
-                             && (!privateSleepFrame || !privateSleepFrame->isVisible())))
-        return {};
-    sleep::Snapshot frame;
-    frame.image = sleepImage;
-    frame.orientation = sleepOrientation;
-    frame.privateBook = sleepShot.privateBook;
-    return frame;
 }
 
 sleep::Details Reader::sleepDetails()
@@ -978,7 +950,6 @@ void Reader::sleepViewReady()
     const bool presented = !sleepImage.isNull()
             && presentation->presentSleepScreen(sleepImage, sleepOrientation,
                                                 sleepNeedsImageCleanup);
-    sleepFramePresented = presented;
     if (!presented && book->hideBookOnSleepScreen())
         return;
     // Hiding a top-level window immediately submits the backing store
@@ -1004,7 +975,6 @@ void Reader::wakeReader()
     kosyncWaking = true;
     syncCoordinator->resetBackgroundFailures();
     sleepImage = {};
-    sleepFramePresented = false;
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
     const bool menuStayedVisible = lifecycleHidden && topControls->isVisible();

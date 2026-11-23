@@ -141,7 +141,6 @@ public:
     void showShutdownNotice(bool restarting) override;
     void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) override;
     sleep::Snapshot powerScreenSnapshot() override;
-    sleep::Snapshot presentedSleepSnapshot() const override;
     void sleepReader(bool externalScreenVisible) override;
 
     bool pendingNetworkSync() const override
@@ -570,7 +569,7 @@ private:
     BatteryStatus sleepBattery;
     quint64 sleepCoverRequest = 0;
     Qt::ScreenOrientation sleepOrientation = Qt::PrimaryOrientation;
-    bool sleepNeedsImageCleanup = true, sleepFramePresented = false;
+    bool sleepNeedsImageCleanup = true;
     QTimer *clockTimer = nullptr;
     // The local date, minute of the day and UTC offset distinguish repeated
     // minutes after standby or a time zone change.

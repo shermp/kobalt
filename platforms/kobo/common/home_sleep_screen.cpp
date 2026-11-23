@@ -348,6 +348,8 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
 
 bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIdentity)
 {
+    auto pageBeforeSleep = std::move(homePage);
+    const bool hadSleepScreen = !snapshot.image.isNull();
     if (preparePrivateScreen(powerOff, openingIdentity))
         return true;
     clearFrame();
@@ -374,12 +376,19 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         return false;
     // Outside the reader, Nickel's own screen is the page. Without it, the
     // cover stands in.
+    const auto needsPage = [](sleep::Mode mode) {
+        return mode == sleep::Mode::Page || mode == sleep::Mode::Overlay;
+    };
     QImage page;
-    if (look.mode == sleep::Mode::Page || look.mode == sleep::Mode::Overlay) {
-        page = nativeScreen();
-        if (page.isNull())
-            look.mode = sleep::Mode::Cover;
-    }
+    const bool keepPage = !powerOff && needsPage(sleep::look(preferences.object, true).mode);
+    if (needsPage(look.mode) || keepPage)
+        page = powerOff && hadSleepScreen ? std::move(pageBeforeSleep) : nativeScreen();
+    if (keepPage)
+        homePage = page;
+    if (!needsPage(look.mode))
+        page = {};
+    else if (page.isNull())
+        look.mode = sleep::Mode::Cover;
     const auto *screen = QGuiApplication::primaryScreen();
     QSize size = screen ? screen->size() : QSize(800, 1200);
     size = QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height()));
@@ -492,19 +501,6 @@ void HomeSleepScreen::preparePowerOff(sleep::Snapshot next)
     compose();
 }
 
-bool HomeSleepScreen::keepPresentedForPowerOff(sleep::Snapshot shown)
-{
-    if (!shown.image.isNull()) {
-        clearFrame();
-        snapshot = std::move(shown);
-    } else if (!presented) {
-        return false;
-    }
-    fontBackdrop = {};
-    poweredOff = true;
-    return true;
-}
-
 void HomeSleepScreen::persistPowerOff(const QString &identity)
 {
     if (poweredOff && !shutdownBackdrop.image.isNull()) {
@@ -576,7 +572,7 @@ void HomeSleepScreen::present()
 {
     // Nickel owned the outgoing screen. Clean it when the cover first paints.
     if (!snapshot.image.isNull())
-        presented = presentation->presentSleepScreen(snapshot.image, snapshot.orientation, true);
+        presentation->presentSleepScreen(snapshot.image, snapshot.orientation, true);
 }
 
 void HomeSleepScreen::clear()
@@ -592,7 +588,8 @@ void HomeSleepScreen::clearFrame()
     underlay.clear();
     shutdownBackdrop = {};
     fontBackdrop = {};
-    poweredOff = presented = false;
+    homePage = {};
+    poweredOff = false;
 }
 
 void HomeSleepScreen::updateBattery()

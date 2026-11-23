@@ -767,6 +767,40 @@ private slots:
                 != reader::sleepDesignImage(expected.image, expected, 67,
                                             reader::SleepStatus::PoweredOff));
         owner.clear();
+        // A page-based power-off design must use the original Home screen even
+        // when a different sleep design and Nickel's sleep view cover it.
+        power.hide();
+        sleep::Custom custom;
+        custom.same = false;
+        custom.sleep = { sleep::Mode::Plain, sleep::Design::Seal, {} };
+        custom.off = { sleep::Mode::Page, sleep::Design::Pill, {} };
+        QJsonObject preferences;
+        sleep::setCustom(preferences, custom);
+        sleep::setDesign(preferences, sleep::Design::Custom);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        QVERIFY(owner.prepareHomeScreen(true));
+        power.show();
+        const auto pixels = [&] {
+            auto *shown = power.findChild<QWidget *>("sleepFrame");
+            return shown ? shown->grab().toImage() : QImage();
+        };
+        const auto direct = pixels();
+        QVERIFY(!direct.isNull());
+        owner.clear();
+        power.hide();
+        QVERIFY(owner.prepareHomeScreen());
+        power.setStyleSheet("background-color: red");
+        power.show();
+        owner.present();
+        QVERIFY(!pixels().isNull() && pixels() != direct);
+        QVERIFY(owner.prepareHomeScreen(true));
+        owner.present();
+        QCOMPARE(pixels(), direct);
+        power.hide();
+        power.show();
+        QCOMPARE(pixels(), direct);
+        owner.clear();
+        power.setStyleSheet({});
         // Every transition from Nickel requests one flash, even from a text-only screen.
         QLabel title(QStringLiteral("My Books"), &window);
         title.adjustSize();
@@ -1237,34 +1271,6 @@ private slots:
         power.hide();
         power.show();
         QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
-    }
-
-    void powerOffKeepsPresentedPixels()
-    {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        MainWindowView window;
-        window.resize(800, 1200);
-        AbstractPowerView sleeping(&window), poweredOff(&window);
-        sleeping.setGeometry(window.rect());
-        poweredOff.setGeometry(window.rect());
-        poweredOff.hide();
-        window.show();
-        sleeping.show();
-        kobalt::nickel::HomeSleepScreen screen({ directory.path() }, nullptr);
-        QVERIFY(!screen.keepPresentedForPowerOff());
-        kobalt::sleep::Snapshot visible;
-        visible.image = QImage(window.size(), QImage::Format_RGB32);
-        visible.image.fill(QColor(175, 175, 175));
-        visible.orientation = Qt::PortraitOrientation;
-        visible.privateBook = true;
-        QVERIFY(directory.remove());
-        QVERIFY(screen.keepPresentedForPowerOff(visible));
-        sleeping.hide();
-        poweredOff.show();
-        auto *frame = poweredOff.findChild<QWidget *>("sleepFrame");
-        QVERIFY(frame);
-        QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32), visible.image);
     }
 
     void powerOffKeepsSelectedDesign_data()

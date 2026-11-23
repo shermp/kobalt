@@ -116,7 +116,7 @@ Saving a highlight immediately before sleep finishes the accepted save before ha
 - Power-off, low-battery power-off and reboot first save the open book, as USB does.
   - While the reader is visible, a Shutting down or Restarting notice covers the page during the save. Kobalt gives the save at most ten seconds. A failed save gets the usual attempts and no Retry dialog.
   - When the save ends, Kobalt closes its profile and Nickel continues. When the ten seconds pass, Kobalt blocks new profile and native writes without waiting for a running write, and Nickel continues. Recent changes can then be lost.
-  - A visible Kobalt sleep screen stays in place during power-off. While awake, Kobalt draws the configured power-off screen from current data when power-off starts, before the save.
+  - Kobalt draws the configured power-off screen before the save, including when the device powers off from sleep.
   - When the standalone application exits, Kobalt stops its engine worker before releasing any remaining cached engine documents.
 
 - The Use Kobo screen preview follows Kobo’s current cover visibility, full-screen cover and information-panel settings. It represents the native layout with the open book’s cover and progress. Kobo draws the actual sleep and power-off screens.

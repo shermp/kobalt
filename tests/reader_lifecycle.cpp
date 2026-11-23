@@ -5161,11 +5161,9 @@ private slots:
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
         QVERIFY(sleep->image.isNull());
-        QVERIFY(host.window()->presentedSleepSnapshot().image.isNull());
         host.window()->sleepViewReady();
         QCOMPARE(sleep->presented, supported && enabled ? 1 : 0);
         QVERIFY(!host.window()->isVisible());
-        QCOMPARE(host.window()->presentedSleepSnapshot().image, sleep->image);
         if (supported && enabled) {
             QCOMPARE(sleep->image.size(), original.size());
             QVERIFY(sleep->image != original);
@@ -5739,7 +5737,8 @@ private slots:
         QTest::addColumn<QString>("design");
         QTest::addColumn<bool>("landscape");
         QTest::addColumn<bool>("dark");
-        for (const auto *design : { "seal", "medallion", "pill", "caption", "widgets", "framed" })
+        for (const auto *design :
+             { "bookmark", "card", "seal", "medallion", "pill", "caption", "widgets", "framed" })
             for (const bool landscape : { false, true })
                 for (const bool dark : { false, true }) {
                     const auto name = QString::fromLatin1(design)
