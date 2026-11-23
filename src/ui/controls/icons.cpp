@@ -355,6 +355,12 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QStringLiteral("device-rotate"), path);
+    } else if (icon == ControlIcon::Camera || icon == ControlIcon::Power) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(icon == ControlIcon::Camera ? QStringLiteral("camera")
+                                                     : QStringLiteral("power"),
+                         path);
     } else if (icon == ControlIcon::WordsAdd || icon == ControlIcon::WordsSaved) {
         result.canvas = 256;
         result.filled = true;
@@ -942,7 +948,8 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
             && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
             && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
-            && icon != ControlIcon::LockOpen
+            && icon != ControlIcon::LockOpen && icon != ControlIcon::Camera
+            && icon != ControlIcon::Power
             && (icon < ControlIcon::Lotus || icon > ControlIcon::Gauge)
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::ClockCountdown || icon > ControlIcon::TextTSlash)

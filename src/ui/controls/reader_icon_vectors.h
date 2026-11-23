@@ -4686,5 +4686,78 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
             }
         return true;
     }
+    if (name == QStringLiteral("camera")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(208, 56);
+        path.lineTo(180.28, 56);
+        path.lineTo(166.65, 35.56);
+        path.cubicTo(165.166983, 33.33721, 162.672102, 32.001605, 160, 32);
+        path.lineTo(96, 32);
+        path.cubicTo(93.327898, 32.001605, 90.833017, 33.33721, 89.35, 35.56);
+        path.lineTo(75.71, 56);
+        path.lineTo(48, 56);
+        path.cubicTo(34.745166, 56, 24, 66.745166, 24, 80);
+        path.lineTo(24, 192);
+        path.cubicTo(24, 205.254834, 34.745166, 216, 48, 216);
+        path.lineTo(208, 216);
+        path.cubicTo(221.254834, 216, 232, 205.254834, 232, 192);
+        path.lineTo(232, 80);
+        path.cubicTo(232, 66.745166, 221.254834, 56, 208, 56);
+        path.closeSubpath();
+        path.moveTo(216, 192);
+        path.cubicTo(216, 196.418278, 212.418278, 200, 208, 200);
+        path.lineTo(48, 200);
+        path.cubicTo(43.581722, 200, 40, 196.418278, 40, 192);
+        path.lineTo(40, 80);
+        path.cubicTo(40, 75.581722, 43.581722, 72, 48, 72);
+        path.lineTo(80, 72);
+        path.cubicTo(82.675645, 72.001738, 85.175017, 70.665737, 86.66, 68.44);
+        path.lineTo(100.28, 48);
+        path.lineTo(155.71, 48);
+        path.lineTo(169.34, 68.44);
+        path.cubicTo(170.824983, 70.665737, 173.324355, 72.001738, 176, 72);
+        path.lineTo(208, 72);
+        path.cubicTo(212.418278, 72, 216, 75.581722, 216, 80);
+        path.closeSubpath();
+        path.moveTo(128, 88);
+        path.cubicTo(103.699471, 88, 84, 107.699471, 84, 132);
+        path.cubicTo(84, 156.300529, 103.699471, 176, 128, 176);
+        path.cubicTo(152.300529, 176, 172, 156.300529, 172, 132);
+        path.cubicTo(171.972446, 107.710894, 152.289106, 88.027554, 128, 88);
+        path.closeSubpath();
+        path.moveTo(128, 160);
+        path.cubicTo(112.536027, 160, 100, 147.463973, 100, 132);
+        path.cubicTo(100, 116.536027, 112.536027, 104, 128, 104);
+        path.cubicTo(143.463973, 104, 156, 116.536027, 156, 132);
+        path.cubicTo(156, 147.463973, 143.463973, 160, 128, 160);
+        path.closeSubpath();
+        return true;
+    }
+    if (name == QStringLiteral("power")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(120, 128);
+        path.lineTo(120, 48);
+        path.cubicTo(120, 43.581722, 123.581722, 40, 128, 40);
+        path.cubicTo(132.418278, 40, 136, 43.581722, 136, 48);
+        path.lineTo(136, 128);
+        path.cubicTo(136, 132.418278, 132.418278, 136, 128, 136);
+        path.cubicTo(123.581722, 136, 120, 132.418278, 120, 128);
+        path.closeSubpath();
+        path.moveTo(180.37, 49.3);
+        path.cubicTo(176.672888, 46.963307, 171.784528, 48.028778, 169.39518, 51.69208);
+        path.cubicTo(167.005832, 55.355383, 168.001257, 60.258486, 171.63, 62.7);
+        path.cubicTo(194.74, 77.77, 208, 101.57, 208, 128);
+        path.cubicTo(208, 172.18278, 172.18278, 208, 128, 208);
+        path.cubicTo(83.81722, 208, 48, 172.18278, 48, 128);
+        path.cubicTo(48, 101.57, 61.26, 77.77, 84.37, 62.7);
+        path.cubicTo(87.998743, 60.258486, 88.994168, 55.355383, 86.60482, 51.69208);
+        path.cubicTo(84.215472, 48.028778, 79.327112, 46.963307, 75.63, 49.3);
+        path.cubicTo(47.9, 67.38, 32, 96.06, 32, 128);
+        path.cubicTo(32, 181.019336, 74.980664, 224, 128, 224);
+        path.cubicTo(181.019336, 224, 224, 181.019336, 224, 128);
+        path.cubicTo(224, 96.06, 208.1, 67.38, 180.37, 49.3);
+        path.closeSubpath();
+        return true;
+    }
     return false;
 }

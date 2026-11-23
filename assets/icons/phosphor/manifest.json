@@ -75,6 +75,10 @@
       "sha256": "3b589be35978b8c400a60d6c2154885ea648c20b8947e376ccabfde66ddabda5"
     },
     {
+      "file": "camera.svg",
+      "sha256": "e1fb071d5326bc4de193746b38457a6f73c89df90d65d33eaa8386eb22b219f5"
+    },
+    {
       "file": "caret-down.svg",
       "sha256": "53f0cf2d0b144ac3cb07e353e0cd0853ffb3ed432d741460ce288edfcb0924b1"
     },
@@ -333,6 +337,10 @@
     {
       "file": "plus.svg",
       "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4"
+    },
+    {
+      "file": "power.svg",
+      "sha256": "7c493f7a807a08a5fcaadd33493fd4ad66cb0aa752a822c71a5f5cf5fd665b53"
     },
     {
       "file": "question.svg",

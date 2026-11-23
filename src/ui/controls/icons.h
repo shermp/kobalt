@@ -166,7 +166,10 @@ enum class ControlIcon {
     BookStart,
     BookEnd,
     Hourglass,
-    Ruler
+    Ruler,
+    // The Mac preview toolbar.
+    Camera,
+    Power
 };
 enum class IconStyle { Monochrome, Color, Pastel, Rings };
 QString iconStyleId(IconStyle style);
