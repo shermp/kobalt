@@ -292,6 +292,18 @@ int main(int argc, char **argv)
                         "Preview lost a custom fallback");
             require(preview.textFontFace() == model.textFontFace(),
                     "Preview changed the current fallback or embedded font");
+            const kobalt::appearance::Patch explicitFace(
+                    kobalt::qt::object({ { "font_face", "IBM Plex Sans" } }));
+            kobalt::EngineDocument direct(kobalt::test::readerFonts());
+            require(direct.openPreview(model, size, &error, explicitFace)
+                            && preview.applyAppearance(explicitFace),
+                    "Cannot preview an explicit reading font from publisher fonts");
+            require(direct.position() == preview.position() && direct.pages() == preview.pages()
+                            && direct.embeddedFontCount() == preview.embeddedFontCount(),
+                    "Opening with an explicit font changed the passage or publisher font catalog");
+            for (int page = 0; page < direct.pages(); ++page)
+                require(direct.image(page) == preview.image(page),
+                        "Opening with an explicit font changed a publisher-font preview page");
             const auto saved = model.state();
             require(model.open(bytes, size, saved, &error), qPrintable(error));
             checkFamilies();

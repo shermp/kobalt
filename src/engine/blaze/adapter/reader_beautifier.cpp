@@ -1,5 +1,6 @@
 #include "reader_beautifier.h"
 #include "stop_point.h"
+#include <fb2def.h>
 #include <lvtinydom.h>
 #include <QRegularExpression>
 #include <QSet>
@@ -14,25 +15,24 @@ QString text(const lString32 &value)
     return QString::fromUtf8(UnicodeToUtf8(value).c_str());
 }
 
-bool special(ldomNode *node, const QString &name)
+bool special(ldomNode *node, lUInt16 tag)
 {
-    static const QSet<QString> tags{ "blockquote", "aside", "address", "figure", "figcaption",
-                                     "table",      "ul",    "ol",      "dl",     "pre",
-                                     "code",       "math",  "ruby",    "nav",    "header",
-                                     "footer",     "h1",    "h2",      "h3",     "h4",
-                                     "h5",         "h6" };
-    if (tags.contains(name))
+    static const QSet<lUInt16> tags{ el_blockquote, el_aside, el_address, el_figure, el_figcaption,
+                                     el_table,      el_ul,    el_ol,      el_dl,     el_pre,
+                                     el_code,       el_math,  el_ruby,    el_nav,    el_header,
+                                     el_footer,     el_h1,    el_h2,      el_h3,     el_h4,
+                                     el_h5,         el_h6 };
+    if (tags.contains(tag))
         return true;
     static const QRegularExpression names(
             "(?:^|[\\s_-])(?:quote|quotation|blockquote|letter|signature|verse|poem|poetry|stanza|caption|epigraph|dedication|footnote|endnote|noteref|title|subtitle|heading|scene|break|separator|copyright|toc)(?:$|[\\s_-])",
             QRegularExpression::CaseInsensitiveOption);
-    const auto &types =
-            node->getAttributeValue(LXML_NS_ANY, node->getDocument()->getAttrNameIndex("type"));
+    const auto &types = node->getAttributeValue(LXML_NS_ANY, attr_type);
     const auto matchesName = [&](const lString32 &value) {
         return !value.empty() && names.match(text(value)).hasMatch();
     };
-    if (matchesName(node->getAttributeValue("class")) || matchesName(types)
-        || matchesName(node->getAttributeValue("role")))
+    if (matchesName(node->getAttributeValue(attr_class)) || matchesName(types)
+        || matchesName(node->getAttributeValue(attr_role)))
         return true;
     const auto style = node->getStyle();
     return !style.isNull()
@@ -41,9 +41,9 @@ bool special(ldomNode *node, const QString &name)
                 || style->white_space == css_ws_pre_wrap);
 }
 
-bool initial(ldomNode *node, const QString &tag)
+bool initial(ldomNode *node, lUInt16 tag)
 {
-    if (tag != "span")
+    if (tag != el_span)
         return false;
     static const QRegularExpression name("drop.?cap|initial",
                                          QRegularExpression::CaseInsensitiveOption);
@@ -52,7 +52,7 @@ bool initial(ldomNode *node, const QString &tag)
     // single letter is also evidence of a text initial, regardless of its name.
     const bool floated = !style.isNull() && style->float_ == css_f_left;
     if (!floated) {
-        const auto &classes = node->getAttributeValue("class");
+        const auto &classes = node->getAttributeValue(attr_class);
         if (classes.empty() || !name.match(text(classes)).hasMatch())
             return false;
     }
@@ -83,6 +83,8 @@ void markBeautifierContent(ldomDocument *document)
     const auto firstLetterAttribute = document->getAttrNameIndex("data-kobalt-first-letter");
     const auto engineFirstLetter = document->getAttrNameIndex("HasFirstLetter");
 
+    const auto paragraph = document->getAttrNameIndex("data-kobalt-paragraph");
+
     struct Frame
     {
         ldomNode *node;
@@ -106,22 +108,22 @@ void markBeautifierContent(ldomDocument *document)
             node->setAttributeValue(0, firstLetterAttribute, U"");
         // Text initials are independent of prose spacing and indentation. A
         // subtitle, leading gap or quotation must not keep a drop cap enlarged.
-        const auto name = text(node->getNodeName());
-        if (initial(node, name))
+        const auto tag = node->getNodeId();
+        if (initial(node, tag))
             node->setAttributeValue(0, initialAttribute, U"1");
         static const QRegularExpression opener("drop.?cap|stickupcap",
                                                QRegularExpression::CaseInsensitiveOption);
         bool firstLetter = node->hasAttribute(engineFirstLetter);
-        if (!firstLetter && name == "p") {
-            const auto &classes = node->getAttributeValue("class");
+        if (!firstLetter && tag == el_p) {
+            const auto &classes = node->getAttributeValue(attr_class);
             firstLetter = !classes.empty() && opener.match(text(classes)).hasMatch();
         }
         if (firstLetter)
             node->setAttributeValue(0, firstLetterAttribute, U"1");
-        const bool blocked = frame.blocked || special(node, name);
+        const bool blocked = frame.blocked || special(node, tag);
         for (int i = node->getChildCount() - 1; i >= 0; --i)
             stack.push_back({ node->getChildNode(i), blocked });
-        if (blocked || name != "p" || text(node->getAttributeValue("data-kobalt-paragraph")) != "1")
+        if (blocked || tag != el_p || node->getAttributeValue(paragraph) != U"1")
             continue;
         const auto style = node->getStyle();
         if (style.isNull() || style->text_indent.value < 0 || style->margin[0].value
@@ -150,18 +152,18 @@ void markBeautifierContent(ldomDocument *document)
             }
             if (!child->isElement())
                 continue;
-            const auto name = text(child->getNodeName());
-            static const QSet<QString> inlineTags{ "span", "i",   "em",  "b",    "strong",
-                                                   "a",    "sup", "sub", "small" };
+            const auto childTag = child->getNodeId();
+            static const QSet<lUInt16> inlineTags{ el_span, el_i,   el_em,  el_b,    el_strong,
+                                                   el_a,    el_sup, el_sub, el_small };
             // CREngine boxes floats during parsing. Keep those internal nodes;
             // reflow updates their rendering when the source float is disabled.
-            const bool leadingBox =
-                    !precedingText && (name == "floatBox" || (firstLetter && name == "pseudoElem"));
-            if ((!inlineTags.contains(name) && !leadingBox) || special(child, name)) {
+            const bool leadingBox = !precedingText
+                    && (childTag == el_floatBox || (firstLetter && childTag == el_pseudoElem));
+            if ((!inlineTags.contains(childTag) && !leadingBox) || special(child, childTag)) {
                 safe = false;
                 break;
             }
-            if (!precedingText && initial(child, name)) {
+            if (!precedingText && initial(child, childTag)) {
                 initials.push_back(child);
             } else if (const auto s = child->getStyle();
                        !leadingBox && !s.isNull() && s->float_ != css_f_none) {

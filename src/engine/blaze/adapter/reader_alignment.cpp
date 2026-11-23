@@ -46,7 +46,7 @@ bool preserve(ldomNode *node, lUInt16 tag, const lString32 &type)
     }
     if (elements.contains(tag))
         return true;
-    const auto &role = node->getAttributeValue("role");
+    const auto &role = node->getAttributeValue(attr_role);
     if (!role.empty() && text(role).split(' ', kobalt::qt::skipEmptyParts).contains("heading"))
         return true;
     if (!type.empty()) {
@@ -60,7 +60,7 @@ bool preserve(ldomNode *node, lUInt16 tag, const lString32 &type)
     static const QRegularExpression headingClass(
             "(?:^|[\\s_-])(?:title|subtitle|heading)(?:$|[\\s_-])",
             QRegularExpression::CaseInsensitiveOption);
-    const auto &classes = node->getAttributeValue("class");
+    const auto &classes = node->getAttributeValue(attr_class);
     return !classes.empty() && headingClass.match(text(classes)).hasMatch();
 }
 
@@ -104,7 +104,7 @@ void markBodyAlignment(ldomDocument *document)
                 return !value.empty() && specialClass.match(text(value)).hasMatch();
             };
             frame.paragraphBlocked = frame.paragraphBlocked || frame.blocked
-                    || special.contains(tag) || matchesSpecial(node->getAttributeValue("class"))
+                    || special.contains(tag) || matchesSpecial(node->getAttributeValue(attr_class))
                     || matchesSpecial(type);
             const auto style = node->getStyle();
             // Publisher exports can leave a border style on a zero-width frame.

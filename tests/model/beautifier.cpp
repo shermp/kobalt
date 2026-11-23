@@ -500,6 +500,9 @@ int main(int argc, char **argv)
                     "Invalid setting accepted");
             for (const auto &special :
                  { QByteArray("<p class='quote'>"), QByteArray("<p class='letter'>"),
+                   QByteArray("<p xmlns:pub='urn:publisher' pub:class='quoted-letter'>"),
+                   QByteArray("<p xmlns:pub='urn:publisher' pub:type='epigraph'>"),
+                   QByteArray("<p><publisher-run données='début'>É</publisher-run>"),
                    QByteArray("<p style='margin-top:2em'>"),
                    QByteArray("<p style='text-indent:-1em;margin-left:2em'>"),
                    QByteArray("<p style='text-align:right'>") }) {
