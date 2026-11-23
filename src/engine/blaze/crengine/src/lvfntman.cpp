@@ -1372,8 +1372,8 @@ void LVFontLocalGlyphCache::remove( LVFontGlyphCacheItem * item )
 void LVFontGlobalGlyphCache::refresh( LVFontGlyphCacheItem * item )
 {
     FONT_GLYPH_CACHE_GUARD
-    if ( tail!=item ) {
-        //move to head
+    if ( head!=item ) {
+        // Blaze: promote the least recently used glyph too.
         removeNoLock( item );
         putNoLock( item );
     }

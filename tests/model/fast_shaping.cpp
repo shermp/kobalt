@@ -6,11 +6,31 @@
 #include <QGuiApplication>
 #include <QTemporaryDir>
 #include <koblaze.h>
+#include <lvfntman.h>
 
 using kobalt::EngineDocument;
 
 namespace {
 const QSize viewport(800, 1136);
+
+// A hit on the oldest glyph must protect it from the next eviction.
+void checkGlyphEviction()
+{
+    const int bytes = offsetof(LVFontGlyphCacheItem, bmp) + 1;
+    LVFontGlobalGlyphCache global(2 * bytes);
+    LVFontLocalGlyphCache local(&global);
+    auto add = [&](lChar32 value) {
+        local.put(LVFontGlyphCacheItem::newItem(&local, value, 1, 1));
+    };
+    add(U'A');
+    add(U'a');
+    require(local.getByChar(U'A'), "Cannot find the oldest glyph");
+    add(U'!');
+    require(local.getByChar(U'A') && !local.getByChar(U'a') && local.getByChar(U'!'),
+            "A recently used glyph was evicted");
+    global.clear();
+    require(!local.getByChar(U'!'), "Global eviction left a local glyph");
+}
 
 void checkWordCache()
 {
@@ -153,6 +173,7 @@ void checkExtendedLatin()
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    checkGlyphEviction();
     checkWordCache();
     checkExtendedLatin();
     for (const auto &face : { QStringLiteral("Libron"), kobalt::test::alternateReadingFace(),

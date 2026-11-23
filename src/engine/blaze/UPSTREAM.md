@@ -122,7 +122,7 @@ Looking up the index of a child scans the child list from the start. Blaze first
 
 **Summary:** a font finds a cached bitmap by searching one of 32 buckets. The global cache still evicts glyphs by recency and holds 256 KiB of bitmap entries.
 
-The default upstream configuration searches one linked list per local cache. Blaze reuses the list links in each glyph for its bucket. This costs 30 extra pointers per local cache. In a desktop layout and paint probe with Trevelyan’s Type Tester, the same 8,732 lookups inspected 9,744 entries instead of 169,026 with the original eviction order.
+The default upstream configuration searches one linked list per local cache. Blaze reuses the list links in each glyph for its bucket. This costs 30 extra pointers per local cache. In a desktop layout and paint probe with Trevelyan’s Type Tester, the same 8,732 lookups inspected 9,744 entries instead of 169,026 with the original eviction order. Blaze also moves a hit on the oldest glyph to the front. The upstream refresh checks the tail where it should check the head. We found that by reading the pinned source.
 
 **Code:** `LVFontLocalGlyphCache` in [lvfntman.h](crengine/include/lvfntman.h) and [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
