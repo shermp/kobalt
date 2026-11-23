@@ -697,7 +697,6 @@
 "reader.settings_write_error" = "Disk Write Error";
 "reader.settings_write_error_description" = "Kobalt could not save your reader settings. Check the available storage space and try again.";
 "reader.could_not_save_reading_position" = "Could not save reading position";
-"reader.dark_mode" = "Dark mode";
 "reader.debug_progress" = "Debug progress";
 "reader.defaults_selected" = "Defaults selected";
 "reader.duplicate_current_update" = "Duplicate current update";
@@ -837,7 +836,6 @@
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
 "settings.dark_mode" = "Dark Mode";
 "settings.night_mode_description" = "Also known as Night Mode. Displays light text on a dark background, and inverts some colors.";
-"settings.dark_description" = "Light text on a dark background.";
 "settings.section_opening" = "Opening books";
 "settings.section_engine" = "Engine";
 "settings.section_developer" = "Developer";

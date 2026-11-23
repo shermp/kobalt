@@ -14289,6 +14289,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         for (const char *row : { "rrKosyncLogin", "rrDarkMode", "rrEdgeLight", "rrAboutVersion" })
             QVERIFY2(!fixture.widget(row), row);
         if (shortScreen) {
+            auto *row = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrZenDarkMode"));
+            QVERIFY(row);
+            auto *clip = fixture.widget("rrSettingsPageClip");
+            QVERIFY(clip);
+            QVERIFY(clip->rect().contains(QRect(row->mapTo(clip, QPoint()), row->size())));
+            QVERIFY(row->height() >= row->heightForWidth(row->width()));
             const auto firstPage = labelText(fixture, "rrSettingsOptionsPage");
             QVERIFY(revealSettingsOption(fixture, "rrZenAbout"));
             const auto aboutPage = labelText(fixture, "rrSettingsOptionsPage");
@@ -14298,6 +14304,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(labelText(fixture, "rrSettingsOptionsPage"), aboutPage);
             return;
         }
+        auto *darkRow = qobject_cast<QCheckBox *>(fixture.widget("rrZenDarkMode"));
+        QVERIFY(darkRow);
+        QCOMPARE(darkRow->text(), strings::get("settings.dark_mode"));
+        QCOMPARE(darkRow->accessibleDescription(), strings::get("settings.night_mode_description"));
         if (signedIn) {
             QVERIFY(fixture.press("rrZenAutomaticSync"));
             QTRY_VERIFY(fixture.visible("rrKosyncAutomaticPopup"));

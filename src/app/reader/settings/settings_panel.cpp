@@ -121,6 +121,14 @@ ui::DescribedOption *settingsOption(QWidget *parent, const QString &name, const 
     return option;
 }
 
+ui::DescribedOption *darkModeOption(QWidget *parent, const QString &name)
+{
+    auto *option = settingsOption(parent, name, strings::get("settings.dark_mode"),
+                                  strings::get("settings.night_mode_description"));
+    option->setLeadingIcon(ui::ControlIcon::Moon);
+    return option;
+}
+
 } // namespace
 
 ui::DescribedOption *checklistOption(QWidget *parent, const QString &name, const QString &label,
@@ -808,9 +816,7 @@ void SettingsPanel::buildDisplay(QWidget *displayPage)
     auto *generalOptions = new QVBoxLayout(displayPage);
     generalOptions->setContentsMargins(0, 0, 0, 0);
     generalOptions->setSpacing(0);
-    darkOption = settingsOption(displayPage, "rrDarkMode", strings::get("settings.dark_mode"),
-                                strings::get("settings.night_mode_description"));
-    darkOption->setLeadingIcon(ui::ControlIcon::Moon);
+    darkOption = darkModeOption(displayPage, "rrDarkMode");
     const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
     const auto animationDescription =
             strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
@@ -1409,11 +1415,7 @@ void SettingsPanel::buildZen()
     zenRows->setContentsMargins(0, 0, 0, 0);
     zenRows->setSpacing(0);
     section(zenPage, zenRows, "rrZenDisplaySection", strings::get("settings.display"));
-    zenDarkOption = settingsOption(zenPage, "rrZenDarkMode", strings::get("reader.dark_mode"),
-                                   strings::get("settings.dark_description"));
-    // The rows keep their height; the stretch below takes the spare space.
-    zenDarkOption->setSizePolicy(zenDarkOption->sizePolicy().horizontalPolicy(),
-                                 QSizePolicy::Maximum);
+    zenDarkOption = darkModeOption(zenPage, "rrZenDarkMode");
     zenRows->addWidget(zenDarkOption);
     zenLightButton =
             listAction(zenPage, zenRows, "rrZenLight", strings::get("settings.zen_light"), [this] {
