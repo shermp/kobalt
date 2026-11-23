@@ -8,6 +8,9 @@
 #include "app/reader/views/reading_page.h"
 #include "reading/reading_density.h"
 #include "ui/style/scale.h"
+#include "ui/controls/brand_wordmark.h"
+#include "ui/controls/icons.h"
+#include <QAbstractItemView>
 #include <QActionGroup>
 #include <QComboBox>
 #include <QCloseEvent>
@@ -90,6 +93,97 @@ private:
     QImage image;
 };
 
+// The toolbar controls look like Mac toolbar buttons with Kobalt's icons:
+// rounded corners, a soft border, a light fill on hover and a darker fill
+// while pressed or on. Their colours come from the text colour, so they
+// follow the Mac's dark mode.
+constexpr int toolbarControlHeight = 32;
+// The toolbar hides Sleep and Power off until that emulation is ready to use.
+// The buttons and the emulation behind them stay, so tests can still drive it.
+constexpr bool showSleepAndPowerButtons = false;
+
+static void paintToolbarControl(QPainter &painter, const QWidget *control, bool pressed)
+{
+    painter.setRenderHint(QPainter::Antialiasing);
+    QColor ink = control->palette().color(QPalette::WindowText);
+    QColor fill = ink;
+    fill.setAlphaF(pressed ? 0.16 : control->underMouse() && control->isEnabled() ? 0.07 : 0);
+    ink.setAlphaF(0.22);
+    painter.setPen(QPen(ink, 1));
+    painter.setBrush(fill);
+    painter.drawRoundedRect(QRectF(control->rect()).adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
+}
+
+class PreviewPicker final : public QComboBox
+{
+public:
+    explicit PreviewPicker(QWidget *parent) : QComboBox(parent)
+    {
+        setFocusPolicy(Qt::NoFocus);
+        setFixedHeight(toolbarControlHeight);
+        // The Mac style adds layout margins around its own controls.
+        setAttribute(Qt::WA_LayoutUsesWidgetRect);
+        setAttribute(Qt::WA_Hover);
+    }
+
+    // Wide enough for the longest choice, the caret and the margins.
+    QSize sizeHint() const override
+    {
+        int text = 0;
+        for (int i = 0; i < count(); ++i)
+            text = qMax(text, fontMetrics().horizontalAdvance(itemText(i)));
+        return { text + caret + 3 * margin, toolbarControlHeight };
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        paintToolbarControl(painter, this, view()->isVisible());
+        const QColor ink = palette().color(QPalette::WindowText);
+        painter.setPen(ink);
+        const int textWidth = width() - caret - 3 * margin;
+        painter.drawText(QRect(margin, 0, textWidth, height()), Qt::AlignVCenter | Qt::AlignLeft,
+                         fontMetrics().elidedText(currentText(), Qt::ElideRight, textWidth));
+        ui::controlIcon(ui::ControlIcon::Down, ink)
+                .paint(&painter,
+                       QRect(width() - margin - caret, (height() - caret) / 2, caret, caret));
+    }
+
+private:
+    static constexpr int caret = 14, margin = 10;
+};
+
+class PreviewButton final : public QPushButton
+{
+public:
+    PreviewButton(ui::ControlIcon icon, const QString &name, QWidget *parent)
+        : QPushButton(parent), icon(icon)
+    {
+        setAccessibleName(name);
+        setFocusPolicy(Qt::NoFocus);
+        setFixedSize(40, toolbarControlHeight);
+        setAttribute(Qt::WA_LayoutUsesWidgetRect);
+        setAttribute(Qt::WA_Hover);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        paintToolbarControl(painter, this, isDown() || isChecked());
+        const int size = 22;
+        ui::controlIcon(icon, palette().color(QPalette::WindowText))
+                .paint(&painter, QRect((width() - size) / 2, (height() - size) / 2, size, size));
+    }
+
+private:
+    ui::ControlIcon icon;
+};
+
+// The silver of the Libra's page buttons and of the wordmark on the bezels.
+const QColor deviceSilver("#8e9095");
+
 class DeviceButton final : public QPushButton
 {
 public:
@@ -100,8 +194,9 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(QPen(QColor("#111111"), 1));
-        painter.setBrush(isDown() ? QColor("#444444") : QColor("#303030"));
+        // A press darkens the silver.
+        painter.setPen(QPen(deviceSilver.darker(130), 1));
+        painter.setBrush(isDown() ? deviceSilver.darker(120) : deviceSilver);
         const qreal radius = qMax(3.0, qMin(width(), height()) * 0.25);
         painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
     }
@@ -112,6 +207,9 @@ protected:
 // app, as Android letterboxes it; both sides keep that band so the page stays
 // centred. Sizes are device pixels at 300 PPI.
 constexpr int phoneCameraBand = 60, phoneCameraSize = 34, phoneCornerRadius = 80;
+// The phone's front is black glass, so its rounded screen corners have the
+// same colour as the body.
+const QColor phoneGlass("#121213");
 
 // The rounded screen corners and the camera, drawn over the screen. They do
 // not take input, so taps reach the reader below them, as on a phone.
@@ -146,7 +244,7 @@ protected:
         QPainterPath screen;
         const qreal radius = phoneCornerRadius * scale;
         screen.addRoundedRect(QRectF(rect()), radius, radius);
-        painter.fillPath(corners.subtracted(screen), QColor("#242424"));
+        painter.fillPath(corners.subtracted(screen), phoneGlass);
         const qreal camera = phoneCameraSize * scale, band = phoneCameraBand * scale;
         const QPointF centre =
                 landscape ? QPointF(band / 2, height() / 2.0) : QPointF(width() / 2.0, band / 2);
@@ -193,6 +291,9 @@ public:
                              : QRect(126, 150, 1072, 1448);
         // Long, narrow buttons like the Libra's, centred in the grip.
         QRect previousBounds(1473, 640, 64, 300), nextBounds(1473, 980, 64, 300);
+        portraitBody = body;
+        portraitScreen = screen;
+        this->landscape = landscape;
         if (landscape) {
             // Turn the physical body clockwise; reader content stays upright.
             const auto rotated = [body](QRect rect) {
@@ -246,14 +347,46 @@ public:
     PhoneScreenMask *mask;
 
 protected:
+    // The body is drawn in portrait device pixels and turned with the device,
+    // so the wordmark and the asymmetric corners turn with it.
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(QPen(Qt::black, 1.5));
-        painter.setBrush(QColor("#242424"));
-        const qreal radius = qMax(5.0, qMin(width(), height()) * (phone ? 0.11 : 0.025));
-        painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), radius, radius);
+        painter.save();
+        const qreal scale =
+                qMin(qreal(width()) / (landscape ? portraitBody.height() : portraitBody.width()),
+                     qreal(height()) / (landscape ? portraitBody.width() : portraitBody.height()));
+        painter.scale(scale, scale);
+        if (landscape) {
+            painter.translate(portraitBody.height(), 0);
+            painter.rotate(90);
+        }
+        const QRectF bodyRect(0, 0, portraitBody.width(), portraitBody.height());
+        const QPainterPath shape = bodyShape(bodyRect);
+        // The e-readers use the website's matte plastic. The phone's glass
+        // catches a little light only at its top edge.
+        QLinearGradient fill(0, 0, 0, bodyRect.height());
+        if (phone) {
+            fill.setColorAt(0, QColor("#26272a"));
+            fill.setColorAt(0.04, phoneGlass);
+            fill.setColorAt(1, phoneGlass);
+        } else {
+            fill.setColorAt(0, QColor("#37383b"));
+            fill.setColorAt(1, QColor("#2a2b2e"));
+        }
+        painter.fillPath(shape, fill);
+        // A faint light along the top edge, then a thin edge around the body.
+        painter.save();
+        painter.setClipPath(shape);
+        painter.setPen(QPen(QColor(255, 255, 255, 20), 0));
+        painter.drawPath(shape.translated(0, 1.5 / scale));
+        painter.restore();
+        painter.setPen(QPen(QColor("#4a4b4f"), 0));
+        painter.drawPath(shape);
+        if (!phone)
+            paintWordmark(painter);
+        painter.restore();
         painter.setBrush(phone ? QBrush(Qt::black) : QBrush(Qt::NoBrush));
         painter.setPen(QPen(Qt::black, 2));
         const auto border = QRectF(screenBounds).adjusted(-1, -1, 1, 1);
@@ -264,8 +397,45 @@ protected:
     }
 
 private:
-    bool libra = false, phone = false;
-    QRect screenBounds;
+    // The Clara follows Kobo's front photo, as on the website: tight top
+    // corners (about 5 mm) and round bottom corners (about 14 mm).
+    QPainterPath bodyShape(const QRectF &body) const
+    {
+        const qreal top = phone ? 88 : libra ? 70 : 60;
+        const qreal bottom = phone ? 88 : libra ? 70 : 165;
+        QPainterPath path;
+        path.moveTo(body.left() + top, body.top());
+        path.arcTo(QRectF(body.right() - 2 * top, body.top(), 2 * top, 2 * top), 90, -90);
+        path.arcTo(QRectF(body.right() - 2 * bottom, body.bottom() - 2 * bottom, 2 * bottom,
+                          2 * bottom),
+                   0, -90);
+        path.arcTo(QRectF(body.left(), body.bottom() - 2 * bottom, 2 * bottom, 2 * bottom), 270,
+                   -90);
+        path.arcTo(QRectF(body.left(), body.top(), 2 * top, 2 * top), 180, -90);
+        path.closeSubpath();
+        return path;
+    }
+
+    // The wordmark sits centred below the screen: on the Clara's chin at the
+    // website's 91.5% of the height, and in the Libra's narrow bottom bezel.
+    void paintWordmark(QPainter &painter) const
+    {
+        static const QPainterPath wordmark = brandWordmark();
+        const QRectF bounds = wordmark.boundingRect();
+        const qreal height = libra ? 40 : 66;
+        const qreal centreY = libra ? (portraitScreen.bottom() + 1 + portraitBody.height()) / 2.0
+                                    : portraitBody.height() * 0.915;
+        const qreal factor = height / bounds.height();
+        QTransform place;
+        place.translate(portraitScreen.center().x() + 0.5 - bounds.center().x() * factor,
+                        centreY - bounds.center().y() * factor);
+        place.scale(factor, factor);
+        painter.fillPath(place.map(wordmark), deviceSilver);
+    }
+
+    bool libra = false, phone = false, landscape = false;
+    QSize portraitBody;
+    QRect portraitScreen, screenBounds;
     qreal screenCornerRadius = 0;
 };
 
@@ -343,7 +513,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     toolbar->setObjectName("desktopPreviewToolbar");
     toolbar->setMovable(false);
     toolbar->setFloatable(false);
-    screenPicker = new QComboBox(toolbar);
+    screenPicker = new PreviewPicker(toolbar);
     screenPicker->setObjectName("desktopScreenPicker");
     screenPicker->setAccessibleName(tr("Reader screen"));
     screenPicker->addItems({ tr("Fill window"), tr("6-inch e-reader"),
@@ -351,7 +521,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     screenPicker->setCurrentIndex(screenPreset);
     screenPicker->setMinimumWidth(100);
     screenPicker->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    resolutionPicker = new QComboBox(toolbar);
+    resolutionPicker = new PreviewPicker(toolbar);
     resolutionPicker->setObjectName("desktopResolutionPicker");
     resolutionPicker->setAccessibleName(tr("Rendering resolution"));
     resolutionPicker->setToolTip(tr(
@@ -361,7 +531,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     resolutionPicker->addItem(tr("Native"), 0);
     resolutionPicker->setCurrentIndex(resolutionPicker->findData(renderingDpi));
     // Kobo's Large Print and Android's font size set the same scale.
-    textSizePicker = new QComboBox(toolbar);
+    textSizePicker = new PreviewPicker(toolbar);
     textSizePicker->setObjectName("desktopTextSizePicker");
     textSizePicker->setAccessibleName(tr("Text size"));
     textSizePicker->setToolTip(
@@ -397,17 +567,15 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     rotateAction->setCheckable(true);
     rotateAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
     rotateAction->setToolTip(tr("Switch the e-reader preview between portrait and landscape."));
-    auto *rotate = new QPushButton(tr("Rotate"), pickers);
+    auto *rotate = new PreviewButton(ui::ControlIcon::DeviceRotate, tr("Rotate"), pickers);
     rotate->setObjectName("desktopRotateButton");
     rotate->setCheckable(true);
-    rotate->setFocusPolicy(Qt::NoFocus);
     rotate->setToolTip(rotateAction->toolTip());
     choices->addWidget(rotate);
     connect(rotate, &QPushButton::clicked, rotateAction, &QAction::trigger);
-    auto *screenshot = new QPushButton(tr("Screenshot"), pickers);
+    auto *screenshot = new PreviewButton(ui::ControlIcon::Camera, tr("Screenshot"), pickers);
     screenshot->setObjectName("desktopScreenshot");
     screenshot->setToolTip(tr("Save the current preview to the Desktop as a PNG."));
-    screenshot->setFocusPolicy(Qt::NoFocus);
     choices->addWidget(screenshot);
     connect(screenshot, &QPushButton::clicked, this, [this, screenshot] {
         QString error;
@@ -420,22 +588,22 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
                                tr("Saved to %1").arg(QDir::toNativeSeparators(path)), screenshot);
         }
     });
-    sleepButton = new QPushButton(tr("Sleep"), pickers);
+    sleepButton = new PreviewButton(ui::ControlIcon::Moon, tr("Sleep"), pickers);
     sleepButton->setObjectName("desktopSleep");
     sleepButton->setCheckable(true);
-    sleepButton->setFocusPolicy(Qt::NoFocus);
     sleepButton->setToolTip(tr(
             "Put the e-reader preview to sleep, or wake it, as the power button does on a Kobo."));
     choices->addWidget(sleepButton);
+    sleepButton->setVisible(showSleepAndPowerButtons);
     connect(sleepButton, &QPushButton::clicked, this,
             [this](bool checked) { setDeviceAsleep(checked); });
-    powerButton = new QPushButton(tr("Power off"), pickers);
+    powerButton = new PreviewButton(ui::ControlIcon::Power, tr("Power off"), pickers);
     powerButton->setObjectName("desktopPowerOff");
     powerButton->setCheckable(true);
-    powerButton->setFocusPolicy(Qt::NoFocus);
     powerButton->setToolTip(
             tr("Power the e-reader preview off, or on again. The book closes as on a Kobo."));
     choices->addWidget(powerButton);
+    powerButton->setVisible(showSleepAndPowerButtons);
     connect(powerButton, &QPushButton::clicked, this,
             [this](bool checked) { setPoweredOff(checked); });
     layout->addWidget(pickers, 0, 1);
@@ -464,9 +632,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     connect(start, &standalone::StartScreen::bookRequested, this,
             [this](const QString &path) { openBook(path); });
     connect(start, &standalone::StartScreen::passageRequested, this,
-            [this](const QString &key, const QString &position) {
-                openBook(key, position);
-            });
+            [this](const QString &key, const QString &position) { openBook(key, position); });
     connect(start, &standalone::StartScreen::libraryOpenRequested, this, &Window::chooseBook);
     connect(start, &standalone::StartScreen::markUnreadRequested, this, [this](const QString &key) {
         if (controller.resetBook(key))
@@ -723,8 +889,8 @@ void Window::setPoweredOff(bool off)
 void Window::updateDeviceControls()
 {
     const bool ereader = ereaderPreview();
-    sleepButton->setVisible(ereader);
-    powerButton->setVisible(ereader);
+    sleepButton->setVisible(ereader && showSleepAndPowerButtons);
+    powerButton->setVisible(ereader && showSleepAndPowerButtons);
     sleepButton->setEnabled(ereader && !poweredOff && (deviceAsleep || controller.window()));
     powerButton->setEnabled(ereader && !deviceAsleep
                             && (poweredOff || controller.idle() || controller.window()));

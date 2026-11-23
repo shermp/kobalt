@@ -18492,8 +18492,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *power = fixture.window.findChild<QPushButton *>("desktopPowerOff");
         auto *off = fixture.window.findChild<QWidget *>("desktopOffScreen");
         QVERIFY(sleep && power && off);
-        QVERIFY(!sleep->isHidden() && sleep->isEnabled() && !power->isHidden()
-                && power->isEnabled());
+        // The toolbar hides both buttons until the emulation is ready to use.
+        QVERIFY(sleep->isHidden() && sleep->isEnabled() && power->isHidden() && power->isEnabled());
         const auto position = fixture.state().value("position");
         sleep->click();
         QVERIFY(!off->isHidden());
