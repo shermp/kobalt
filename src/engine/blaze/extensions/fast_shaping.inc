@@ -521,12 +521,17 @@ inline bool LVFreeTypeFace::koblazeMeasureWords( const lChar32 * text, int len, 
     bool has_latin = false;
     int cur_width = 0, cur_width_64 = 0;
     last_fit = 0;
+    int space_offset = -1; // Record offsets survive growth until the language changes.
     // Finds the word that starts at `from`: its end and its record.
     // Returns false when the run does not qualify.
     auto find = [&]( int from, int & end, unsigned int & offset ) -> bool {
         unsigned int hash = 2166136261u;
         if ( text[from] == space ) {
             end = from + 1;
+            if ( space_offset >= 0 ) {
+                offset = (unsigned int)space_offset;
+                return true;
+            }
             hash = (hash ^ (unsigned int)space) * 16777619u;
         }
         else {
@@ -544,7 +549,11 @@ inline bool LVFreeTypeFace::koblazeMeasureWords( const lChar32 * text, int len, 
                 return false;
         }
         offset = koblazeWord(text + from, end - from, hash);
-        return _word_cache.record(offset)[KW_USABLE] != 0;
+        if ( !_word_cache.record(offset)[KW_USABLE] )
+            return false;
+        if ( text[from] == space )
+            space_offset = (int)offset;
+        return true;
     };
     int start = 0, end = 0, next_end = 0;
     unsigned int offset = 0, next_offset = 0;

@@ -196,6 +196,8 @@ It suits static faces only. A face registered this way has no variable axes, mat
 
 Each face keeps a cache of shaped words and kerning by language, with up to 50,000 words for each language. Plain Latin runs are measured from that cache. A sample of them is still shaped with HarfBuzz, and the widths and flags are compared, to catch differences. The face clears its caches when font settings change.
 
+A run looks up the space record once and reuses its offset for the other spaces. The offset remains valid when the word table grows.
+
 The cache must fill before it saves time, so it only pays off in large books. On a Mac, with the cache turned off, a small book opened a little faster and a font size change took about a quarter less time, but a large book took about half again as long to open (330 to 485 ms). Kobalt therefore turns it on only for books with at least 250,000 characters of text (`fastShapingMinimum` in [engine_document.h](adapter/engine_document.h)). The engine itself has no such limit: the host decides. This is a large change and needs a design discussion.
 
 > We also tried seeding the cache with common words. It was not useful, but it probably deserves another look.
