@@ -143,6 +143,8 @@ static void resultPages()
         expected.append({ prefix + left + QString::number(i), prefix + right, {}, {}, {}, -1 });
     }
     expected[0].start = expected[0].end;
+    expected[3].printedPage = QStringLiteral("iv");
+    expected[19].printedPage = QStringLiteral("");
     expected[44].before = QStringLiteral("");
     expected[45].end = QString();
     expected[46] = { "plain", "other", "before", "text", "after", 7, "chapter" };
@@ -154,8 +156,9 @@ static void resultPages()
         require(page.size() == qMin(19, int(expected.size()) - first), "Wrong search page size");
         for (int i = 0; i < page.size(); ++i) {
             const auto &got = page[i], &want = expected[first + i];
-            for (auto field : { &SearchHit::start, &SearchHit::end, &SearchHit::before,
-                                &SearchHit::text, &SearchHit::after, &SearchHit::chapter })
+            for (auto field :
+                 { &SearchHit::start, &SearchHit::end, &SearchHit::before, &SearchHit::text,
+                   &SearchHit::after, &SearchHit::chapter, &SearchHit::printedPage })
                 require(got.*field == want.*field
                                 && (got.*field).isNull() == (want.*field).isNull(),
                         "Reading a search results page changed a field");

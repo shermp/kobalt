@@ -9,7 +9,8 @@ namespace {
 bool positionsOnly(const SearchHit &hit)
 {
     return !hit.start.isEmpty() && !hit.end.isEmpty() && hit.page == -1 && hit.before.isNull()
-            && hit.text.isNull() && hit.after.isNull() && hit.chapter.isNull();
+            && hit.text.isNull() && hit.after.isNull() && hit.chapter.isNull()
+            && hit.printedPage.isNull();
 }
 } // namespace
 
