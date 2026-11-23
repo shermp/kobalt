@@ -26,6 +26,52 @@ inline void LVFreeTypeFace::shapeSingleGlyph() {
     }
 }
 
+// Both callers add one codepoint per cluster, starting at zero, without
+// surrounding text. Keep the whole shaped run, including missing glyphs for
+// the fallback font. Measurement reverses its clusters after this call.
+inline void LVFreeTypeFace::shapeShortRtlRun(unsigned length) {
+    const hb_glyph_info_t *input = hb_buffer_get_glyph_infos(_hb_buffer, NULL);
+    hb_codepoint_t text[ShortRtlShape::capacity];
+    unsigned hash = 2166136261u;
+    for ( unsigned i = 0; i < length; ++i ) {
+        text[i] = input[i].codepoint;
+        hash = (hash ^ text[i]) * 16777619u;
+    }
+    hb_segment_properties_t properties{};
+    hb_buffer_get_segment_properties(_hb_buffer, &properties);
+    const hb_buffer_flags_t flags = hb_buffer_get_flags(_hb_buffer);
+    const unsigned serial = hb_font_get_serial(_hb_font);
+    constexpr unsigned slots = 64;
+    if ( _shortRtlShapes.empty() )
+        _shortRtlShapes.resize(slots);
+    auto &entry = _shortRtlShapes[hash % slots];
+    if ( entry && entry->length == length && entry->fontSerial == serial && entry->flags == flags
+         && hb_segment_properties_equal(&entry->properties, &properties)
+         && memcmp(entry->text, text, length * sizeof(*text)) == 0
+         && hb_buffer_set_length(_hb_buffer, entry->glyphCount) ) {
+        hb_buffer_set_content_type(_hb_buffer, HB_BUFFER_CONTENT_TYPE_GLYPHS);
+        memcpy(hb_buffer_get_glyph_infos(_hb_buffer, NULL), entry->glyphs,
+               entry->glyphCount * sizeof(*entry->glyphs));
+        memcpy(hb_buffer_get_glyph_positions(_hb_buffer, NULL), entry->positions,
+               entry->glyphCount * sizeof(*entry->positions));
+        return;
+    }
+    hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned)_hb_features.length());
+    const unsigned count = hb_buffer_get_length(_hb_buffer);
+    if ( !hb_buffer_allocation_successful(_hb_buffer) || count == 0 || count > ShortRtlShape::capacity )
+        return;
+    if ( !entry )
+        entry.reset(new ShortRtlShape);
+    entry->length = length;
+    entry->glyphCount = count;
+    entry->fontSerial = serial;
+    entry->properties = properties;
+    entry->flags = flags;
+    memcpy(entry->text, text, length * sizeof(*text));
+    memcpy(entry->glyphs, hb_buffer_get_glyph_infos(_hb_buffer, NULL), count * sizeof(*entry->glyphs));
+    memcpy(entry->positions, hb_buffer_get_glyph_positions(_hb_buffer, NULL), count * sizeof(*entry->positions));
+}
+
 inline void LVFreeTypeFace::koblazeClearKerning() {
     _koblaze_kern.clear();
     _koblaze_kern_systems.clear();

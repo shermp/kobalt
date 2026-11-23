@@ -140,6 +140,16 @@ The default upstream configuration searches one linked list per local cache. Bla
 
 **Upstream:** present upstream.
 
+### Reuse short right-to-left shaping runs
+
+**Summary:** a font face reuses HarfBuzz results for complete right-to-left runs of two to eight characters.
+
+Measurement and painting add the same codepoints with consecutive cluster numbers and no surrounding text. Each cache entry keeps the complete glyph and position arrays, including missing glyphs that trigger fallback. A hit requires the same codepoints, segment properties, buffer flags and font serial. Changing shaping features or clearing the face cache drops all entries. Each face allocates at most 64 entries as needed. On the Hebrew fixture, changing the font size took about 12% less CPU in the Qt 5.2 ARM emulator. The Arabic fixture gained about 2%.
+
+**Code:** `shapeShortRtlRun` in [fast_shaping.inc](extensions/fast_shaping.inc), called from measurement and drawing in [lvfntman.cpp](crengine/src/lvfntman.cpp).
+
+**Upstream:** not upstream.
+
 ### Shape a single character once
 
 **Summary:** each face keeps up to 32 results for runs that start with one character and produce one glyph.

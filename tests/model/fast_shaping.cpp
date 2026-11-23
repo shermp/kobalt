@@ -7,6 +7,7 @@
 #include <QTemporaryDir>
 #include <koblaze.h>
 #include <lvfntman.h>
+#include <lvdrawbuf.h>
 
 using kobalt::EngineDocument;
 
@@ -30,6 +31,61 @@ void checkGlyphEviction()
             "A recently used glyph was evicted");
     global.clear();
     require(!local.getByChar(U'!'), "Global eviction left a local glyph");
+}
+
+void checkShortRtlRuns()
+{
+    require(InitFontManager(lString8()), "Cannot initialize shaping fonts");
+    require(fontMan->RegisterFont(lString8(KOBALT_FONT_DIRECTORY "/NotoSerifHebrew-Regular.ttf"))
+                    && fontMan->RegisterFont(
+                            lString8(KOBALT_FONT_DIRECTORY "/NotoNaskhArabic-Regular.ttf")),
+            "Cannot register shaping fonts");
+    fontMan->SetKerningMode(KERNING_MODE_HARFBUZZ);
+    for (const auto &family : { "Noto Serif Hebrew", "Noto Naskh Arabic" }) {
+        auto font = fontMan->GetFont(48, 400, false, css_ff_serif, lString8(family));
+        require(!font.isNull() && font->getTypeFace() == lString8(family), "Wrong shaping font");
+        const auto render = [&](const lString32 &text, bool measureFirst) {
+            const unsigned hints = LFNT_HINT_DIRECTION_KNOWN | LFNT_HINT_DIRECTION_IS_RTL;
+            lUInt16 widths[8]{};
+            lUInt8 flags[8]{};
+            const auto measure = [&] {
+                require(font->measureText(text.c_str(), text.length(), widths, flags, 512, U'?',
+                                          nullptr, 0, false, hints)
+                                == text.length(),
+                        "Incomplete short run");
+            };
+            LVColorDrawBuf buf(256, 96, 32);
+            buf.Clear(0xffffff);
+            buf.SetTextColor(0);
+            if (measureFirst)
+                measure();
+            const int advance = font->DrawTextString(&buf, 0, 0, text.c_str(), text.length(), U'?',
+                                                     nullptr, false, nullptr, hints);
+            if (!measureFirst)
+                measure();
+            QByteArray result(reinterpret_cast<const char *>(widths), sizeof(widths));
+            result.append(reinterpret_cast<const char *>(flags), sizeof(flags));
+            result.append(QByteArray::number(advance));
+            for (int y = 0; y < buf.GetHeight(); ++y)
+                result.append(reinterpret_cast<const char *>(buf.GetScanLine(y)), buf.GetRowSize());
+            return result;
+        };
+        // The first two words collide in a 64-slot cache. The marked words can
+        // produce a different number of glyphs than input codepoints.
+        const lString32 runs[] = { U"אר", U"בכ", U"שָׁלוֹם", U"لَا" };
+        QVector<QByteArray> expected;
+        for (const auto &run : runs) {
+            font->clearCache();
+            expected.append(render(run, false));
+        }
+        require(expected[0] != expected[1] || font->getTypeFace() != lString8("Noto Serif Hebrew"),
+                "Colliding Hebrew words must have different glyphs");
+        for (int i = 0; i < expected.size(); ++i) {
+            require(render(runs[i], true) == expected[i] && render(runs[i], false) == expected[i],
+                    "Reused RTL shaping changed the glyphs or their widths");
+        }
+    }
+    ShutdownFontManager();
 }
 
 void checkWordCache()
@@ -174,6 +230,7 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     checkGlyphEviction();
+    checkShortRtlRuns();
     checkWordCache();
     checkExtendedLatin();
     for (const auto &face : { QStringLiteral("Libron"), kobalt::test::alternateReadingFace(),

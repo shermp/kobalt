@@ -52,6 +52,7 @@
 
 #include "../../extensions/embedded_font_cache.h"
 #include <vector>
+#include <memory>
 #include <ft2build.h>
 #include <freetype/freetype.h>
 #include <freetype/ftoutln.h>    // for FT_Outline_Embolden()
@@ -1744,6 +1745,18 @@ protected:
     };
     std::vector<SingleGlyph> _singleGlyphs;
     void shapeSingleGlyph();
+    // A face only allocates these entries when short right-to-left runs occur.
+    struct ShortRtlShape {
+        static constexpr unsigned capacity = 8;
+        hb_codepoint_t text[capacity];
+        hb_glyph_info_t glyphs[capacity];
+        hb_glyph_position_t positions[capacity];
+        hb_segment_properties_t properties;
+        hb_buffer_flags_t flags;
+        unsigned length, glyphCount, fontSerial;
+    };
+    std::vector<std::unique_ptr<ShortRtlShape>> _shortRtlShapes;
+    void shapeShortRtlRun(unsigned length);
     LVArray<hb_feature_t> _hb_features;
     // Blaze: pair kerning from memory. See koblazeKernRun().
     struct KoblazeKern {
@@ -2070,6 +2083,7 @@ public:
         _vert_body_metrics_cache.clear();
         #if USE_HARFBUZZ==1
         _singleGlyphs.clear();
+        _shortRtlShapes.clear();
         _glyph_cache2.clear();
         _width_cache2.clear();
         koblazeClearKerning();
@@ -2157,6 +2171,7 @@ public:
     }
     void setupHBFeatures(bool is_vertical = false) {
         _singleGlyphs.clear();
+        _shortRtlShapes.clear();
         _hb_features_is_vertical = is_vertical ? 1 : 0;
         _hb_features.clear();
         _koblaze_features_nokern.clear(); // made again from _hb_features when needed
@@ -3391,8 +3406,12 @@ public:
 
             // Shape. koblaze: plain left-to-right horizontal runs can take
             // their pair kerning from memory.
-            if ( hb_buffer_get_length(_hb_buffer) == 1 )
+            const unsigned runLength = hb_buffer_get_length(_hb_buffer);
+            if ( runLength == 1 )
                 shapeSingleGlyph();
+            else if ( runLength >= 2 && runLength <= ShortRtlShape::capacity
+                      && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_RTL )
+                shapeShortRtlRun(runLength);
             else
                 koblazeShapeRun( !is_vertical_hb && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_LTR );
 
@@ -4865,8 +4884,12 @@ public:
             }
 
             // Shape
-            if ( hb_buffer_get_length(_hb_buffer) == 1 )
+            const unsigned runLength = hb_buffer_get_length(_hb_buffer);
+            if ( runLength == 1 )
                 shapeSingleGlyph();
+            else if ( runLength >= 2 && runLength <= ShortRtlShape::capacity
+                      && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_RTL )
+                shapeShortRtlRun(runLength);
             else
                 hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
 
