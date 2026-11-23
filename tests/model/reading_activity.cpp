@@ -73,13 +73,14 @@ void matchingBooks()
     require(summary.books == 2 && summary.booksThisMonth == 2 && summary.todayBooks == 2
                     && month.books.size() == 2,
             "Matching titles and authors should count as one book");
-    const auto &first = month.books.first();
+    require(month.books.first().book == "file-d", "The most recently read book should come first");
+    const auto &first = month.books.last();
     require(first.book == "native-c" && first.milliseconds == 60 * minute && first.sessions == 3
                     && month.copies.value(first.book).size() == 3,
             "The monthly row lost time or copy identities");
     records.hidden.insert("file-b");
     const auto hidden = activity::summarize(records, today);
-    require(hidden.months.first().books.first().milliseconds == 40 * minute
+    require(hidden.months.first().books.last().milliseconds == 40 * minute
                     && hidden.hiddenBooks.first().book == "file-b" && hidden.books == 2,
             "Hiding one copy changed the totals of another");
     for (auto &item : records.sessions)
@@ -171,6 +172,13 @@ void shortSessions()
     require(activity::bookSessions(records, "b", today).isEmpty()
                     && activity::bookTotal(records, "b", today).sessions == 0,
             "A short session was listed for its book");
+    require(summary.months.first().books.first().book == "b"
+                    && activity::bookTotal(records, "b", today).title == "b",
+            "A newly opened book must lead the month and have a named detail page");
+    records.sessions.append(session("a", today, 10, 0));
+    const auto reopened = activity::summarize(records, today).months.first().books.first();
+    require(reopened.book == "a" && reopened.last == at(today, 10) && reopened.sessions == 1,
+            "Reopening a book must move it to the top immediately");
 }
 
 void milestones()

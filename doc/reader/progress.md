@@ -137,7 +137,7 @@ Activity's four sections are cells in the top bar, beside the close cell.
 
 - Overview shows today's time, sessions and books, the current and best streak, this week's time per day and totals since the first reading day: hours, finished books, sessions, reading days, saved words and books read.
 - Calendar shows a month with each day's reading time in five shades, the current and longest streak and the month's total. The arrows go back to the first month with reading. Below the month, a strip shows every day of the year. A narrow day writes its time short, such as "45m".
-- Books lists each month's books with their covers, reading time, sessions and saved progress. Tap a book to open its page.
+- Books lists each month's books with their covers, reading time, sessions and saved progress. Opening or reopening a book moves it to the top of that month's list, even before it counts as a session. Tap a book to open its page.
 - Records shows the reading time by hour of the day, the longest session, the day with the most reading and the longest streak.
   - Below them are milestones: for each kind, the last one reached and the next. All milestones opens every milestone, grouped by kind, with a line under each kind that says where the reader stands and how far the next milestone is.
   - For streaks it also says whether the longest streak is still going, or when it ended and how long the current one is. When the kinds do not fit at a readable size, as on a phone, they take two pages.

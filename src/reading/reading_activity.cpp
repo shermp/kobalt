@@ -27,12 +27,14 @@ QDate monthOf(const QDate &date)
 
 void add(BookTotal &total, const ActivitySession &session, qint64 milliseconds)
 {
-    if (!total.sessions) {
+    if (total.book.isEmpty()) {
         total.book = session.book;
         total.first = session.started;
     }
-    total.milliseconds += milliseconds;
-    ++total.sessions;
+    if (countsAsSession(session)) {
+        total.milliseconds += milliseconds;
+        ++total.sessions;
+    }
     total.first = qMin(total.first, session.started);
     total.last = qMax(total.last, session.observed);
 }
@@ -180,16 +182,17 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
         if (date > today)
             continue;
         const auto group = groupFor.value(session.book);
-        if (!countsAsSession(session))
-            continue;
-        ++summary.sessions;
-        allBooks.insert(group);
+        const bool counted = countsAsSession(session);
         QMap<QDate, qint64> monthTime;
+        if (!counted)
+            monthTime.insert(monthOf(date), 0);
         bool readToday = false;
         visitHours(session, [&](const QDate &day, int hour, qint64 milliseconds) {
             if (day > today)
                 return;
             monthTime[monthOf(day)] += milliseconds;
+            if (!counted)
+                return;
             summary.hours[hour] += milliseconds;
             if (day == today) {
                 readToday = true;
@@ -200,19 +203,23 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
             if (day == summary.bestDayDate)
                 bestDayBooks.insert(group);
         });
-        if (readToday)
-            ++summary.todaySessions;
         const bool hidden = records.hidden.contains(session.book);
-        if (session.milliseconds > summary.longestSession) {
-            summary.longestSession = session.milliseconds;
-            summary.longestSessionDate = date;
-            summary.longestSessionTitle = hidden ? QString() : session.title;
-        }
         if (hidden)
             add(hiddenBooks[session.book], session, session.milliseconds);
         else
             for (auto month = monthTime.cbegin(); month != monthTime.cend(); ++month)
                 add(months[month.key()][session.book], session, month.value());
+        if (!counted)
+            continue;
+        ++summary.sessions;
+        allBooks.insert(group);
+        if (readToday)
+            ++summary.todaySessions;
+        if (session.milliseconds > summary.longestSession) {
+            summary.longestSession = session.milliseconds;
+            summary.longestSessionDate = date;
+            summary.longestSessionTitle = hidden ? QString() : session.title;
+        }
     }
     summary.todayBooks = todayBooks.size();
     summary.books = allBooks.size();
@@ -253,9 +260,10 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
         }
         std::sort(month.books.begin(), month.books.end(),
                   [](const BookTotal &left, const BookTotal &right) {
-                      return left.milliseconds != right.milliseconds
-                              ? left.milliseconds > right.milliseconds
-                              : left.title < right.title;
+                      if (left.last != right.last)
+                          return left.last > right.last;
+                      return left.title != right.title ? left.title < right.title
+                                                       : left.book < right.book;
                   });
         summary.months.append(month);
     }
@@ -342,10 +350,9 @@ BookTotal bookTotal(const ActivityRecords &records, const QString &book, const Q
         if (session.book != book || localDate(session.started) > today)
             continue;
         latest = &session;
-        if (countsAsSession(session))
-            add(total, session, session.milliseconds);
+        add(total, session, session.milliseconds);
     }
-    if (total.sessions)
+    if (latest)
         describe(total, *latest, records);
     return total;
 }

@@ -38,7 +38,7 @@ struct MonthBooks
     // The first day of the month.
     QDate month;
     qint64 milliseconds = 0;
-    // Most reading first.
+    // Most recently read first.
     QVector<BookTotal> books;
     // For a combined row, the individual copies read during this month.
     QHash<QString, QVector<BookTotal>> copies;
