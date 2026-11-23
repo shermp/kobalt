@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <lvfntman.h>
 
 using namespace kobalt;
 
@@ -80,7 +81,30 @@ int main(int argc, char **argv)
     FontSources sources{ { root + "/ebook-core/Regular.ttf" },
                          root + "/system",
                          root + "/sideload" };
-    const auto catalog = discoverReadingFonts(sources);
+    const auto file = sources.bundled.first();
+    const lString8 fontPath(file.toUtf8().constData());
+    expect(InitFontManager(lString8()) && fontMan->RegisterFont(fontPath),
+           "register variable font directly");
+    const auto eagerHash = fontMan->GetFontListHash(-1);
+    ShutdownFontManager();
+    expect(InitFontManager(lString8()), "initialize registration from catalog metadata");
+    std::shared_ptr<const LVFontFace> metadata;
+    QStringList inspectedFiles;
+    auto repeatedSources = sources;
+    repeatedSources.bundled += sources.bundled;
+    const auto catalog =
+            discoverReadingFonts(repeatedSources, [&](const QString &path, FT_FaceRec_ *face) {
+                metadata = fontMan->InspectOpenFont(lString8(path.toUtf8().constData()), face);
+                inspectedFiles.append(path);
+            });
+    expect(inspectedFiles == sources.bundled,
+           "only the selected copy of each file is passed to the engine");
+    expect(QFile::remove(file), "remove the test copy after catalog discovery");
+    expect(metadata && fontMan->RegisterInspectedFont(*metadata),
+           "register inspected metadata after the font file and catalog library are gone");
+    expect(fontMan->GetFontListHash(-1) == eagerHash,
+           "catalog and direct registration give the same variable-font cache hash");
+    ShutdownFontManager();
     expect(catalog.size() == 1, "duplicate families respect source precedence");
     expect(catalog.first().origin == FontOrigin::Recommended,
            "bundled reading font takes precedence");

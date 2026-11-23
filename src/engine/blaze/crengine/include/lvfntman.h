@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <cmath>
+#include <memory>
 #include "lvtypes.h"
 #include "lvplatform.h"
 #include "lvfnt.h"
@@ -736,6 +737,9 @@ public:
     bool deserialize(SerialBuf & buf);
 };
 
+struct FT_FaceRec_;
+struct LVFontFace;
+
 /// font manager interface class
 class LVFontManager
 {
@@ -773,6 +777,10 @@ public:
     }
     /// registers font by name
     virtual bool RegisterFont( lString8 name ) = 0;
+    /// Inspect a borrowed single-face file for later registration in host order.
+    /// An empty result requests normal file registration (including collections).
+    virtual std::shared_ptr<const LVFontFace> InspectOpenFont(lString8 /*name*/, FT_FaceRec_* /*face*/) { return {}; }
+    virtual bool RegisterInspectedFont(const LVFontFace& /*face*/) { return false; }
     /// Registers known static face metadata without opening the font file.
     /// The face has no variable axes, math, emoji or small-cap capabilities.
     /// Its file is opened only when a font instance is requested.

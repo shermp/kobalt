@@ -8670,7 +8670,7 @@ public:
                 CRLog::info("Variable font found: \"%s\"  axes: %s",
                             def.file_path.c_str(), axisBuf);
                 #endif
-                FT_DONE_MM_VAR(_library, mm_var);
+                FT_DONE_MM_VAR(ft_face->glyph->library, mm_var);
             }
         }
         // All fonts carry wght, ital and wdth axis info; non-variable fonts get a fixed-point range.
@@ -9234,6 +9234,68 @@ public:
         return tryRegisterFace(face);
     }
 
+    bool inspectFileFace(const lString8& name, int index, FT_Face face, LVFontFace& def)
+    {
+        bool scal = FT_IS_SCALABLE( face );
+        bool charset = checkCharSet( face );
+        if (!charset) {
+            if (FT_Select_Charmap(face, FT_ENCODING_UNICODE)) // returns 0 on success
+                // If no unicode charmap found, try symbol charmap
+                if (!FT_Select_Charmap(face, FT_ENCODING_MS_SYMBOL))
+                    // It has a symbol charmap: consider it valid
+                    charset = true;
+        }
+
+        //bool monospaced = isMonoSpaced( face );
+        if ( !scal || !charset ) {
+            CRLog::debug("    won't register font %s: %s",
+                name.c_str(), !charset?"no mandatory characters in charset" : "font is not scalable");
+            return false;
+        }
+
+        lString8 familyName( ::familyName(face) );
+        css_font_family_t fontFamily = css_ff_sans_serif;
+        if (face->face_flags & FT_FACE_FLAG_FIXED_WIDTH) fontFamily = css_ff_monospace;
+        int weight = getFontWeight(face);
+        bool italicFlag = ( face->style_flags & FT_STYLE_FLAG_ITALIC ) ? true : false;
+        def.file_path  = name;
+        def.face_index = index;
+        def.is_italic  = italicFlag;
+        def.css_family = fontFamily;
+        def.typeface   = familyName;
+        // Any width info is in the family name (see familyName()); a variable font's
+        // wdth axis, if any, is read by inspectFTFace() and overrides this default.
+        inspectFTFace(face, def, weight, css_fwd_normal);
+        #if (DEBUG_FONT_MAN==1)
+            if ( _log )
+                fprintf(_log, "registering font: (file=%s[%d], weight=%d, italic=%d, family=%d, typeface=%s)\n",
+                    def.file_path.c_str(), def.face_index, weight,
+                    def.is_italic?1:0, (int)def.css_family, def.typeface.c_str());
+        #endif
+        return true;
+    }
+
+    std::shared_ptr<const LVFontFace> InspectOpenFont(lString8 name, FT_Face face) override
+    {
+        FONT_MAN_GUARD
+        if (!face || face->num_faces != 1 || face->face_index != 0)
+            return {};
+        #ifdef LOAD_TTF_FONTS_ONLY
+        if (name.pos(cs8(".ttf")) < 0 && name.pos(cs8(".TTF")) < 0)
+            return {};
+        #endif
+        auto def = std::make_shared<LVFontFace>();
+        if (!inspectFileFace(name, 0, face, *def))
+            return {};
+        return def;
+    }
+
+    bool RegisterInspectedFont(const LVFontFace& face) override
+    {
+        FONT_MAN_GUARD
+        return tryRegisterFace(face);
+    }
+
     bool RegisterFont( lString8 name ) override
     {
         FONT_MAN_GUARD
@@ -9259,49 +9321,11 @@ public:
                 ft_error_trace(__func__, "FT_New_Face", error);
                 break;
             }
-            bool scal = FT_IS_SCALABLE( face );
-            bool charset = checkCharSet( face );
-            if (!charset) {
-                if (FT_Select_Charmap(face, FT_ENCODING_UNICODE)) // returns 0 on success
-                    // If no unicode charmap found, try symbol charmap
-                    if (!FT_Select_Charmap(face, FT_ENCODING_MS_SYMBOL))
-                        // It has a symbol charmap: consider it valid
-                        charset = true;
-            }
-
-            //bool monospaced = isMonoSpaced( face );
-            if ( !scal || !charset ) {
-                CRLog::debug("    won't register font %s: %s",
-                    name.c_str(), !charset?"no mandatory characters in charset" : "font is not scalable");
-                if ( face ) {
-                    FT_Done_Face( face );
-                    face = NULL;
-                }
-                break;
-            }
             int num_faces = face->num_faces;
-
-            lString8 familyName( ::familyName(face) );
-            css_font_family_t fontFamily = css_ff_sans_serif;
-            if (face->face_flags & FT_FACE_FLAG_FIXED_WIDTH) fontFamily = css_ff_monospace;
-            int weight = getFontWeight(face);
-            bool italicFlag = ( face->style_flags & FT_STYLE_FLAG_ITALIC ) ? true : false;
             LVFontFace def;
-            def.file_path  = name;
-            def.face_index = index;
-            def.is_italic  = italicFlag;
-            def.css_family = fontFamily;
-            def.typeface   = familyName;
-            // Any width info is in the family name (see familyName()); a variable font's
-            // wdth axis, if any, is read by inspectFTFace() and overrides this default.
-            inspectFTFace(face, def, weight, css_fwd_normal);
-            #if (DEBUG_FONT_MAN==1)
-                if ( _log )
-                    fprintf(_log, "registering font: (file=%s[%d], weight=%d, italic=%d, family=%d, typeface=%s)\n",
-                        def.file_path.c_str(), def.face_index, weight,
-                        def.is_italic?1:0, (int)def.css_family, def.typeface.c_str());
-            #endif
+            bool accepted = inspectFileFace(name, index, face, def);
             if ( face ) { FT_Done_Face( face ); face = NULL; }
+            if (!accepted) break;
             if (!tryRegisterFace(def)) return false;
             res = true;
             if ( index>=num_faces-1 ) break;

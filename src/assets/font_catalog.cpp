@@ -180,7 +180,8 @@ FontOpticalSizeAxis fontOpticalSizeAxis(const QVector<ReadingFont> &fonts, const
     return {};
 }
 
-QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
+QVector<ReadingFont> discoverReadingFonts(const FontSources &sources,
+                                          const ReadingFontInspector &inspect)
 {
     FT_Library library = nullptr;
     if (FT_Init_FreeType(&library))
@@ -192,6 +193,14 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
         if (FT_New_Face(library, path.toUtf8().constData(), 0, &face))
             return;
         const auto family = QString::fromUtf8(face->family_name);
+        const auto key = fontFamilyKey(family);
+        auto found = seen.constFind(key);
+        if (family.isEmpty()
+            || (found != seen.cend()
+                && (result[*found].origin != origin || result[*found].files.contains(path)))) {
+            FT_Done_Face(face);
+            return;
+        }
         FontWeightAxis axis;
         FontOpticalSizeAxis optical;
         FT_MM_Var *variations = nullptr;
@@ -207,9 +216,9 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
             }
             FT_Done_MM_Var(library, variations);
         }
+        if (inspect)
+            inspect(path, face);
         FT_Done_Face(face);
-        if (family.isEmpty())
-            return;
         const qint64 bytes = QFileInfo(path).size();
         QByteArray version;
         if (origin == FontOrigin::Sideloaded
@@ -218,37 +227,32 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
             version = path.toUtf8() + '\0' + QByteArray::number(file.size()) + ':'
                     + QByteArray::number(file.lastModified().toMSecsSinceEpoch()) + '\0';
         }
-        const auto key = fontFamilyKey(family);
-        auto found = seen.constFind(key);
         if (found != seen.cend()) {
             auto &entry = result[*found];
-            if (entry.origin == origin && !entry.files.contains(path)) {
-                entry.files.append(path);
-                entry.directoryFileVersions += version;
-                entry.bytes += bytes;
-                if (entry.opticalSizeAxis.available() && optical.available()) {
-                    auto &range = entry.opticalSizeAxis;
-                    range.minimum = qMax(range.minimum, optical.minimum);
-                    range.maximum = qMin(range.maximum, optical.maximum);
-                    if (range.available())
-                        range.defaultValue =
-                                qBound(range.minimum, range.defaultValue, range.maximum);
-                    else
-                        range = {};
-                } else
-                    entry.opticalSizeAxis = {};
-                if (entry.weightAxis.available() && axis.available()) {
-                    entry.weightAxis.minimum = qMax(entry.weightAxis.minimum, axis.minimum);
-                    entry.weightAxis.maximum = qMin(entry.weightAxis.maximum, axis.maximum);
-                    if (entry.weightAxis.available())
-                        entry.weightAxis.defaultValue =
-                                qBound(entry.weightAxis.minimum, entry.weightAxis.defaultValue,
-                                       entry.weightAxis.maximum);
-                    else
-                        entry.weightAxis = {};
-                } else {
+            entry.files.append(path);
+            entry.directoryFileVersions += version;
+            entry.bytes += bytes;
+            if (entry.opticalSizeAxis.available() && optical.available()) {
+                auto &range = entry.opticalSizeAxis;
+                range.minimum = qMax(range.minimum, optical.minimum);
+                range.maximum = qMin(range.maximum, optical.maximum);
+                if (range.available())
+                    range.defaultValue = qBound(range.minimum, range.defaultValue, range.maximum);
+                else
+                    range = {};
+            } else
+                entry.opticalSizeAxis = {};
+            if (entry.weightAxis.available() && axis.available()) {
+                entry.weightAxis.minimum = qMax(entry.weightAxis.minimum, axis.minimum);
+                entry.weightAxis.maximum = qMin(entry.weightAxis.maximum, axis.maximum);
+                if (entry.weightAxis.available())
+                    entry.weightAxis.defaultValue =
+                            qBound(entry.weightAxis.minimum, entry.weightAxis.defaultValue,
+                                   entry.weightAxis.maximum);
+                else
                     entry.weightAxis = {};
-                }
+            } else {
+                entry.weightAxis = {};
             }
             return;
         }

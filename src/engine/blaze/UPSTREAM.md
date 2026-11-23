@@ -168,6 +168,16 @@ Upstream's `TextLangCfg` constructor resolves the hyphenation method, which load
 
 **Upstream:** present upstream.
 
+### Reuse an open font when building the font catalog
+
+**Summary:** a host that discovers fonts with FreeType can use the same open face to collect the engine's registration metadata.
+
+Kobalt first opens fonts to build its picker, then registers the selected files in family order. Upstream's `RegisterFont` opens each file again. Blaze can inspect a borrowed, single-face font during discovery and register its metadata later in the original order. The metadata includes variable axes and OpenType capabilities. It holds no open font file. Collections still use `RegisterFont` to enumerate every face.
+
+For Kobalt’s 112 bundled files (33 families), this cut `FT_New_Face` calls from 224 to 112 and kept the font-list hash unchanged. In ten alternating pairs on a Mac with warm files, median CPU time for discovery and registration fell from 7.91 to 4.93 ms.
+
+**Code:** `InspectOpenFont` and `RegisterInspectedFont` in [lvfntman.cpp](crengine/src/lvfntman.cpp), used by [engine_document.cpp](adapter/engine_document.cpp).
+
 ### Font faces can register without opening their file
 
 **Summary:** a host that already knows a face's family, weight and style can register it without opening the font file.

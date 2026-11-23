@@ -3,6 +3,9 @@
 #include <QStringList>
 #include <QVector>
 #include <cmath>
+#include <functional>
+
+struct FT_FaceRec_;
 
 namespace kobalt {
 enum class FontOrigin { Recommended, BuiltIn, Sideloaded, Interface };
@@ -69,7 +72,10 @@ struct EngineFontInputs
 
 // Each source owns all styles of a family. Lower-priority copies are ignored.
 // Empty directories disable discovery for that source.
-QVector<ReadingFont> discoverReadingFonts(const FontSources &sources);
+// The callback borrows the open face of each selected file during discovery.
+using ReadingFontInspector = std::function<void(const QString &, FT_FaceRec_ *)>;
+QVector<ReadingFont> discoverReadingFonts(const FontSources &sources,
+                                          const ReadingFontInspector &inspect = {});
 // Plain font files in the directory and up to two folder levels below it.
 // Kobo's wrapped fonts are skipped. An empty directory returns no files.
 QStringList sideloadedFontFiles(const QString &directory);

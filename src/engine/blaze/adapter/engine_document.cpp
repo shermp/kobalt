@@ -437,20 +437,32 @@ bool EngineDocument::initializeFonts()
         return false;
     if (!InitFontManager(lString8()))
         return false;
-    readingFonts = discoverReadingFonts(fonts_.sources);
+    QMap<QString, std::shared_ptr<const LVFontFace>> inspected;
+    readingFonts =
+            discoverReadingFonts(fonts_.sources, [&](const QString &file, FT_FaceRec_ *face) {
+                auto metadata = fontMan->InspectOpenFont(lString8(file.toUtf8().constData()), face);
+                if (metadata)
+                    inspected.insert(file, std::move(metadata));
+            });
     if (readingFonts.isEmpty()) {
         ShutdownFontManager();
         return false;
     }
-    for (const auto &font : readingFonts)
-        for (const auto &file : font.files)
-            if (!fontMan->RegisterFont(lString8(file.toUtf8().constData()))
+    for (const auto &font : readingFonts) {
+        for (const auto &file : font.files) {
+            const auto metadata = inspected.take(file);
+            const bool registered = metadata
+                    ? fontMan->RegisterInspectedFont(*metadata)
+                    : fontMan->RegisterFont(lString8(file.toUtf8().constData()));
+            if (!registered
                 && (font.origin == FontOrigin::Recommended
                     || font.origin == FontOrigin::Interface)) {
                 readingFonts.clear();
                 ShutdownFontManager();
                 return false;
             }
+        }
+    }
     // The generic monospace family for code, also under a chosen reading font,
     // and fallback faces for characters that a reading font lacks. The picker
     // offers script fallbacks when they match the document language.
