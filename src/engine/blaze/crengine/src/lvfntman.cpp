@@ -1732,6 +1732,18 @@ protected:
     hb_language_t _capsLanguage = HB_LANGUAGE_INVALID;
     int _capsFeatures = 0;
     hb_buffer_t* _hb_buffer;
+    // Blaze: measurement and paint both shape complete, one-character runs.
+    // Such a run starts at cluster zero and has no surrounding buffer context.
+    struct SingleGlyph {
+        hb_codepoint_t character;
+        unsigned fontSerial;
+        hb_segment_properties_t properties;
+        hb_buffer_flags_t flags;
+        hb_glyph_info_t glyph;
+        hb_glyph_position_t position;
+    };
+    std::vector<SingleGlyph> _singleGlyphs;
+    void shapeSingleGlyph();
     LVArray<hb_feature_t> _hb_features;
     // Blaze: pair kerning from memory. See koblazeKernRun().
     struct KoblazeKern {
@@ -2057,6 +2069,7 @@ public:
         _vert_metrics_cache.clear();  // fork-only
         _vert_body_metrics_cache.clear();
         #if USE_HARFBUZZ==1
+        _singleGlyphs.clear();
         _glyph_cache2.clear();
         _width_cache2.clear();
         koblazeClearKerning();
@@ -2143,6 +2156,7 @@ public:
         return false;
     }
     void setupHBFeatures(bool is_vertical = false) {
+        _singleGlyphs.clear();
         _hb_features_is_vertical = is_vertical ? 1 : 0;
         _hb_features.clear();
         _koblaze_features_nokern.clear(); // made again from _hb_features when needed
@@ -3377,7 +3391,10 @@ public:
 
             // Shape. koblaze: plain left-to-right horizontal runs can take
             // their pair kerning from memory.
-            koblazeShapeRun( !is_vertical_hb && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_LTR );
+            if ( hb_buffer_get_length(_hb_buffer) == 1 )
+                shapeSingleGlyph();
+            else
+                koblazeShapeRun( !is_vertical_hb && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_LTR );
 
             // Harfbuzz has guessed and set a direction even if we did not provide one.
             #ifdef DEBUG_MEASURE_TEXT
@@ -4848,7 +4865,10 @@ public:
             }
 
             // Shape
-            hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
+            if ( hb_buffer_get_length(_hb_buffer) == 1 )
+                shapeSingleGlyph();
+            else
+                hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
 
             // If direction is RTL, hb_shape() has reversed the order of the glyphs, so
             // they are in visual order and ready to be iterated and drawn. So,

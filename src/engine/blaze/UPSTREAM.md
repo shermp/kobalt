@@ -128,6 +128,16 @@ The default upstream configuration searches one linked list per local cache. Bla
 
 **Upstream:** present upstream.
 
+### Shape a single character once
+
+**Summary:** each face keeps up to 32 results for runs that start with one character and produce one glyph.
+
+Fallback fonts can see the same isolated character many times during layout and paint. The cache keeps its glyph and position, including a missing glyph so the caller can continue through the fallback chain. Its key includes the character, the HarfBuzz font serial, segment properties and buffer flags. A font cache clear or a change to shaping features drops the entries. On a Japanese desktop reflow fixture the cache avoided about one million shaping calls. This measures work over repeated layouts.
+
+**Code:** `shapeSingleGlyph` in [fast_shaping.inc](extensions/fast_shaping.inc), called from measurement and drawing in [lvfntman.cpp](crengine/src/lvfntman.cpp).
+
+**Upstream:** not upstream.
+
 ### Line breaks are kept when a paragraph reflows
 
 **Summary:** a paragraph that is formatted again with the same text and language does not run libunibreak again.

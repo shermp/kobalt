@@ -1,6 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Included after the private LVFreeTypeFace definition in lvfntman.cpp.
 
+inline void LVFreeTypeFace::shapeSingleGlyph() {
+    hb_segment_properties_t properties{};
+    hb_buffer_get_segment_properties(_hb_buffer, &properties);
+    const hb_buffer_flags_t flags = hb_buffer_get_flags(_hb_buffer);
+    const hb_codepoint_t character = hb_buffer_get_glyph_infos(_hb_buffer, NULL)[0].codepoint;
+    const unsigned serial = hb_font_get_serial(_hb_font);
+    constexpr unsigned slots = 32;
+    if ( _singleGlyphs.empty() )
+        _singleGlyphs.resize(slots);
+    SingleGlyph &entry = _singleGlyphs[character % slots];
+    if ( entry.properties.direction != HB_DIRECTION_INVALID &&
+         entry.character == character && entry.fontSerial == serial && entry.flags == flags &&
+         hb_segment_properties_equal(&properties, &entry.properties) ) {
+        hb_buffer_set_content_type(_hb_buffer, HB_BUFFER_CONTENT_TYPE_GLYPHS);
+        hb_buffer_get_glyph_infos(_hb_buffer, NULL)[0] = entry.glyph;
+        hb_buffer_get_glyph_positions(_hb_buffer, NULL)[0] = entry.position;
+        return;
+    }
+    hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned)_hb_features.length());
+    if ( hb_buffer_allocation_successful(_hb_buffer) && hb_buffer_get_length(_hb_buffer) == 1 ) {
+        entry = { character, serial, properties, flags, hb_buffer_get_glyph_infos(_hb_buffer, NULL)[0],
+                  hb_buffer_get_glyph_positions(_hb_buffer, NULL)[0] };
+    }
+}
+
 inline void LVFreeTypeFace::koblazeClearKerning() {
     _koblaze_kern.clear();
     _koblaze_kern_systems.clear();
