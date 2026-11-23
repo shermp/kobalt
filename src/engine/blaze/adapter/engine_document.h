@@ -264,7 +264,16 @@ public:
     // alone is laid out in slices of about `pages` pages of text, so that no
     // layout is longer than that. Each slice starts on a new page. Zero lays
     // out a spine item as a whole. Takes effect when a spine item is shown.
-    void setChapterSlices(int pages) { slicePages_ = qMax(0, pages); }
+    void setChapterSlices(int pages)
+    {
+        pages = qMax(0, pages);
+        if (pages != slicePages_) {
+            slicePages_ = pages;
+            sliceExtra_ = 0;
+            for (auto &slice : sliceHistory_)
+                slice.extra = 0;
+        }
+    }
 
     // With the koblaze fork only. `interrupt` is asked after each block of
     // text while applyAppearance() lays out the book. When it returns true,
@@ -475,10 +484,17 @@ private:
     bool sliceLookAheadHidden_ = false;
     // The characters that are laid out from the start of the slice.
     int sliceReach() const;
+
     // The starts of the slices that the reader passed going forward, so
     // that going backward shows the same pages.
-    // Each entry is the start of a slice and its forced end, or 0.
-    QVector<QPair<int, int>> sliceHistory_;
+    // Keep the successful lookahead so returning to the same slice does
+    // not repeat the shorter layouts that failed to find a break.
+    struct SliceStart
+    {
+        int first = 0, forcedEnd = 0, extra = 0;
+    };
+
+    QVector<SliceStart> sliceHistory_;
 
     // True on the extra pages after the end of the slice. They are the
     // first pages of the next slice.
@@ -670,7 +686,7 @@ private:
     // Continues from a saved page estimate when the book opens.
     void restorePageEstimate(const QJsonValue &saved);
     // Lays out the slice that starts at `first` characters.
-    bool layoutSlice(int first, int forcedEnd = 0);
+    bool layoutSlice(int first, int forcedEnd = 0, int extra = 0);
     // Lays out the slice that holds `position` when it is another one.
     bool showSliceOf(const QString &position);
     // Lays out the slice that holds the character `before` of the spine item,

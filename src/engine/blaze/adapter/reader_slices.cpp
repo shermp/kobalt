@@ -1085,7 +1085,7 @@ bool EngineDocument::extendSlice()
     return true;
 }
 
-bool EngineDocument::layoutSlice(int first, int forcedEnd)
+bool EngineDocument::layoutSlice(int first, int forcedEnd, int extra)
 {
     EngineSlowdownScope slowdown(true, sliceInterrupt_);
     if (!engine_ || !slices())
@@ -1094,7 +1094,7 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     timer.start();
     sliceFirst_ = qMax(0, first);
     sliceForcedEnd_ = forcedEnd > sliceFirst_ ? forcedEnd : 0;
-    sliceExtra_ = 0;
+    sliceExtra_ = extra;
     searchText_.reset();
     sourceIndex_.reset();
     cache_.clear();
@@ -1135,7 +1135,7 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
         const auto damage = damage_;
         const auto sourceIndex = sourceIndex_;
         const auto searchText = searchText_;
-        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_, sliceExtra_ });
         bool done = false;
         {
             const StopCheck check(current);
@@ -1168,7 +1168,7 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
         }
         // The layout could not come back: lay out the slice again. This
         // does not stop.
-        if (!layoutSlice(first, forced))
+        if (!layoutSlice(first, forced, extra))
             return false;
         go(qBound(0, shown, qMax(0, pages() - 1)));
         return false;
@@ -1176,7 +1176,7 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
 #else
     Q_UNUSED(current);
 #endif
-    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_, sliceExtra_ });
     if (!layoutSlice(sliceEnd_))
         return false;
     return go(qBound(0, ahead, qMax(0, pages() - 1)));
@@ -1219,7 +1219,7 @@ bool EngineDocument::showSliceOf(const QString &position)
     // a block that started earlier is in the slice before.
     if (!laidOut() && !sliceHistory_.isEmpty()) {
         const auto previous = sliceHistory_.takeLast();
-        if (!layoutSlice(previous.first, previous.second))
+        if (!layoutSlice(previous.first, previous.forcedEnd, previous.extra))
             return false;
     }
     return true;
@@ -1234,16 +1234,16 @@ bool EngineDocument::showSliceAt(int before)
     // On the extra pages after the end of the slice, the position belongs
     // to the next slice, so that its page is a whole page.
     auto starts = sliceHistory_;
-    starts.append({ sliceFirst_, sliceForcedEnd_ });
+    starts.append({ sliceFirst_, sliceForcedEnd_, sliceExtra_ });
     while (!starts.isEmpty() && starts.last().first > before)
         starts.removeLast();
-    const auto start = starts.isEmpty() ? qMakePair(0, 0) : starts.takeLast();
+    const auto start = starts.isEmpty() ? SliceStart{} : starts.takeLast();
     sliceHistory_ = starts;
-    if ((start.first != sliceFirst_ || start.second != sliceForcedEnd_)
-        && !layoutSlice(start.first, start.second))
+    if ((start.first != sliceFirst_ || start.forcedEnd != sliceForcedEnd_)
+        && !layoutSlice(start.first, start.forcedEnd, start.extra))
         return false;
     while (before >= sliceEnd_ && sliceEnd_ < spineItemText()) {
-        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_, sliceExtra_ });
         if (!layoutSlice(sliceEnd_))
             return false;
     }

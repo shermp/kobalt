@@ -2176,7 +2176,7 @@ bool EngineDocument::turnInWindow(int delta)
             bool moved = false;
             if (direction > 0) {
                 if (slices() && sliceEnd_ < spineItemText()) {
-                    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+                    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_, sliceExtra_ });
                     moved = layoutSlice(sliceEnd_);
                 } else
                     moved = showNextUnit();
@@ -2184,9 +2184,9 @@ bool EngineDocument::turnInWindow(int delta)
                 // A recorded start gives the same pages as before. Without
                 // one, the slice before must stop where this one starts.
                 const auto slice = sliceHistory_.isEmpty()
-                        ? qMakePair(qMax(0, sliceFirst_ - sliceSize()), sliceFirst_)
+                        ? SliceStart{ qMax(0, sliceFirst_ - sliceSize()), sliceFirst_, 0 }
                         : sliceHistory_.takeLast();
-                moved = layoutSlice(slice.first, slice.second);
+                moved = layoutSlice(slice.first, slice.forcedEnd, slice.extra);
             } else
                 moved = showPreviousUnit();
             if (!moved) {
