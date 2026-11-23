@@ -60,7 +60,7 @@ Nickel's event thread runs with idle priority (`SCHED_IDLE`). While Kobalt keeps
 
 ### Measure as on a device
 
-`KOBALT_KOBO_EMULATION=20` makes each engine job on a desktop take about 20 times as long. The worker sleeps for the added time instead of using the processor. So it shows when work stops and how long a tap waits, but not two threads that compete for one core. Check that on a Kobo, or in VirtualNickel limited to one CPU. The Book status field of the header and footer shows the progress of the background layout and the last turn time. Diagnostics record each background step as `engine-work-start` and `engine-work-end`, and each panel opening as `panel-open` (see [Release evaluation](release-evaluation.md)).
+`KOBALT_KOBO_EMULATION=20` makes each engine job on a desktop take about 20 times as long. The worker sleeps for the added time instead of using the processor. So it shows when work stops and how long a tap waits, but not two threads that compete for one core. Check that on a single-core Kobo. The Book status field of the header and footer shows the progress of the background layout and the last turn time. Diagnostics record each background step as `engine-work-start` and `engine-work-end`, and each panel opening as `panel-open` (see [Release evaluation](release-evaluation.md)).
 
 ## Engines and revisions
 

@@ -52,7 +52,7 @@ Blaze lets the host identify its content-addressed font directory before registe
 
 **Code:** `SetContentAddressedFontDirectory` and `GetFontListHash` in [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
-**Upstream:** present upstream. We checked the path hash in the pinned revision and reproduced the unnecessary pagination with Kobo firmware in VirtualNickel.
+**Upstream:** present upstream. We checked the path hash in the pinned revision and reproduced the unnecessary pagination with Kobo firmware.
 
 ### PNG images decode one row at a time
 

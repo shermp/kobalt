@@ -183,7 +183,7 @@ A book whose Nickel content ID is not a `file:///` path came through Nickel's sy
 
 - `model.chapter-progress`: the chapter-progress formula.
 - `platform.native-progress` and `model.reading-progress`: progress signals and position rules.
-- `lifecycle.closeWritesPositionBeforeNativeTime` and `lifecycle.sleepWritesPositionBeforeNativeTime`: the progress write comes before the reading-time finish at close and sleep, and the failure handling of both. The Kobo session itself runs only on Nickel; check it in VirtualNickel on firmware 4 and 6.
+- `lifecycle.closeWritesPositionBeforeNativeTime` and `lifecycle.sleepWritesPositionBeforeNativeTime`: the progress write comes before the reading-time finish at close and sleep, and the failure handling of both. The Kobo session itself runs only on Nickel; check it on Kobo devices running firmware 4 and 6.
 - `pewter.event-history`, in both Kobo SDKs: the 10,000 trigger, whole-session retention, malformed histories, preserved fields and event-thread guard.
 - `pewter.progress`, in both Kobo SDKs: the status at opening, the position and progress write, the recent book at close, and their failure paths, as described above. It runs the firmware adapters against [pewter](validation/kobo.md#pewter-the-fake-nickel), a fake Nickel, with `bash platforms/kobo/build.sh qt5 --check` and `qt6 --check`.
 - Firmware behavior, such as the upload format and the analytics conditions, cannot be checked by the native tests or pewter. Check it on a device or an emulated Nickel after a firmware or code change, against a local sync server: the stored row after sleep and close, the `PUT .../state` body, and the `AnalyticsEvents` rows and their upload.
