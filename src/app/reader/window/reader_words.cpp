@@ -11,7 +11,7 @@ void Reader::buildWords()
     if (!savedWords)
         return;
     wordNotice = new ui::ButtonFeedback(this);
-    wordNotice->setObjectName("rrWordNotice");
+    wordNotice->setObjectName("wordNotice");
     savedWords->relocate(wordsBook(), wordsSource(), session->title(), session->author());
     wordList = new kobalt::WordList(bookmarkList, kobalt::WordList::Scope::Book);
     wordList->setSortOrder(preferences.value("marks_sort").toString("position"));

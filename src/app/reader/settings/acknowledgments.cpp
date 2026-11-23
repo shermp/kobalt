@@ -43,7 +43,7 @@ QString groupTitle(const QString &id)
 
 LicenseText::LicenseText(QWidget *parent) : ui::PagedText(parent)
 {
-    setObjectName("rrLicenseText");
+    setObjectName("licenseText");
     // License text is laid out in columns. Firmware 4 ships no fixed-width
     // font, so every firmware uses the bundled one. At this size most notices
     // keep their own line breaks.
@@ -68,24 +68,24 @@ void LicenseText::setText(const QString &text)
 
 Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent)
 {
-    setObjectName("rrAcknowledgments");
+    setObjectName("acknowledgments");
     setAutoFillBackground(true);
     QFile file(":/kobalt/acknowledgments.json");
     if (file.open(QIODevice::ReadOnly))
         entries = QJsonDocument::fromJson(file.readAll()).array();
     back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
-    back->setObjectName("rrAcknowledgmentsBack");
+    back->setObjectName("acknowledgmentsBack");
     back->setRule(Qt::RightEdge);
     back->setAccessibleName(strings::get("common.back"));
     title = new ui::InterfaceLabel(this);
-    title->setObjectName("rrAcknowledgmentsTitle");
+    title->setObjectName("acknowledgmentsTitle");
     title->setTextFormat(Qt::PlainText);
     ui::readerStyle(title, styles::brand(chrome::titleText) + "background:transparent;");
     section = new ui::InterfaceLabel(this);
-    section->setObjectName("rrAcknowledgmentsSection");
+    section->setObjectName("acknowledgmentsSection");
     ui::captionLabel(section);
     detail = new ui::InterfaceLabel(this);
-    detail->setObjectName("rrAcknowledgmentsDetail");
+    detail->setObjectName("acknowledgmentsDetail");
     ui::captionLabel(detail);
     detail->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     // The GNU GPL and AGPL ask an interactive program to state its license and
@@ -98,7 +98,7 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent)
                             "acknowledgments.thanks_to_the_open_source_projects_that_make_this_reader_possible"),
             this);
     description = new ui::InterfaceLabel(this);
-    description->setObjectName("rrLicenseDescription");
+    description->setObjectName("licenseDescription");
     for (auto *label : { intro, description }) {
         label->setWordWrap(true);
         label->setTextFormat(Qt::PlainText);
@@ -108,17 +108,17 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent)
                             + "background:transparent;color:palette(placeholder-text);");
     ui::readerStyle(description, styles::font(chrome::labelText) + "background:transparent;");
     version = new ui::InterfaceLabel(this);
-    version->setObjectName("rrLicenseVersion");
+    version->setObjectName("licenseVersion");
     ui::captionLabel(version);
     license = new ui::InterfaceLabel(this);
-    license->setObjectName("rrLicenseName");
+    license->setObjectName("licenseName");
     ui::captionLabel(license);
     url = new ui::InterfaceLabel(this);
-    url->setObjectName("rrLicenseUrl");
+    url->setObjectName("licenseUrl");
     url->setTextFormat(Qt::PlainText);
     ui::readerStyle(url, styles::caption(chrome::numberText));
     text = new LicenseText(this);
-    pager = new ui::PagerBar(this, "rrAcknowledgments");
+    pager = new ui::PagerBar(this, "acknowledgments");
     connect(back, &QPushButton::clicked, this, &Acknowledgments::goBack);
     connect(pager->previous, &QPushButton::clicked, this, [this] { turnPage(-1); });
     connect(pager->next, &QPushButton::clicked, this, [this] { turnPage(1); });
@@ -321,7 +321,7 @@ void Acknowledgments::redraw(bool paging)
         const auto project = entries.at(index >= 0 ? index : shown.at(i + 1)).toObject();
         if (index < 0) {
             auto *label = headings.at(heading++);
-            label->leftLabel()->setObjectName("rrAcknowledgmentsGroup_"
+            label->leftLabel()->setObjectName("acknowledgmentsGroup_"
                                               + project.value("group").toString());
             label->setCaptions(groupTitle(project.value("group").toString()));
             label->setGeometry(0, y, width(), metrics::list::headerHeight);
@@ -330,7 +330,7 @@ void Acknowledgments::redraw(bool paging)
             continue;
         }
         auto *button = rows.at(row++);
-        button->setObjectName(QString("rrAcknowledgment%1").arg(index));
+        button->setObjectName(QString("acknowledgment%1").arg(index));
         button->setProperty("reader_entry", index);
         auto *itemRow = static_cast<ui::ListRow *>(button);
         itemRow->setTitle(project.value("name").toString());

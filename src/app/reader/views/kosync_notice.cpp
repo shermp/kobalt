@@ -14,7 +14,7 @@ KosyncNotice::KosyncNotice(QWidget *parent)
     : ui::NoticeModal(
               parent,
               { strings::get("kosync.opening_description"), strings::get("kosync.opening"), {} },
-              { strings::get("kosync.cancel_sync"), "rrKosyncCancel" })
+              { strings::get("kosync.cancel_sync"), "kosyncCancel" })
 {
     heading = titleLabel();
     auto *header = heading->parentWidget();
@@ -27,7 +27,7 @@ KosyncNotice::KosyncNotice(QWidget *parent)
     row->setSpacing(ui::px(20));
     row->addStretch(1);
     statusIcon = new QLabel(headingRow);
-    statusIcon->setObjectName("rrKosyncStatusIcon");
+    statusIcon->setObjectName("kosyncStatusIcon");
     const int size = ui::px(48);
     statusIcon->setFixedSize(size, size);
     statusIcon->setPixmap(
@@ -45,7 +45,7 @@ KosyncNotice::KosyncNotice(QWidget *parent)
                             + ui::styles::font(ui::metrics::chrome::labelText) + "}");
     // The member timer belongs to the notice, so a check of its children finds it.
     successTimer.setParent(this);
-    successTimer.setObjectName("rrKosyncSuccessTimer");
+    successTimer.setObjectName("kosyncSuccessTimer");
     successTimer.setSingleShot(true);
     successTimer.setTimerType(Qt::PreciseTimer);
     connect(&successTimer, &QTimer::timeout, this, [this] {

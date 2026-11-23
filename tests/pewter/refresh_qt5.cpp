@@ -330,7 +330,7 @@ int main(int argc, char **argv)
     for (const bool legacy : { true, false }) {
         setReaderRefreshWindow(&reader);
         QTextEdit note(&reader);
-        note.setObjectName("rrNoteText");
+        note.setObjectName("noteText");
         note.setProperty("reader_native_keyboard_editor", true);
         note.setGeometry(20, 70, 250, 120);
         note.show();

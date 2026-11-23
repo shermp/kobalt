@@ -111,9 +111,9 @@ LightSwipeNotice::LightSwipeNotice(QWidget *parent)
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setFocusPolicy(Qt::NoFocus);
     percentage = new ui::InterfaceLabel(this);
-    percentage->setObjectName("rrLightSwipeValue");
+    percentage->setObjectName("lightSwipeValue");
     caption = new ui::InterfaceLabel(this);
-    caption->setObjectName("rrLightSwipeCaption");
+    caption->setObjectName("lightSwipeCaption");
     readerStyle(percentage, styles::font(metrics::lightSwipe::percentText));
     readerStyle(caption,
                 styles::font(metrics::lightSwipe::captionText) + "color:@swipe-caption-ink@;");
@@ -318,7 +318,7 @@ AnnotationModeNotice::AnnotationModeNotice(QWidget *parent)
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setFocusPolicy(Qt::NoFocus);
     state = new InterfaceLabel(this);
-    state->setObjectName("rrAnnotationModeState");
+    state->setObjectName("annotationModeState");
     caption = new InterfaceLabel(strings::get("annotations.mode").toUpper(), this);
     readerStyle(state, styles::font(metrics::lightSwipe::percentText));
     readerStyle(caption,

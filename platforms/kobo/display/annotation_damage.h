@@ -21,7 +21,7 @@ inline QRegion annotationRepairDamage(const QWidget *window, const QRegion &dama
 
     // The note stays above the page after Done closes the keyboard.
     // Keep pending cleanup until the opaque note viewport moves or closes.
-    for (const auto *editor : window->findChildren<QTextEdit *>(QStringLiteral("rrNoteText"))) {
+    for (const auto *editor : window->findChildren<QTextEdit *>(QStringLiteral("noteText"))) {
         const auto *viewport = editor->viewport();
         if (viewport->isVisible())
             repairs -= QRect(viewport->mapTo(window, QPoint()), viewport->size());

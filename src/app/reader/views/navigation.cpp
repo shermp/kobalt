@@ -270,7 +270,7 @@ class ZenStatsButton final : public QPushButton
 public:
     explicit ZenStatsButton(QWidget *parent) : QPushButton(parent)
     {
-        setObjectName("rrZenStats");
+        setObjectName("zenStats");
         setFocusPolicy(Qt::NoFocus);
         setAccessibleName(strings::get("zen.reading_stats"));
         setToolTip(accessibleName());
@@ -314,7 +314,7 @@ public:
         }
     };
 
-    explicit ZenStatsPanel(QWidget *parent) : QWidget(parent) { setObjectName("rrZenStatsPanel"); }
+    explicit ZenStatsPanel(QWidget *parent) : QWidget(parent) { setObjectName("zenStatsPanel"); }
 
     void setFigures(const QVector<Figure> &next)
     {
@@ -506,7 +506,7 @@ private:
 
 BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopEdge)
 {
-    setObjectName("rrBottomNavigation");
+    setObjectName("bottomNavigation");
     setProperty("reader_navigation_bar", true);
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, toolbarBorder, 0, 0);
@@ -518,12 +518,12 @@ BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopE
     returnLayout->setContentsMargins(0, 0, 0, 0);
     returnLayout->setSpacing(0);
     returnButton = new ui::CaptionButton(ui::ControlIcon::Undo, returnRow);
-    returnButton->setObjectName("rrNavLinkReturn");
+    returnButton->setObjectName("navigationLinkReturn");
     returnButton->setRule(Qt::BottomEdge);
     returnButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     returnLayout->addWidget(returnButton, 1);
     auto *stay = new ui::CellButton(ui::ControlIcon::Close, returnRow);
-    stay->setObjectName("rrNavLinkStay");
+    stay->setObjectName("navigationLinkStay");
     stay->setAccessibleName(strings::get("reader.stay_here"));
     stay->setToolTip(stay->accessibleName());
     stay->setFixedWidth(chrome::cellWidth);
@@ -563,7 +563,7 @@ BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopE
     };
     for (int i = 0; i < 9; ++i) {
         auto *tab = new Tab(labels[i], icons[i], tabRow);
-        tab->setObjectName(QString("rrNav%1").arg(names[i]));
+        tab->setObjectName(QString("navigation%1").arg(names[i]));
         tab->setVisible(i <= int(NavigationDestination::Stats));
         row->addWidget(tab, 1);
         tabs.append(tab);
@@ -819,16 +819,16 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
       sync(controls.sync)
 {
     zenViewBase = new ZenViewBase(parent);
-    zenViewBase->setObjectName("rrZenViewBase");
+    zenViewBase->setObjectName("zenViewBase");
     upperEdge = new ReadingRule(parent);
-    upperEdge->setObjectName("rrNavigationUpperEdge");
+    upperEdge->setObjectName("navigationUpperEdge");
     lowerEdge = new ReadingRule(parent);
-    lowerEdge->setObjectName("rrNavigationLowerEdge");
+    lowerEdge->setObjectName("navigationLowerEdge");
     toolbar->setEdges({});
     toolbarRows->setEnabled(false);
     rules = new ToolbarRules(toolbar);
     rules->lower();
-    zenMark = ui::makeZenMark(toolbar, "rrZenMark");
+    zenMark = ui::makeZenMark(toolbar, "zenMark");
     zenMark->hide();
     zenStatsButton = new ZenStatsButton(toolbar);
     zenStatsButton->hide();
@@ -989,7 +989,7 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
     settings->setFixedWidth(cell);
     settings->setGeometry(left + 2 * cell, statusHeight(), cell, chrome::actionHeight);
     // The arrow alone. Its accessible name stays Exit Kobalt or Library.
-    if (auto *title = exitAction->findChild<QWidget *>("rrReturnTitle"))
+    if (auto *title = exitAction->findChild<QWidget *>("readingMenuReturnTitle"))
         title->hide();
     exitAction->setProperty("reader_arrow_only", true);
     exitAction->setGeometry(left, statusHeight(), cell, chrome::actionHeight);
@@ -1087,7 +1087,7 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions)
     zenStatsPanel->hide();
     if (exitAction->property("reader_arrow_only").toBool()) {
         exitAction->setProperty("reader_arrow_only", false);
-        if (auto *title = exitAction->findChild<QWidget *>("rrReturnTitle"))
+        if (auto *title = exitAction->findChild<QWidget *>("readingMenuReturnTitle"))
             title->show();
         exitAction->update();
     }

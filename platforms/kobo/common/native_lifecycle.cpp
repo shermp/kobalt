@@ -219,7 +219,8 @@ extern "C" __attribute__((visibility("default"))) void kobalt_show_sleep_view(vo
 #ifndef KOBALT_READER_HARDWARE
     if (active) {
         auto *modal = QApplication::activeModalWidget();
-        active->testSleepCovered = modal && modal->objectName() == "rrReader" && modal->isVisible();
+        active->testSleepCovered =
+                modal && modal->objectName() == "readerWindow" && modal->isVisible();
     }
 #endif
     nativeShowSleepView(manager);

@@ -148,15 +148,14 @@ private:
                   strings::get(replace ? "annotations.export_replace_title"
                                        : "annotations.export_title"),
                   {} },
-                { strings::get("common.cancel"), "rrAnnotationExportCancel" },
+                { strings::get("common.cancel"), "annotationExportCancel" },
                 { strings::get(replace ? "annotations.export_replace_action"
                                        : "annotations.export_action"),
-                  replace ? "rrAnnotationExportReplace" : "rrAnnotationExportConfirm" });
+                  replace ? "annotationExportReplace" : "annotationExportConfirm" });
         for (auto *label : dialog->findChildren<QLabel *>())
             label->setTextFormat(Qt::PlainText);
         currentDialog = dialog;
-        dialog->setObjectName(replace ? "rrAnnotationExportReplaceDialog"
-                                      : "rrAnnotationExportDialog");
+        dialog->setObjectName(replace ? "annotationExportReplaceDialog" : "annotationExportDialog");
         const auto reject = [this] { finish({ AnnotationExportStatus::Cancelled, {} }); };
         dialog->dismissed = reject;
         connect(dialog->secondaryButton(), &QPushButton::clicked, this, reject);
@@ -187,7 +186,7 @@ private:
                 strings::get("annotations.export_format_title").arg(request.formatName),
                 request.fileName, strings::get("annotations.export_filter"));
         currentDialog = picker;
-        picker->setObjectName("rrAnnotationExportPicker");
+        picker->setObjectName("annotationExportPicker");
         picker->setAcceptMode(QFileDialog::AcceptSave);
         picker->setFileMode(QFileDialog::AnyFile);
         picker->setDefaultSuffix("zip");

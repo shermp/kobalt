@@ -38,7 +38,7 @@ class SleepGalleryGrid final : public QWidget
 public:
     explicit SleepGalleryGrid(SleepGallery *gallery) : QWidget(gallery), gallery(gallery)
     {
-        setObjectName("rrSleepGalleryGrid");
+        setObjectName("sleepGalleryGrid");
         setAttribute(Qt::WA_OpaquePaintEvent);
         hold.setSingleShot(true);
         hold.setInterval(600);
@@ -242,33 +242,33 @@ SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Desig
                                     qMax(screen.width(), screen.height()))),
       readingScreen_(screen)
 {
-    setObjectName("rrSleepGallery");
+    setObjectName("sleepGallery");
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(0);
     // The header matches Settings: a title in the brand face, a heavy rule
     // under it, and a close cell, here on the right.
     auto *heading = new ui::Panel(this, Qt::BottomEdge);
-    heading->setObjectName("rrSleepGalleryHeader");
+    heading->setObjectName("sleepGalleryHeader");
     heading->setEdgeWidth(chrome::heavyRule);
     heading->setFixedHeight(chrome::actionHeight);
     auto *headingRows = new QHBoxLayout(heading);
     headingRows->setContentsMargins(0, 0, 0, chrome::heavyRule);
     headingRows->setSpacing(0);
     title_ = new SettingsTitle(strings::get("sleep.gallery_title"), heading);
-    title_->setObjectName("rrSleepGalleryTitle");
+    title_->setObjectName("sleepGalleryTitle");
     title_->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title_, ui::styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(title_, 1);
     followOrientation_ = new ui::CheckCellButton(ui::ControlIcon::DeviceRotate, heading);
     followOrientation_->setChecked(followReading);
-    followOrientation_->setObjectName("rrSleepFollowOrientation");
+    followOrientation_->setObjectName("sleepFollowOrientation");
     followOrientation_->setAccessibleName(strings::get("sleep.follow_orientation"));
     followOrientation_->setRule(Qt::LeftEdge);
     followOrientation_->setFixedWidth(chrome::cellWidth);
     headingRows->addWidget(followOrientation_);
     orientationNotice_ = new ui::ButtonFeedback(this);
-    orientationNotice_->setObjectName("rrSleepOrientationNotice");
+    orientationNotice_->setObjectName("sleepOrientationNotice");
     connect(followOrientation_, &QPushButton::clicked, this, [this](bool checked) {
         followOrientation_->setEnabled(false);
         const auto finish = [guard = QPointer<SleepGallery>(this), checked](bool saved) {
@@ -297,7 +297,7 @@ SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Desig
             finish(true);
     });
     close_ = new ui::CellButton(ui::ControlIcon::Close, heading);
-    close_->setObjectName("rrSleepGalleryClose");
+    close_->setObjectName("sleepGalleryClose");
     close_->setAccessibleName(strings::get("settings.close"));
     close_->setRule(Qt::LeftEdge);
     close_->setFixedWidth(chrome::cellWidth);
@@ -309,7 +309,7 @@ SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Desig
     rows->addWidget(heading);
     grid_ = new SleepGalleryGrid(this);
     rows->addWidget(grid_, 1);
-    pager_ = new ui::PagerBar(this, "rrSleepGallery");
+    pager_ = new ui::PagerBar(this, "sleepGallery");
     rows->addWidget(pager_);
     connect(pager_->previous, &QPushButton::clicked, this,
             [this] { showPage(pager_->turnTarget(-1)); });

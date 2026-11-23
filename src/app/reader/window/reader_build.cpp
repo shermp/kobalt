@@ -169,7 +169,7 @@ protected:
             ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
         if (!isEnabled())
             painter.setOpacity(.45);
-        const auto *title = findChild<QLabel *>("rrReturnTitle");
+        const auto *title = findChild<QLabel *>("readingMenuReturnTitle");
         qreal letterOffset = 0;
         if (title && !arrowOnly && !title->text().isEmpty()) {
             const auto word = ui::interfaceInkBounds(title->text(), title->font());
@@ -203,7 +203,7 @@ kobalt::ui::Button *iconButton(QWidget *parent, QBoxLayout *layout, const char *
 
 ChapterHeader::ChapterHeader(QWidget *parent) : QPushButton(parent)
 {
-    setObjectName("rrReadingMenu");
+    setObjectName("readingMenu");
     readerStyle(this, "min-height:0;padding:0;");
     setUpdatesEnabled(false);
     // The page handles taps on the strip, including the bookmark corner.
@@ -230,7 +230,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     openingStarted.invalidate();
     showing.invalidate();
     turnStarted.invalidate();
-    setObjectName("rrReader");
+    setObjectName("readerWindow");
+    setProperty("kobalt_touch_window", true);
     setAttribute(Qt::WA_DeleteOnClose);
     // Member timers belong to the window, so a check of its children finds them.
     for (auto *timer : { &kosyncOpeningGrace, &renderNoticeTimer, &resizeTimer, &annotationModeHide,
@@ -561,7 +562,7 @@ void Reader::buildReadingPage()
     };
     linkPanel->navigate = [this](const QString &target) { goToPassage(target); };
     linkReturn = new kobalt::ui::BackButton(strings::get("reader.return_to_passage"), this);
-    linkReturn->setObjectName("rrLinkReturn");
+    linkReturn->setObjectName("linkReturn");
     readerStyle(linkReturn, styles::outlined() + "QPushButton{min-height:0;padding:0;}");
     linkReturn->setFixedSize(metrics::links::returnWidth, metrics::links::returnHeight);
     linkReturn->hide();
@@ -710,7 +711,7 @@ void Reader::startClockTimer()
     // The clock and menu status change once a minute. Wake just after each
     // change instead of every second.
     clockTimer = new QTimer(this);
-    clockTimer->setObjectName("rrClockTimer");
+    clockTimer->setObjectName("clockTimer");
     clockTimer->setSingleShot(true);
     // Qt rounds a long coarse timer to whole seconds and can fire it up to half
     // a second early, before the minute changes; that costs a second wakeup.
@@ -782,7 +783,7 @@ void MenuSessionLabel::paintEvent(QPaintEvent *event)
 void Reader::buildToolbar()
 {
     topControls = new kobalt::ui::Panel(this, Qt::BottomEdge);
-    topControls->setObjectName("rrControlsTop");
+    topControls->setObjectName("readingMenuControlsTop");
     topControls->setFrameStyle(QFrame::Box);
     auto *toolbar = new QVBoxLayout(topControls);
     toolbarComposition.panel = topControls;
@@ -795,13 +796,13 @@ void Reader::buildToolbar()
     auto *clockLabel = new ui::InterfaceLabel(topControls);
     clockLabel->setOpticalCentering(true);
     menuClock = clockLabel;
-    menuClock->setObjectName("rrMenuClock");
+    menuClock->setObjectName("menuClock");
     menuClock->setFixedHeight(metrics::panel::statusHeight);
     menuClock->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     readerStyle(menuClock, styles::font(metrics::panel::statusText));
     status->addWidget(menuClock, 0, 0);
     menuSession = new MenuSessionLabel(topControls);
-    menuSession->setObjectName("rrMenuSession");
+    menuSession->setObjectName("menuSession");
     menuSession->setFixedHeight(metrics::panel::statusHeight);
     menuSession->setAlignment(Qt::AlignCenter);
     readerStyle(menuSession, styles::brand(metrics::panel::sessionText));
@@ -809,14 +810,14 @@ void Reader::buildToolbar()
     status->setColumnStretch(0, 1);
     status->setColumnStretch(2, 1);
     menuBattery = new kobalt::ui::BatteryIndicator(topControls);
-    menuBattery->setObjectName("rrMenuBattery");
+    menuBattery->setObjectName("menuBattery");
     readerStyle(menuBattery, styles::font(metrics::panel::batteryText));
     status->addWidget(menuBattery, 0, 2, Qt::AlignRight);
     menuBluetooth = new kobalt::ui::BluetoothIndicator(topControls);
-    menuBluetooth->setObjectName("rrMenuBluetooth");
+    menuBluetooth->setObjectName("menuBluetooth");
     toolbarComposition.bluetooth = menuBluetooth;
     menuWifi = new kobalt::ui::WifiIndicator(topControls);
-    menuWifi->setObjectName("rrMenuWifi");
+    menuWifi->setObjectName("menuWifi");
     toolbarComposition.wifi = menuWifi;
     auto *top = new QHBoxLayout;
     toolbar->addLayout(top);
@@ -825,7 +826,7 @@ void Reader::buildToolbar()
     const auto returnLabel = services.backButtonLabel.isEmpty() ? strings::get("reader.exit")
                                                                 : services.backButtonLabel;
     auto *back = new ReturnButton(returnLabel, topControls);
-    back->setObjectName("rrReturn");
+    back->setObjectName("readingMenuReturn");
     back->setAccessibleName(returnLabel);
     back->setFocusPolicy(Qt::NoFocus);
     readerStyle(back, "QPushButton{border:none;padding:0;min-width:0;min-height:0;}");
@@ -834,7 +835,7 @@ void Reader::buildToolbar()
     returnRow->setSpacing(0);
 
     auto *returnTitle = new ReturnTitle(returnLabel, back);
-    returnTitle->setObjectName("rrReturnTitle");
+    returnTitle->setObjectName("readingMenuReturnTitle");
     returnTitle->setAttribute(Qt::WA_TransparentForMouseEvents);
     returnTitle->setAlignment(Qt::AlignCenter);
     returnTitle->setContentsMargins(0, 0, metrics::chrome::inset, 0);
@@ -850,9 +851,9 @@ void Reader::buildToolbar()
     connect(back, &QPushButton::clicked, this, [this] { close(); });
     back->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     top->addStretch(1);
-    auto *lightButton =
-            iconButton(topControls, top, "rrLight", strings::get("reader.brightness_and_warmth"),
-                       ControlIcon::Light, [this] { toggleLight(); });
+    auto *lightButton = iconButton(topControls, top, "readingMenuLight",
+                                   strings::get("reader.brightness_and_warmth"), ControlIcon::Light,
+                                   [this] { toggleLight(); });
     lightButton->setCheckable(true);
     lightButton->setEnabled(services.lightAvailable());
     toolbarButtons.light = lightButton;
@@ -875,7 +876,7 @@ void Reader::buildToolbar()
                           : height() - 2 * int(metrics::panel::toolbarHeight);
     };
     auto *typeButton =
-            iconButton(topControls, top, "rrTypography", strings::get("reader.typography"),
+            iconButton(topControls, top, "readingMenuTypography", strings::get("reader.typography"),
                        ControlIcon::Typography, [this] { selectPanel(0); });
     typeButton->setFixedWidth(metrics::control::typographyButtonWidth);
     typeButton->setAccessibleName(strings::get("reader.typography"));
@@ -884,27 +885,27 @@ void Reader::buildToolbar()
     typeButton->setCheckable(true);
     toolbarButtons.typography = typeButton;
     toolbarButtons.layout =
-            iconButton(topControls, top, "rrLayout", strings::get("reader.page_layout"),
+            iconButton(topControls, top, "readingMenuLayout", strings::get("reader.page_layout"),
                        ControlIcon::Layout, [this] { selectPanel(1); });
     toolbarButtons.layout->setCheckable(true);
     toolbarButtons.graph =
-            iconButton(topControls, top, "rrGraph", strings::get("reader.chapter_lengths"),
+            iconButton(topControls, top, "readingMenuGraph", strings::get("reader.chapter_lengths"),
                        ControlIcon::Graph, [this] { toggleGraph(); });
     toolbarButtons.graph->setCheckable(true);
     toolbarComposition.search =
-            iconButton(topControls, top, "rrSearchOpen", strings::get("reader.search_book"),
-                       ControlIcon::Search,
+            iconButton(topControls, top, "readingMenuSearchOpen",
+                       strings::get("reader.search_book"), ControlIcon::Search,
                        [this] { activateNavigation(kobalt::NavigationDestination::Search); });
     toolbarComposition.sync =
-            iconButton(topControls, top, "rrKosyncManual", strings::get("kosync.sync_now"),
+            iconButton(topControls, top, "readingMenuKosyncManual", strings::get("kosync.sync_now"),
                        ControlIcon::Sync, [this] { requestManualKosync(); });
     toolbarComposition.sync->hide();
     toolbarComposition.bookmarks =
-            iconButton(topControls, top, "rrBookmarks", strings::get("reader.bookmarks"),
+            iconButton(topControls, top, "readingMenuBookmarks", strings::get("reader.bookmarks"),
                        ControlIcon::Bookmark, [this] { openBookmarks(); });
     toolbarComposition.bookmarks->setEnabled(bookmarks->available());
     toolbarComposition.annotate =
-            iconButton(topControls, top, "rrAnnotate", strings::get("annotations.title"),
+            iconButton(topControls, top, "readingMenuAnnotate", strings::get("annotations.title"),
                        ControlIcon::Annotate, [this] {
                            if (annotationMode)
                                leaveAnnotations();
@@ -914,13 +915,13 @@ void Reader::buildToolbar()
     toolbarComposition.annotate->setCheckable(true);
     toolbarComposition.annotate->setEnabled(highlights->writable());
     toolbarComposition.formattingWarning = iconButton(
-            topControls, top, "rrFormattingWarning", strings::get("reader.formatting_warning"),
+            topControls, top, "formattingWarning", strings::get("reader.formatting_warning"),
             ControlIcon::FileWarning, [this] { showFormattingWarning(); });
     toolbarComposition.formattingWarning->setVisible(session->formattingWarning());
 
     toolbarComposition.settings =
-            iconButton(topControls, top, "rrSettings", strings::get("reader.reader_settings"),
-                       ControlIcon::Settings, [this] {
+            iconButton(topControls, top, "readingMenuSettings",
+                       strings::get("reader.reader_settings"), ControlIcon::Settings, [this] {
                            // A panel's close cell sits where this button is. A
                            // second tap that lands after the panel closed must
                            // not open Settings.
@@ -944,9 +945,12 @@ void Reader::buildToolbar()
          topControls->findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         if (button == back)
             continue;
-        if (button->objectName() != "rrSettings" && button->objectName() != "rrBookmarks"
-            && button->objectName() != "rrAnnotate" && button->objectName() != "rrFormattingWarning"
-            && button->objectName() != "rrSearchOpen" && button->objectName() != "rrKosyncManual")
+        if (button->objectName() != "readingMenuSettings"
+            && button->objectName() != "readingMenuBookmarks"
+            && button->objectName() != "readingMenuAnnotate"
+            && button->objectName() != "formattingWarning"
+            && button->objectName() != "readingMenuSearchOpen"
+            && button->objectName() != "readingMenuKosyncManual")
             topActions.append(button);
         if (auto *action = dynamic_cast<kobalt::ui::Button *>(button))
             action->setPaintMode(kobalt::ui::ButtonPaintMode::ToolbarSquare);
@@ -962,7 +966,7 @@ void Reader::buildToolbar()
 void Reader::buildBottomControls()
 {
     bottomControls = new kobalt::ui::Panel(this, Qt::TopEdge);
-    bottomControls->setObjectName("rrControlsBottom");
+    bottomControls->setObjectName("readingMenuControlsBottom");
     bottomControls->setFrameStyle(QFrame::Box);
     auto *bottom = new QVBoxLayout(bottomControls);
     bottom->setContentsMargins(metrics::panel::footerMargins);
@@ -1073,7 +1077,7 @@ void Reader::buildBottomControls()
     auto *footer = new QHBoxLayout;
     bottom->addLayout(footer);
     auto *chapters = new kobalt::ui::ElidingButton(strings::get("reader.contents"), bottomControls);
-    chapters->setObjectName("rrChapters");
+    chapters->setObjectName("readingMenuChapters");
     footer->addWidget(chapters, 1);
     connect(chapters, &QPushButton::clicked, this, [this] { showChapters(); });
     chapterButton = chapters;
@@ -1106,14 +1110,14 @@ void Reader::buildOverlays()
     choices = new ChoiceScreen(this);
     choices->hide();
     pinnedBookmarks = new BookmarkTray(this);
-    pinnedBookmarks->setObjectName("rrPinnedBookmarks");
-    ui::readerStyle(pinnedBookmarks, "QFrame#rrPinnedBookmarks{background:transparent;}");
+    pinnedBookmarks->setObjectName("pinnedBookmarks");
+    ui::readerStyle(pinnedBookmarks, "QFrame#pinnedBookmarks{background:transparent;}");
     pinnedBookmarks->hide();
     for (int i = 0; i < BookmarkStore::maxPins; ++i) {
         auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks,
                                           qRound(1.2 * int(metrics::chrome::cellIcon)));
         button->setCircular(true);
-        button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
+        button->setObjectName(QString("pinnedBookmark%1").arg(i));
         pinnedButtons.append(button);
         connect(button, &QPushButton::clicked, this, [this, button] {
             if (button->isEnabled())
@@ -2131,11 +2135,10 @@ void Reader::buildNotices()
 {
     busyNotice = new kobalt::ui::ModalOverlay(this);
     busyNotice->setDimmed(true);
-    busyNotice->card()->message(strings::get("reader.applying_appearance_changes"),
-                                "rrUpdatingText");
+    busyNotice->card()->message(strings::get("reader.applying_appearance_changes"), "updatingText");
     // Create the bar before the initial refresh attributes are assigned.
     busyNotice->setDelayedProgress(false, 0, 0);
-    resizeTimer.setObjectName("rrViewportResizeTimer");
+    resizeTimer.setObjectName("viewportResizeTimer");
     resizeTimer.setSingleShot(true);
     resizeTimer.setInterval(100);
     connect(&resizeTimer, &QTimer::timeout, this, [this] {
@@ -2148,16 +2151,16 @@ void Reader::buildNotices()
     busyNotice->card()->fitToWidth(metrics::notice::cardWidth);
     busyNotice->centerCard();
     brightnessNotice = new kobalt::ui::LightSwipeNotice(this);
-    brightnessNotice->setObjectName("rrBrightnessNotice");
+    brightnessNotice->setObjectName("brightnessNotice");
     brightnessNotice->setAttribute(Qt::WA_TransparentForMouseEvents);
     brightnessNotice->hide();
-    brightnessHide.setObjectName("rrBrightnessHideTimer");
+    brightnessHide.setObjectName("brightnessHideTimer");
     brightnessHide.setSingleShot(true);
     brightnessHide.setTimerType(Qt::PreciseTimer);
     brightnessHide.setInterval(metrics::lightSwipe::finalPercentageMilliseconds);
     connect(&brightnessHide, &QTimer::timeout, brightnessNotice, &QWidget::hide);
     annotationModeNotice = new ui::AnnotationModeNotice(this);
-    annotationModeNotice->setObjectName("rrAnnotationModeNotice");
+    annotationModeNotice->setObjectName("annotationModeNotice");
     annotationModeNotice->hide();
     annotationReopen.setSingleShot(true);
     annotationReopen.setInterval(metrics::selection::reopenMilliseconds);
@@ -2169,7 +2172,7 @@ void Reader::buildNotices()
 
 void Reader::connectLightGestures()
 {
-    lightFeedback.setObjectName("rrLightFeedbackTimer");
+    lightFeedback.setObjectName("lightFeedbackTimer");
     lightFeedback.setSingleShot(true);
     lightFeedback.setInterval(metrics::lightSwipe::feedbackMilliseconds);
     connect(&lightFeedback, &QTimer::timeout, this, [this] {
@@ -2421,7 +2424,7 @@ void Reader::showFontPicker()
     const auto *settings =
             appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
     diagnostic("font-picker-open", {}, false);
-    QVector<Choice> items{ { strings::get("reader.publisher_fonts"), QString(), "rrFontChoice0",
+    QVector<Choice> items{ { strings::get("reader.publisher_fonts"), QString(), "fontChoice0",
                              strings::get("reader.recommended_fonts") } };
     pickerNativeFamilies = services.fontFamilies();
     const auto state = settings->state();
@@ -2445,7 +2448,7 @@ void Reader::showFontPicker()
     for (const auto &font : fonts) {
         const QString section = fontSectionLabel(fontSection(font));
         items.append({ fontDisplayName(font.family), font.family,
-                       QString("rrFontChoice%1").arg(items.size()), section });
+                       QString("fontChoice%1").arg(items.size()), section });
         items.last().fontFiles = font.files;
     }
     const int personalCount = sideloadedFirst
@@ -2477,7 +2480,7 @@ void Reader::showFontPicker()
             detail += '\n';
         detail += strings::get("reader.default_font");
     }
-    Choice slot{ QStringLiteral("Aa"), defaultFace, "rrFontDefaultSlot",
+    Choice slot{ QStringLiteral("Aa"), defaultFace, "fontDefaultSlot",
                  strings::get("reader.recommended_fonts") };
     slot.detail = strings::get("reader.set_default_font");
     slot.placeholder = true;

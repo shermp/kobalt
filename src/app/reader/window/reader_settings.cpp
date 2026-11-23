@@ -236,7 +236,7 @@ void Reader::syncStatusTimer()
     if (!statusTimer) {
         statusTimer = new QTimer(this);
         statusTimer->setInterval(5000);
-        statusTimer->setObjectName("rrBookStatusTimer");
+        statusTimer->setObjectName("bookStatusTimer");
         connect(statusTimer, &QTimer::timeout, this, [this, needed] {
             if (!needed()) {
                 statusTimer->stop();

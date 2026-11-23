@@ -37,7 +37,7 @@ PopupCard::Heading PopupCard::heading(const QString &text, const QString &descri
                                     metrics::notice::cardBorder, metrics::notice::cardBorder);
     contentRows->setSpacing(0);
     auto *header = new QWidget(this);
-    header->setObjectName("rrModalHeading");
+    header->setObjectName("modalHeading");
     auto *rows = new QVBoxLayout(header);
     rows->setContentsMargins(metrics::chrome::inset, metrics::notice::cardMargins.top(),
                              metrics::chrome::inset, metrics::notice::cardMargins.bottom());
@@ -182,9 +182,9 @@ PopupCard::Heading modalContent(PopupCard *card, const ModalContent &content)
     if (!content.image.isNull())
         card->image(content.image);
     return card->heading(content.title, content.description,
-                         content.titleName.isEmpty() ? QStringLiteral("rrModalTitle")
+                         content.titleName.isEmpty() ? QStringLiteral("modalTitle")
                                                      : content.titleName,
-                         "rrModalDescription");
+                         "modalDescription");
 }
 } // namespace
 
@@ -365,7 +365,7 @@ void PopupCard::fitToHeight(int height, int fallbackWidth)
     }
     if (!rowPager) {
         const auto owner = parentWidget() ? parentWidget()->objectName() : QString();
-        rowPager = new PagerBar(this, owner.isEmpty() ? QStringLiteral("rrCard") : owner);
+        rowPager = new PagerBar(this, owner.isEmpty() ? QStringLiteral("card") : owner);
         // Paging can first become necessary on show or rotation, after the
         // caller has prepared the dialog's existing widgets for e-ink.
         platform::textRefresh(rowPager);
@@ -460,7 +460,7 @@ class AnchorPointer final : public QWidget
 public:
     explicit AnchorPointer(QWidget *parent) : QWidget(parent)
     {
-        setObjectName("rrAnchorPointer");
+        setObjectName("anchorPointer");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_NoSystemBackground);
     }
@@ -493,7 +493,7 @@ ButtonFeedback::ButtonFeedback(QWidget *parent) : ModalOverlay(parent), hideTime
 {
     setInputBarrier(false);
     setAttribute(Qt::WA_TransparentForMouseEvents);
-    label = card()->message({}, "rrButtonFeedbackText");
+    label = card()->message({}, "buttonFeedbackText");
     readerStyle(label, styles::font(metrics::chrome::labelText));
     hideTimer.setSingleShot(true);
     hideTimer.setInterval(1500);
@@ -540,14 +540,14 @@ void ButtonFeedback::hideEvent(QHideEvent *event)
 
 ModalOverlay::ModalOverlay(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrModalBackdrop");
+    setObjectName("modalBackdrop");
     setProperty("reader_popup_overlay", true);
     // Override the reader's general QWidget background, not its child controls.
     readerStyle(this, "QWidget[reader_popup_overlay=\"true\"]{background:transparent;}");
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_NoMousePropagation);
     content = new PopupCard(this);
-    content->setObjectName("rrModalCard");
+    content->setObjectName("modalCard");
     content->installEventFilter(this);
     pointer = new AnchorPointer(this);
     pointer->hide();
@@ -722,11 +722,11 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
                                       const QString &message)
 {
     if (!loadingProgress) {
-        loadingMessage = content->findChild<QLabel *>("rrUpdatingText");
+        loadingMessage = content->findChild<QLabel *>("updatingText");
         if (!loadingMessage)
-            loadingMessage = content->message(message, "rrUpdatingText");
+            loadingMessage = content->message(message, "updatingText");
         loadingProgress = new ProgressBar(content);
-        loadingProgress->setObjectName("rrApplyingProgress");
+        loadingProgress->setObjectName("applyingProgress");
         content->rows()->addWidget(loadingProgress);
         loadingProgress->hide();
         setProperty("reader_standard_modal", true);

@@ -70,7 +70,7 @@ class SleepEditorPreview final : public QWidget
 public:
     explicit SleepEditorPreview(SleepEditor *editor) : QWidget(editor), editor(editor)
     {
-        setObjectName("rrSleepEditorPreview");
+        setObjectName("sleepEditorPreview");
         setAttribute(Qt::WA_OpaquePaintEvent);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
@@ -219,14 +219,14 @@ private:
 
 SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setup_(std::move(setup))
 {
-    setObjectName(setup_.arrange ? "rrSleepArrange" : "rrSleepEditor");
+    setObjectName(setup_.arrange ? "sleepArrange" : "sleepEditor");
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(0);
     // The same header as the gallery: a title in the brand face and a cell
     // on the right, here Done.
     auto *heading = new ui::Panel(this, Qt::BottomEdge);
-    heading->setObjectName("rrSleepEditorHeader");
+    heading->setObjectName("sleepEditorHeader");
     heading->setEdgeWidth(chrome::heavyRule);
     heading->setFixedHeight(chrome::actionHeight);
     auto *headingRows = new QHBoxLayout(heading);
@@ -237,7 +237,7 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
             setup_.arrange ? strings::get("sleep.arrange_title").arg(SleepGallery::label(status))
                            : strings::get("sleep.custom_title"),
             heading);
-    title->setObjectName("rrSleepEditorTitle");
+    title->setObjectName("sleepEditorTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(title, 1);
@@ -245,7 +245,7 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
         // Where wallpapers come from, explained on request rather than in a
         // line that crowds the controls.
         help_ = new ui::CellButton(ui::ControlIcon::Question, heading);
-        help_->setObjectName("rrSleepEditorHelp");
+        help_->setObjectName("sleepEditorHelp");
         help_->setAccessibleName(strings::get("sleep.wallpaper_help_title"));
         help_->setRule(Qt::LeftEdge);
         help_->setFixedWidth(chrome::cellWidth);
@@ -256,7 +256,7 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
         });
     }
     done_ = new ui::CellButton(ui::ControlIcon::Check, heading);
-    done_->setObjectName("rrSleepEditorDone");
+    done_->setObjectName("sleepEditorDone");
     done_->setAccessibleName(strings::get("common.done"));
     done_->setRule(Qt::LeftEdge);
     done_->setFixedWidth(chrome::cellWidth);
@@ -268,7 +268,7 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
     rows->addWidget(heading);
 
     if (!setup_.arrange) {
-        same_ = checklistOption(this, "rrSleepEditorSame", strings::get("sleep.custom_same"),
+        same_ = checklistOption(this, "sleepEditorSame", strings::get("sleep.custom_same"),
                                 strings::get("sleep.custom_same_description"), false);
         same_->setChecked(setup_.custom.same);
         connect(same_, &QCheckBox::toggled, this, [this](bool checked) {
@@ -291,9 +291,9 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
         rows->addWidget(stateRow_);
         // Which screen the controls change, shown only when the two differ.
         stateRow_->setAccessibleName(strings::get("sleep.custom_editing"));
-        ui::SegmentedRow state(stateRow_, topRows, "rrSleepEditorState", {});
-        sleepingTab_ = state.add("rrSleepEditorSleeping", strings::get("sleep.sleeping"));
-        poweredOffTab_ = state.add("rrSleepEditorPoweredOff", strings::get("sleep.powered_off"));
+        ui::SegmentedRow state(stateRow_, topRows, "sleepEditorState", {});
+        sleepingTab_ = state.add("sleepEditorSleeping", strings::get("sleep.sleeping"));
+        poweredOffTab_ = state.add("sleepEditorPoweredOff", strings::get("sleep.powered_off"));
         for (auto *tab : { sleepingTab_, poweredOffTab_ })
             tab->setCheckable(true);
         sleepingTab_->setChecked(true);
@@ -349,13 +349,13 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
         auto *hint = new ui::InterfaceLabel(
                 strings::get("sleep.arrange_hint").arg(SleepGallery::label(status).toLower()),
                 controls);
-        hint->setObjectName("rrSleepArrangeHint");
+        hint->setObjectName("sleepArrangeHint");
         hint->setAlignment(Qt::AlignCenter);
         hint->setWordWrap(true);
         secondary(hint);
         controlRows->addWidget(hint);
         controlRows->addSpacing(ui::px(16));
-        bookOnly_ = checklistOption(this, "rrSleepArrangeBookOnly",
+        bookOnly_ = checklistOption(this, "sleepArrangeBookOnly",
                                     strings::get("sleep.arrange_book_only"),
                                     strings::get("sleep.arrange_book_only_description"), true);
         bookOnly_->setChecked(setup_.bookOnly);
@@ -363,10 +363,10 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
                 [this](bool checked) { setup_.bookOnly = checked; });
         rows->addWidget(bookOnly_);
     } else {
-        stepper("rrSleepEditorBackdrop", strings::get("sleep.custom_background"), backdropValue_,
+        stepper("sleepEditorBackdrop", strings::get("sleep.custom_background"), backdropValue_,
                 backdropCount_, [this](int direction) { stepBackdrop(direction); });
         controlRows->addSpacing(ui::px(12));
-        stepper("rrSleepEditorStatus", strings::get("sleep.custom_status"), statusValue_,
+        stepper("sleepEditorStatus", strings::get("sleep.custom_status"), statusValue_,
                 statusCount_, [this](int direction) { stepStatus(direction); });
     }
     refresh();

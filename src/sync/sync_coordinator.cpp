@@ -31,7 +31,7 @@ SyncCoordinator::SyncCoordinator(Client &client, SyncNetworkFactory network, Con
     finishingElapsed_.invalidate();
     deadline_.setParent(this);
     readerRetry_.setParent(this);
-    deadline_.setObjectName("rrKosyncDeadline");
+    deadline_.setObjectName("kosyncDeadline");
     deadline_.setSingleShot(true);
     readerRetry_.setSingleShot(true);
     readerRetry_.setInterval(1000);

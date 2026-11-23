@@ -26,7 +26,7 @@ static void modalReaderInput(Qt::WindowModality modality)
     nickel.resize(600, 800);
     nickel.show();
     QWidget reader(nullptr, Qt::Window | Qt::FramelessWindowHint);
-    reader.setObjectName("rrReader");
+    reader.setObjectName("readerWindow");
     reader.resize(600, 800);
     reader.setWindowModality(Qt::ApplicationModal);
     reader.show();

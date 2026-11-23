@@ -220,7 +220,7 @@ void Reader::prepareUsb(std::function<void()> finished, bool save)
     // Save as an ordinary close would, but release on time even when storage
     // is slow.
     auto *deadline = new QTimer(this);
-    deadline->setObjectName("rrUsbSaveDeadline");
+    deadline->setObjectName("usbSaveDeadline");
     deadline->setSingleShot(true);
     deadline->setTimerType(Qt::PreciseTimer);
     const auto released = std::make_shared<bool>(false);
@@ -263,12 +263,12 @@ void Reader::showShutdownNotice(bool restarting)
     if (shutdownNotice)
         shutdownNotice->deleteLater();
     shutdownNotice = new kobalt::ui::ModalOverlay(this);
-    shutdownNotice->setObjectName("rrShutdownNotice");
+    shutdownNotice->setObjectName("shutdownNotice");
     shutdownNotice->setDimmed(true);
     auto *card = shutdownNotice->card();
     card->title(strings::get(restarting ? "shutdown.restarting" : "shutdown.shutting_down"),
-                "rrShutdownTitle");
-    card->message(strings::get("shutdown.saving"), "rrShutdownMessage");
+                "shutdownTitle");
+    card->message(strings::get("shutdown.saving"), "shutdownMessage");
     shutdownNotice->setGeometry(rect());
     card->fitToWidth(
             qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
@@ -329,7 +329,7 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     // Each request has its own deadline, so a superseded request still reports
     // its timeout. The name lets tests check and run it instead of waiting.
     auto *deadline = new QTimer(this);
-    deadline->setObjectName("rrTransitionMappingDeadline");
+    deadline->setObjectName("transitionMappingDeadline");
     deadline->setSingleShot(true);
     connect(deadline, &QTimer::timeout, this, [deadline, completed, complete] {
         deadline->deleteLater();
@@ -379,7 +379,7 @@ void Reader::saveTransition(quint64 request, const QString &location,
     const QPointer<Reader> guard(this);
     const auto again = [this, request, location, error, mapped, finished](int failures) {
         auto *timer = new QTimer(this);
-        timer->setObjectName("rrTransitionSaveRetry");
+        timer->setObjectName("transitionSaveRetry");
         timer->setSingleShot(true);
         timer->setTimerType(Qt::PreciseTimer);
         connect(timer, &QTimer::timeout, this,
@@ -843,7 +843,7 @@ void Reader::sleepReader(bool externalScreenVisible)
         // Cover the reader before any save pumps events. If the native handoff
         // fails, this opaque frame remains instead of exposing the reading page.
         privateSleepFrame = new QLabel(this);
-        privateSleepFrame->setObjectName("rrPrivateSleepFrame");
+        privateSleepFrame->setObjectName("privateSleepFrame");
         privateSleepFrame->setAttribute(Qt::WA_OpaquePaintEvent);
         privateSleepFrame->setGeometry(rect());
         privateSleepFrame->setScaledContents(true);
@@ -2553,19 +2553,19 @@ void Reader::syncLinkDiscovery()
     const bool first = !linkDiscovery;
     if (first) {
         linkDiscovery = new ui::Panel(this);
-        linkDiscovery->setObjectName("rrLinkDiscovery");
+        linkDiscovery->setObjectName("linkDiscovery");
         // Tapping the hint leaves reveal mode just like tapping unlinked text.
         linkDiscovery->setAttribute(Qt::WA_TransparentForMouseEvents);
         auto *row = new QHBoxLayout(linkDiscovery);
         row->setSpacing(metrics::links::hintGap);
         linkDiscoveryHint = new ui::InterfaceLabel(
                 strings::get("reader.tap_revealed_link").toUpper(), linkDiscovery);
-        linkDiscoveryHint->setObjectName("rrLinkDiscoveryHint");
+        linkDiscoveryHint->setObjectName("linkDiscoveryHint");
         linkDiscoveryHint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         row->addWidget(linkDiscoveryHint, 1);
         linkDiscoveryExit = new ui::InterfaceLabel(
                 strings::get("reader.tap_elsewhere_to_exit").toUpper(), linkDiscovery);
-        linkDiscoveryExit->setObjectName("rrLinkDiscoveryExit");
+        linkDiscoveryExit->setObjectName("linkDiscoveryExit");
         row->addWidget(linkDiscoveryExit);
     }
     linkDiscovery->setDividers(top ? Qt::BottomEdge : Qt::TopEdge);
@@ -2911,9 +2911,9 @@ void Reader::showChapterActions(int index)
         if (!guard || request != chapterActionRequest || !choices->isVisible())
             return;
         QVector<ui::ActionMenuItem> actions{
-            ui::actionItem(strings::get("chapter_contents.mark_start"), "rrMarkStart",
+            ui::actionItem(strings::get("chapter_contents.mark_start"), "markStart",
                            ui::ControlIcon::BookStart, {}),
-            ui::actionItem(strings::get("chapter_contents.mark_end"), "rrMarkEnd",
+            ui::actionItem(strings::get("chapter_contents.mark_end"), "markEnd",
                            ui::ControlIcon::BookEnd, {})
         };
         for (const auto &action : available) {
@@ -2930,7 +2930,7 @@ void Reader::showChapterActions(int index)
             }
             auto restore = ui::actionItem(strings::get(action.start ? "chapter_contents.reset_start"
                                                                     : "chapter_contents.reset_end"),
-                                          action.start ? "rrResetStart" : "rrResetEnd",
+                                          action.start ? "resetStart" : "resetEnd",
                                           ui::ControlIcon::PinOff, apply);
             restore.startsSection = actions.size() == 2;
             actions.append(restore);
@@ -2940,7 +2940,7 @@ void Reader::showChapterActions(int index)
         auto *actionsMenu = new ui::ActionMenu(this, header, actions);
         for (const auto &item : actions)
             actionsMenu->action(item.name)->setEnabled(bool(item.triggered));
-        actionsMenu->setObjectName("rrChapterActions");
+        actionsMenu->setObjectName("chapterActions");
         actionsMenu->setProperty("reader_standard_modal", true);
         actionsMenu->dismissed = [actionsMenu] {
             actionsMenu->hide();
@@ -2986,9 +2986,9 @@ void Reader::showChapters(ContentsList mode)
         if (mode == ContentsList::PrintedPages && numericPageLabel(chapter.title.trimmed()))
             continue;
         const int index = items.size();
-        const auto name = (mode == ContentsList::Landmarks ? QStringLiteral("rrLandmark%1")
-                                   : auxiliary             ? QStringLiteral("rrPrintedPage%1")
-                                                           : QStringLiteral("rrChapter%1"))
+        const auto name = (mode == ContentsList::Landmarks ? QStringLiteral("landmark%1")
+                                   : auxiliary             ? QStringLiteral("printedPage%1")
+                                                           : QStringLiteral("chapter%1"))
                                   .arg(index);
         // The value is the index of the entry: several entries can share a
         // position until chapter mode loads their text.
@@ -3584,7 +3584,7 @@ void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Caus
                                              && cause == SaveErrorView::Cause::Failed,
                                      cause, savedLocally);
     closeSaveError = notice;
-    notice->setObjectName("rrCloseSaveError");
+    notice->setObjectName("closeSaveError");
     notice->setGeometry(rect());
     const auto dismiss = [this, notice] {
         notice->hide();

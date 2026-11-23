@@ -211,9 +211,9 @@ NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor)
         if (request.value("action").toString() == "cancel-touch") {
             if (this->anchor && this->anchor->window()) {
                 const auto target = request.value("target").toString();
-                const char *name = target == "warmth" ? "rrWarmth"
-                        : target == "brightness"      ? "rrBrightness"
-                                                      : "rrPage";
+                const char *name = target == "warmth" ? "warmth"
+                        : target == "brightness"      ? "brightness"
+                                                      : "readingPage";
                 if (auto *page = this->anchor->window()->findChild<QWidget *>(name)) {
                     QTouchEvent cancel(QEvent::TouchCancel);
                     QApplication::sendEvent(page, &cancel);

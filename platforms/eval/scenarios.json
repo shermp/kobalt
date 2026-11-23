@@ -102,11 +102,11 @@
       "book": "benchmark",
       "repeat": 20,
       "setup": [
-        {"press": "rrPage", "unless": "rrNavChapters"},
-        {"visible": "rrNavChapters"},
-        {"press": "rrNavChapters"},
-        {"visible": "rrChapter1"},
-        {"press": "rrChapter1"},
+        {"press": "readingPage", "unless": "navigationChapters"},
+        {"visible": "navigationChapters"},
+        {"press": "navigationChapters"},
+        {"visible": "chapter1"},
+        {"press": "chapter1"},
         {"settle": true},
         {"key": "PageDown"},
         {"settle": true}
@@ -130,11 +130,11 @@
       "paths": ["src/reading/", "src/engine/", "src/app/reader/views/", "src/app/reader/window/reader_refresh.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage", "unless": "rrNavChapters"},
-        {"visible": "rrNavChapters"},
-        {"press": "rrNavChapters"},
-        {"visible": ["rrChapter2", "rrChapter3", "rrChapter4", "rrChapter5", "rrChapter6"]},
-        {"press": ["rrChapter2", "rrChapter3", "rrChapter4", "rrChapter5", "rrChapter6"]},
+        {"press": "readingPage", "unless": "navigationChapters"},
+        {"visible": "navigationChapters"},
+        {"press": "navigationChapters"},
+        {"visible": ["chapter2", "chapter3", "chapter4", "chapter5", "chapter6"]},
+        {"press": ["chapter2", "chapter3", "chapter4", "chapter5", "chapter6"]},
         {"settle": true},
         {"key": "PageUp"},
         {"event": "page-turn-painted"}
@@ -150,12 +150,12 @@
       "paths": ["src/app/reader/window/", "src/app/reader/views/", "src/ui/"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage"},
+        {"press": "readingPage"},
         {"event": "panel-open", "panel": "menu"}
       ],
       "after": [
-        {"press": "rrPage"},
-        {"hidden": "rrControlsTop"}
+        {"press": "readingPage"},
+        {"hidden": "readingMenuControlsTop"}
       ],
       "sample": {"event": "panel-open", "panel": "menu", "field": "total_ms", "stages": true}
     },
@@ -167,10 +167,10 @@
       "paths": ["src/app/reader/panels/chapter_graph.cpp", "src/app/reader/window/", "src/ui/"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage", "unless": "rrNavStats"}, {"visible": "rrNavStats"}, {"settle": true},
-        {"mark": true}, {"press": "rrNavStats"}, {"visible": "rrChapterGraph"}, {"mark_end": true}
+        {"press": "readingPage", "unless": "navigationStats"}, {"visible": "navigationStats"}, {"settle": true},
+        {"mark": true}, {"press": "navigationStats"}, {"visible": "chapterGraph"}, {"mark_end": true}
       ],
-      "after": [{"press": "rrNavStats"}, {"hidden": "rrChapterGraph"}],
+      "after": [{"press": "navigationStats"}, {"hidden": "chapterGraph"}],
       "sample": {"timer": true}
     },
     {
@@ -181,13 +181,13 @@
       "paths": ["src/app/reader/settings/appearance_panel.cpp", "src/app/reader/window/", "src/ui/"],
       "book": "benchmark",
       "setup": [
-        {"widget": "rrFont", "property": "objectName", "is": "rrFont", "timeout": 15000, "check": "Reader prepared the appearance controls"}
+        {"widget": "appearanceFont", "property": "objectName", "is": "appearanceFont", "timeout": 15000, "check": "Reader prepared the appearance controls"}
       ],
       "steps": [
-        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"}, {"settle": true},
-        {"mark": true}, {"press": "rrNavText"}, {"visible": "rrFont"}, {"mark_end": true}
+        {"press": "readingPage", "unless": "navigationText"}, {"visible": "navigationText"}, {"settle": true},
+        {"mark": true}, {"press": "navigationText"}, {"visible": "appearanceFont"}, {"mark_end": true}
       ],
-      "after": [{"press": "rrNavText"}, {"hidden": "rrMenu"}, {"settle": true}],
+      "after": [{"press": "navigationText"}, {"hidden": "readingMenuPanel"}, {"settle": true}],
       "sample": {"timer": true}
     },
     {
@@ -198,15 +198,15 @@
       "paths": ["src/app/reader/settings/", "src/ui/controls/options.cpp", "src/ui/dialogs/choice_sheet.cpp"],
       "book": "benchmark",
       "setup": [
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"},
-        {"visible": "rrSettingsSystem"}, {"press": "rrSettingsSystem"}, {"reveal": "rrPercentageFormat"},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"},
+        {"visible": "settingsSystem"}, {"press": "settingsSystem"}, {"reveal": "settingsPercentageFormat"},
         {"settle": true}
       ],
       "steps": [
-        {"mark": true}, {"press": "rrPercentageFormat"}, {"visible": "rrPercentageFormat_decimal"}, {"mark_end": true}
+        {"mark": true}, {"press": "settingsPercentageFormat"}, {"visible": "settingsPercentageFormat_decimal"}, {"mark_end": true}
       ],
-      "after": [{"press": "rrPercentageFormatPopup", "at": [0.01, 0.01]}, {"hidden": "rrPercentageFormatPopup"}],
-      "teardown": [{"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"}],
+      "after": [{"press": "settingsPercentageFormatPopup", "at": [0.01, 0.01]}, {"hidden": "settingsPercentageFormatPopup"}],
+      "teardown": [{"press": "settingsClose"}, {"hidden": "settingsPages"}],
       "sample": {"timer": true}
     },
     {
@@ -217,13 +217,13 @@
       "paths": ["src/app/reader/panels/choice_screen.cpp", "src/app/reader/window/", "src/ui/"],
       "book": "benchmark",
       "setup": [
-        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"},
-        {"press": "rrNavText"}, {"visible": "rrFont"}, {"settle": true}
+        {"press": "readingPage", "unless": "navigationText"}, {"visible": "navigationText"},
+        {"press": "navigationText"}, {"visible": "appearanceFont"}, {"settle": true}
       ],
       "steps": [
-        {"mark": true}, {"press": "rrFont"}, {"visible": "rrChoices"}, {"mark_end": true}
+        {"mark": true}, {"press": "appearanceFont"}, {"visible": "choices"}, {"mark_end": true}
       ],
-      "after": [{"press": "rrFontClose"}, {"hidden": "rrChoices"}],
+      "after": [{"press": "fontClose"}, {"hidden": "choices"}],
       "sample": {"timer": true}
     },
     {
@@ -234,17 +234,17 @@
       "paths": ["src/app/reader/settings/", "src/app/reader/window/reader_settings.cpp", "src/ui/"],
       "book": "benchmark",
       "setup": [
-        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"},
-        {"press": "rrNavLayout"}, {"visible": "rrHeaderFooter"}, {"press": "rrHeaderFooter"},
-        {"visible": "rrHeaderFooterView"},
-        {"reveal": "rrStripFontPicker", "next": "rrHeaderFooterNext", "previous": "rrHeaderFooterPrevious"},
+        {"press": "readingPage", "unless": "navigationLayout"}, {"visible": "navigationLayout"},
+        {"press": "navigationLayout"}, {"visible": "headerFooter"}, {"press": "headerFooter"},
+        {"visible": "headerFooterView"},
+        {"reveal": "stripFontPicker", "next": "headerFooterNext", "previous": "headerFooterPrevious"},
         {"settle": true}
       ],
       "steps": [
-        {"mark": true}, {"press": "rrStripFontPicker"}, {"visible": "rrSettingsFontPopup"}, {"mark_end": true}
+        {"mark": true}, {"press": "stripFontPicker"}, {"visible": "settingsFontPopup"}, {"mark_end": true}
       ],
-      "after": [{"press": "rrSettingsFontPopup", "at": [0.01, 0.01]}, {"hidden": "rrSettingsFontPopup"}],
-      "teardown": [{"press": "rrHeaderFooterClose"}, {"hidden": "rrHeaderFooterView"}],
+      "after": [{"press": "settingsFontPopup", "at": [0.01, 0.01]}, {"hidden": "settingsFontPopup"}],
+      "teardown": [{"press": "headerFooterClose"}, {"hidden": "headerFooterView"}],
       "sample": {"timer": true}
     },
     {
@@ -258,8 +258,8 @@
         {"event": "panel-open", "panel": "dictionary"}
       ],
       "after": [
-        {"press": "rrDictionaryClose"},
-        {"hidden": "rrDictionary"},
+        {"press": "dictionaryClose"},
+        {"hidden": "dictionary"},
         {"settle": true}
       ],
       "sample": {"event": "panel-open", "panel": "dictionary", "field": "total_ms", "stages": true}
@@ -275,8 +275,8 @@
         {"event": "panel-open", "panel": "dictionary"}
       ],
       "after": [
-        {"press": "rrDictionaryClose"},
-        {"hidden": "rrDictionary"},
+        {"press": "dictionaryClose"},
+        {"hidden": "dictionary"},
         {"settle": true}
       ],
       "sample": {"event": "panel-open", "panel": "dictionary", "field": "total_ms", "stages": true}
@@ -288,16 +288,16 @@
       "book": "benchmark",
       "repeat": 6,
       "steps": [
-        {"press": "rrPage", "unless": "rrNavText"},
-        {"visible": "rrNavText"},
-        {"press": "rrNavText"},
-        {"visible": "rrLarger"},
-        {"press": ["rrLarger", "rrSmaller"]},
+        {"press": "readingPage", "unless": "navigationText"},
+        {"visible": "navigationText"},
+        {"press": "navigationText"},
+        {"visible": "appearanceLarger"},
+        {"press": ["appearanceLarger", "appearanceSmaller"]},
         {"event": "appearance-preview-request"},
         {"expect": "preview_ready", "is": true},
         {"expect": "preview_busy", "is": false},
         {"mark": true},
-        {"press": "rrPage"},
+        {"press": "readingPage"},
         {"event": "render-end"}
       ],
       "after": [
@@ -329,14 +329,14 @@
       "paths": ["src/app/reader/settings/", "src/ui/", "src/app/reader/window/reader_settings.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage", "unless": "rrSettings"},
-        {"visible": "rrSettings"},
-        {"press": "rrSettings"},
+        {"press": "readingPage", "unless": "readingMenuSettings"},
+        {"visible": "readingMenuSettings"},
+        {"press": "readingMenuSettings"},
         {"event": "panel-open", "panel": "settings"}
       ],
       "after": [
-        {"press": "rrSettingsClose"},
-        {"hidden": "rrSettingsPages"}
+        {"press": "settingsClose"},
+        {"hidden": "settingsPages"}
       ],
       "sample": {"event": "panel-open", "panel": "settings", "field": "total_ms", "stages": true}
     },
@@ -346,19 +346,19 @@
       "paths": ["src/app/reader/settings/", "src/ui/", "src/app/reader/window/reader_settings.cpp", "src/reading/style_sample.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage", "unless": "rrSettings"},
-        {"visible": "rrSettings"},
-        {"press": "rrSettings"},
-        {"visible": "rrSettingsStyling"},
-        {"press": "rrSettingsStyling"},
-        {"press": "rrWordSpacing"},
+        {"press": "readingPage", "unless": "readingMenuSettings"},
+        {"visible": "readingMenuSettings"},
+        {"press": "readingMenuSettings"},
+        {"visible": "settingsStyling"},
+        {"press": "settingsStyling"},
+        {"press": "settingsWordSpacing"},
         {"event": "panel-open", "panel": "styling"}
       ],
       "after": [
-        {"press": "rrWordSpacingClose"},
-        {"hidden": "rrWordSpacingPopup"},
-        {"press": "rrSettingsClose"},
-        {"hidden": "rrSettingsPages"},
+        {"press": "settingsWordSpacingClose"},
+        {"hidden": "settingsWordSpacingPopup"},
+        {"press": "settingsClose"},
+        {"hidden": "settingsPages"},
         {"settle": true}
       ],
       "sample": {"event": "panel-open", "panel": "styling", "field": "total_ms", "stages": true}
@@ -369,19 +369,19 @@
       "paths": ["src/app/reader/settings/", "src/ui/", "src/app/reader/window/reader_settings.cpp", "src/reading/style_sample.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press": "rrPage", "unless": "rrSettings"},
-        {"visible": "rrSettings"},
-        {"press": "rrSettings"},
-        {"visible": "rrSettingsStyling"},
-        {"press": "rrSettingsStyling"},
-        {"press": "rrJustificationTracking"},
+        {"press": "readingPage", "unless": "readingMenuSettings"},
+        {"visible": "readingMenuSettings"},
+        {"press": "readingMenuSettings"},
+        {"visible": "settingsStyling"},
+        {"press": "settingsStyling"},
+        {"press": "settingsJustificationTracking"},
         {"event": "panel-open", "panel": "styling"}
       ],
       "after": [
-        {"press": "rrTrackingClose"},
-        {"hidden": "rrTrackingPopup"},
-        {"press": "rrSettingsClose"},
-        {"hidden": "rrSettingsPages"},
+        {"press": "settingsTrackingClose"},
+        {"hidden": "settingsTrackingPopup"},
+        {"press": "settingsClose"},
+        {"hidden": "settingsPages"},
         {"settle": true}
       ],
       "sample": {"event": "panel-open", "panel": "styling", "field": "total_ms", "stages": true}
@@ -392,22 +392,22 @@
       "paths": ["src/app/reader/settings/","src/app/reader/window/reader_settings.cpp","src/reading/style_sample.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press":"rrPage","unless":"rrSettings"},
-        {"visible":"rrSettings"},
-        {"press":"rrSettings"},
-        {"visible":"rrSettingsStyling"},
-        {"press":"rrSettingsDisplay"},
+        {"press":"readingPage","unless":"readingMenuSettings"},
+        {"visible":"readingMenuSettings"},
+        {"press":"readingMenuSettings"},
+        {"visible":"settingsStyling"},
+        {"press":"settingsDisplay"},
         {"mark":true},
-        {"press":"rrSettingsStyling"},
-        {"press":"rrWidowsOrphans"},
+        {"press":"settingsStyling"},
+        {"press":"settingsWidowsOrphans"},
         {"event":"panel-open","panel":"styling"}
       ],
       "after": [
-        {"press":"rrWidowsOrphansClose"},
-        {"hidden":"rrWidowsOrphansPopup"},
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsClose"},
-        {"hidden":"rrSettingsPages"},
+        {"press":"settingsWidowsOrphansClose"},
+        {"hidden":"settingsWidowsOrphansPopup"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsClose"},
+        {"hidden":"settingsPages"},
         {"settle":true}
       ],
       "sample": {"timer":true,"stages":{"panel_ms":{"event":"panel-open","panel":"styling","field":"total_ms"},"sample_ms":{"event":"panel-open","panel":"styling","field":"sample_ms"}}}
@@ -418,30 +418,30 @@
       "paths": ["src/app/reader/settings/","src/app/reader/window/reader_settings.cpp","src/reading/style_sample.cpp"],
       "book": "benchmark",
       "setup": [
-        {"press":"rrPage","unless":"rrSettings"},
-        {"visible":"rrSettings"},
-        {"press":"rrSettings"},
-        {"visible":"rrSettingsStyling"},
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsStyling"},
-        {"press":"rrWidowsOrphans"},
+        {"press":"readingPage","unless":"readingMenuSettings"},
+        {"visible":"readingMenuSettings"},
+        {"press":"readingMenuSettings"},
+        {"visible":"settingsStyling"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsStyling"},
+        {"press":"settingsWidowsOrphans"},
         {"event":"panel-open","panel":"styling"},
-        {"press":"rrWidowsOrphansClose"},
-        {"hidden":"rrWidowsOrphansPopup"},
+        {"press":"settingsWidowsOrphansClose"},
+        {"hidden":"settingsWidowsOrphansPopup"},
         {"settle":true}
       ],
       "steps": [
-        {"press":"rrWidowsOrphans"},
+        {"press":"settingsWidowsOrphans"},
         {"event":"panel-open","panel":"styling"}
       ],
       "after": [
-        {"press":"rrWidowsOrphansClose"},
-        {"hidden":"rrWidowsOrphansPopup"}
+        {"press":"settingsWidowsOrphansClose"},
+        {"hidden":"settingsWidowsOrphansPopup"}
       ],
       "teardown": [
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsClose"},
-        {"hidden":"rrSettingsPages"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsClose"},
+        {"hidden":"settingsPages"},
         {"settle":true}
       ],
       "sample": {"event":"panel-open","panel":"styling","field":"total_ms","stages":true}
@@ -452,22 +452,22 @@
       "paths": ["src/app/reader/settings/","src/app/reader/window/reader_settings.cpp","src/reading/style_sample.cpp"],
       "book": "benchmark",
       "steps": [
-        {"press":"rrPage","unless":"rrSettings"},
-        {"visible":"rrSettings"},
-        {"press":"rrSettings"},
-        {"visible":"rrSettingsStyling"},
-        {"press":"rrSettingsDisplay"},
+        {"press":"readingPage","unless":"readingMenuSettings"},
+        {"visible":"readingMenuSettings"},
+        {"press":"readingMenuSettings"},
+        {"visible":"settingsStyling"},
+        {"press":"settingsDisplay"},
         {"mark":true},
-        {"press":"rrSettingsStyling"},
-        {"press":"rrVerticalSpacing"},
+        {"press":"settingsStyling"},
+        {"press":"settingsVerticalSpacing"},
         {"event":"panel-open","panel":"styling"}
       ],
       "after": [
-        {"press":"rrVerticalSpacingClose"},
-        {"hidden":"rrVerticalSpacingPopup"},
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsClose"},
-        {"hidden":"rrSettingsPages"},
+        {"press":"settingsVerticalSpacingClose"},
+        {"hidden":"settingsVerticalSpacingPopup"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsClose"},
+        {"hidden":"settingsPages"},
         {"settle":true}
       ],
       "sample": {"timer":true,"stages":{"panel_ms":{"event":"panel-open","panel":"styling","field":"total_ms"},"sample_ms":{"event":"panel-open","panel":"styling","field":"sample_ms"}}}
@@ -478,30 +478,30 @@
       "paths": ["src/app/reader/settings/","src/app/reader/window/reader_settings.cpp","src/reading/style_sample.cpp"],
       "book": "benchmark",
       "setup": [
-        {"press":"rrPage","unless":"rrSettings"},
-        {"visible":"rrSettings"},
-        {"press":"rrSettings"},
-        {"visible":"rrSettingsStyling"},
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsStyling"},
-        {"press":"rrVerticalSpacing"},
+        {"press":"readingPage","unless":"readingMenuSettings"},
+        {"visible":"readingMenuSettings"},
+        {"press":"readingMenuSettings"},
+        {"visible":"settingsStyling"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsStyling"},
+        {"press":"settingsVerticalSpacing"},
         {"event":"panel-open","panel":"styling"},
-        {"press":"rrVerticalSpacingClose"},
-        {"hidden":"rrVerticalSpacingPopup"},
+        {"press":"settingsVerticalSpacingClose"},
+        {"hidden":"settingsVerticalSpacingPopup"},
         {"settle":true}
       ],
       "steps": [
-        {"press":"rrVerticalSpacing"},
+        {"press":"settingsVerticalSpacing"},
         {"event":"panel-open","panel":"styling"}
       ],
       "after": [
-        {"press":"rrVerticalSpacingClose"},
-        {"hidden":"rrVerticalSpacingPopup"}
+        {"press":"settingsVerticalSpacingClose"},
+        {"hidden":"settingsVerticalSpacingPopup"}
       ],
       "teardown": [
-        {"press":"rrSettingsDisplay"},
-        {"press":"rrSettingsClose"},
-        {"hidden":"rrSettingsPages"},
+        {"press":"settingsDisplay"},
+        {"press":"settingsClose"},
+        {"hidden":"settingsPages"},
         {"settle":true}
       ],
       "sample": {"event":"panel-open","panel":"styling","field":"total_ms","stages":true}
@@ -512,25 +512,25 @@
       "paths": ["src/app/reader/settings/acknowledgments.cpp", "src/ui/"],
       "book": "benchmark",
       "setup": [
-        {"press": "rrPage", "unless": "rrSettings"},
-        {"visible": "rrSettings"},
-        {"press": "rrSettings"},
-        {"visible": "rrSettingsAbout"},
-        {"press": "rrSettingsAbout"},
-        {"visible": "rrAboutVersion"}
+        {"press": "readingPage", "unless": "readingMenuSettings"},
+        {"visible": "readingMenuSettings"},
+        {"press": "readingMenuSettings"},
+        {"visible": "settingsAbout"},
+        {"press": "settingsAbout"},
+        {"visible": "aboutVersion"}
       ],
       "steps": [
-        {"press": "rrOpenAcknowledgments"},
+        {"press": "openAcknowledgments"},
         {"event": "panel-open", "panel": "acknowledgments"}
       ],
       "after": [
-        {"press": "rrAcknowledgmentsBack"},
-        {"visible": "rrAboutVersion"}
+        {"press": "acknowledgmentsBack"},
+        {"visible": "aboutVersion"}
       ],
       "sample": {"event": "panel-open", "panel": "acknowledgments", "field": "total_ms", "stages": true},
       "teardown": [
-        {"press": "rrSettingsClose"},
-        {"hidden": "rrSettingsPages"}
+        {"press": "settingsClose"},
+        {"hidden": "settingsPages"}
       ]
     },
     {
@@ -539,29 +539,29 @@
       "paths": ["src/app/reader/settings/acknowledgments.cpp", "src/ui/"],
       "book": "benchmark",
       "setup": [
-        {"press": "rrPage", "unless": "rrSettings"},
-        {"visible": "rrSettings"},
-        {"press": "rrSettings"},
-        {"visible": "rrSettingsAbout"},
-        {"press": "rrSettingsAbout"},
-        {"visible": "rrAboutVersion"},
-        {"press": "rrOpenAcknowledgments"},
-        {"visible": "rrAcknowledgment0"}
+        {"press": "readingPage", "unless": "readingMenuSettings"},
+        {"visible": "readingMenuSettings"},
+        {"press": "readingMenuSettings"},
+        {"visible": "settingsAbout"},
+        {"press": "settingsAbout"},
+        {"visible": "aboutVersion"},
+        {"press": "openAcknowledgments"},
+        {"visible": "acknowledgment0"}
       ],
       "steps": [
-        {"press": "rrAcknowledgment0"},
+        {"press": "acknowledgment0"},
         {"event": "panel-open", "panel": "licence"}
       ],
       "after": [
-        {"press": "rrAcknowledgmentsBack"},
-        {"visible": "rrAcknowledgment0"}
+        {"press": "acknowledgmentsBack"},
+        {"visible": "acknowledgment0"}
       ],
       "sample": {"event": "panel-open", "panel": "licence", "field": "total_ms", "stages": true},
       "teardown": [
-        {"press": "rrAcknowledgmentsBack"},
-        {"visible": "rrAboutVersion"},
-        {"press": "rrSettingsClose"},
-        {"hidden": "rrSettingsPages"}
+        {"press": "acknowledgmentsBack"},
+        {"visible": "aboutVersion"},
+        {"press": "settingsClose"},
+        {"hidden": "settingsPages"}
       ]
     },
     {
@@ -571,13 +571,13 @@
       "book": "notes",
       "steps": [
         {"hold": {"link": "long note"}},
-        {"visible": "rrSelectionLink"},
-        {"press": "rrSelectionLink"},
+        {"visible": "selectionLink"},
+        {"press": "selectionLink"},
         {"event": "panel-open", "panel": "footnote"}
       ],
       "after": [
-        {"press": "rrLinkClose"},
-        {"hidden": "rrLinkPanel"}
+        {"press": "linkClose"},
+        {"hidden": "linkPanel"}
       ],
       "sample": {"event": "panel-open", "panel": "footnote", "field": "total_ms", "stages": true}
     },
@@ -640,11 +640,11 @@
       "setup": [
         {"sleep_persistence":{"action":"configure","mode":"stock"}},
         {"open":"benchmark"},
-        {"press":"rrPage","unless":"rrNavChapters"},
-        {"visible":"rrNavChapters"},
-        {"press":"rrNavChapters"},
-        {"visible":"rrChapter1"},
-        {"press":"rrChapter1"},
+        {"press":"readingPage","unless":"navigationChapters"},
+        {"visible":"navigationChapters"},
+        {"press":"navigationChapters"},
+        {"visible":"chapter1"},
+        {"press":"chapter1"},
         {"settle":true},
         {"key":"PageDown"},
         {"settle":true}
@@ -673,11 +673,11 @@
       "setup": [
         {"sleep_persistence":{"action":"configure","mode":"page"}},
         {"open":"benchmark"},
-        {"press":"rrPage","unless":"rrNavChapters"},
-        {"visible":"rrNavChapters"},
-        {"press":"rrNavChapters"},
-        {"visible":"rrChapter1"},
-        {"press":"rrChapter1"},
+        {"press":"readingPage","unless":"navigationChapters"},
+        {"visible":"navigationChapters"},
+        {"press":"navigationChapters"},
+        {"visible":"chapter1"},
+        {"press":"chapter1"},
         {"settle":true},
         {"key":"PageDown"},
         {"settle":true}
@@ -706,11 +706,11 @@
       "setup": [
         {"sleep_persistence":{"action":"configure","mode":"cover"}},
         {"open":"benchmark"},
-        {"press":"rrPage","unless":"rrNavChapters"},
-        {"visible":"rrNavChapters"},
-        {"press":"rrNavChapters"},
-        {"visible":"rrChapter1"},
-        {"press":"rrChapter1"},
+        {"press":"readingPage","unless":"navigationChapters"},
+        {"visible":"navigationChapters"},
+        {"press":"navigationChapters"},
+        {"visible":"chapter1"},
+        {"press":"chapter1"},
         {"settle":true},
         {"key":"PageDown"},
         {"settle":true}
@@ -762,11 +762,11 @@
       "needs": ["native-sync"],
       "repeat": 5,
       "setup": [
-        {"press":"rrPage","unless":"rrNavChapters"},
-        {"visible":"rrNavChapters"},
-        {"press":"rrNavChapters"},
-        {"visible":"rrChapter1"},
-        {"press":"rrChapter1"},
+        {"press":"readingPage","unless":"navigationChapters"},
+        {"visible":"navigationChapters"},
+        {"press":"navigationChapters"},
+        {"visible":"chapter1"},
+        {"press":"chapter1"},
         {"settle":true}
       ],
       "steps": [
@@ -805,7 +805,7 @@
     {"id": "resources.open.cold", "kind": "e2e", "repeat": 3, "paths": ["src/"], "book": "benchmark", "fixture": {"cache": "cold", "ends": "first page painted and the reader settled", "mode": "hybrid"}, "steps": [{"close": true}, {"event": "book-close"}, {"forget": "benchmark"}, {"mark": true}, {"open": "benchmark"}, {"event": "reader-shown", "earlier": true, "as": "shown"}, {"mark_end": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"reader_shown_ms": {"event": "shown", "field": "total_ms"}}}, "rendering": "hybrid"},
     {"id": "resources.open.warm", "kind": "e2e", "repeat": 3, "paths": ["src/"], "book": "benchmark", "fixture": {"cache": "warm", "ends": "first page painted and the reader settled", "mode": "hybrid"}, "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "steps": [{"close": true}, {"event": "book-close"}, {"mark": true}, {"open": "benchmark"}, {"event": "reader-shown", "earlier": true, "as": "shown"}, {"mark_end": true}], "after": [{"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"reader_shown_ms": {"event": "shown", "field": "total_ms"}}}, "rendering": "hybrid"},
     {"id": "resources.layout", "kind": "e2e", "repeat": 3, "paths": ["src/"], "book": "benchmark", "fixture": {"cache": "cold", "starts": "after the open settled", "ends": "full-document-ready after three page turns, which start the background layout, and the reader settled", "mode": "hybrid"}, "steps": [{"close": true}, {"event": "book-close"}, {"forget": "benchmark"}, {"open": "benchmark"}, {"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "as": "whole", "earlier": true, "timeout": 120000, "where": {"from_cache": false}}, {"settle": true}, {"mark_end": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"whole_pages": {"event": "whole", "field": "pages"}}}, "rendering": "hybrid"},
-    {"id": "resources.turn.forward", "kind": "e2e", "repeat": 10, "paths": ["src/"], "book": "benchmark", "fixture": {"layout": "whole book ready", "turn": "PageDown", "mode": "hybrid"}, "expect": {"profile_transactions": 0, "profile_checkpoints": 0, "native_saves": 0, "document_cache_saves": 0}, "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter1"}, {"press": "rrChapter1"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "steps": [{"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "turn"}, {"settle": true}, {"wait_ms": 1000}, {"mark_end": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"painted_ms": {"event": "turn", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
+    {"id": "resources.turn.forward", "kind": "e2e", "repeat": 10, "paths": ["src/"], "book": "benchmark", "fixture": {"layout": "whole book ready", "turn": "PageDown", "mode": "hybrid"}, "expect": {"profile_transactions": 0, "profile_checkpoints": 0, "native_saves": 0, "document_cache_saves": 0}, "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"press": "readingPage", "unless": "navigationChapters"}, {"visible": "navigationChapters"}, {"press": "navigationChapters"}, {"visible": "chapter1"}, {"press": "chapter1"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "steps": [{"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "turn"}, {"settle": true}, {"wait_ms": 1000}, {"mark_end": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"painted_ms": {"event": "turn", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
     {"id": "resources.turn.backward", "kind": "e2e", "repeat": 10, "paths": ["src/"], "book": "benchmark", "fixture": {"layout": "whole book ready", "turn": "PageUp", "mode": "hybrid"}, "expect": {"profile_transactions": 0, "profile_checkpoints": 0, "native_saves": 0, "document_cache_saves": 0}, "setup": [{"settle": true}], "steps": [{"mark": true}, {"key": "PageUp"}, {"event": "page-turn-painted", "as": "turn"}, {"settle": true}, {"wait_ms": 1000}, {"mark_end": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"painted_ms": {"event": "turn", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
     {"id": "resources.close", "kind": "e2e", "repeat": 3, "paths": ["src/"], "book": "benchmark", "fixture": {"layout": "whole book ready", "ends": "reader gone and its saves done", "mode": "hybrid"}, "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "steps": [{"mark": true}, {"close": true}, {"event": "book-close", "earlier": true, "as": "closed"}, {"mark_end": true}], "after": [{"open": "benchmark"}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000}, {"settle": true}], "sample": {"timer": true, "resources": true, "count": {"profile_transactions": "operation-start/profile-transaction", "profile_checkpoints": "profile-checkpoint", "native_saves": "native-save-start", "document_cache_saves": "document-cache-save"}, "stages": {"book_close_ms": {"event": "closed", "field": "total_ms"}}}, "rendering": "hybrid"},
     {"id": "hybrid.swap.type-tester", "kind": "e2e", "opt_in": true, "repeat": 5, "paths": ["src/reading/", "src/engine/", "src/app/reader/window/"], "book": "type-tester", "fixture": {"mode": "hybrid", "cache": "cold", "turn": "PageDown", "swap": "the first turn after full-document-ready adopts the whole book; back is a whole-book turn to the same page, for comparison"}, "steps": [{"close": true}, {"event": "book-close"}, {"open": "type-tester", "fresh": true}, {"event": "reader-shown"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "chapter"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000, "where": {"from_cache": false}}, {"settle": true}, {"wait_ms": 1000}, {"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "swap", "where": {"whole_book": true}}, {"settle": true}, {"mark_end": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "next"}, {"settle": true}, {"wait_ms": 1000}, {"key": "PageUp"}, {"event": "page-turn-painted", "as": "back"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "again"}, {"settle": true}], "sample": {"timer": true, "stages": {"chapter_painted_ms": {"event": "chapter", "field": "elapsed_ms"}, "swap_painted_ms": {"event": "swap", "field": "elapsed_ms"}, "back_painted_ms": {"event": "back", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
@@ -814,14 +814,14 @@
     {"id": "hybrid.swap.war-and-peace", "kind": "e2e", "opt_in": true, "repeat": 5, "paths": ["src/reading/", "src/engine/", "src/app/reader/window/"], "book": "war-and-peace", "fixture": {"mode": "hybrid", "cache": "cold", "turn": "PageDown", "swap": "the first turn after full-document-ready adopts the whole book; back is a whole-book turn to the same page, for comparison"}, "steps": [{"close": true}, {"event": "book-close"}, {"open": "war-and-peace", "fresh": true}, {"event": "reader-shown"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "chapter"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000, "where": {"from_cache": false}}, {"settle": true}, {"wait_ms": 1000}, {"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "swap", "where": {"whole_book": true}}, {"settle": true}, {"mark_end": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "next"}, {"settle": true}, {"wait_ms": 1000}, {"key": "PageUp"}, {"event": "page-turn-painted", "as": "back"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "again"}, {"settle": true}], "sample": {"timer": true, "stages": {"chapter_painted_ms": {"event": "chapter", "field": "elapsed_ms"}, "swap_painted_ms": {"event": "swap", "field": "elapsed_ms"}, "back_painted_ms": {"event": "back", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
     {"id": "hybrid.swap.maths", "kind": "e2e", "opt_in": true, "repeat": 5, "paths": ["src/reading/", "src/engine/", "src/app/reader/window/"], "book": "maths", "fixture": {"mode": "hybrid", "cache": "cold", "turn": "PageDown", "swap": "the first turn after full-document-ready adopts the whole book; back is a whole-book turn to the same page, for comparison"}, "steps": [{"close": true}, {"event": "book-close"}, {"open": "maths", "fresh": true}, {"event": "reader-shown"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "chapter"}, {"settle": true}, {"event": "full-document-ready", "earlier": true, "timeout": 120000, "where": {"from_cache": false}}, {"settle": true}, {"wait_ms": 1000}, {"mark": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "swap", "where": {"whole_book": true}}, {"settle": true}, {"mark_end": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "next"}, {"settle": true}, {"wait_ms": 1000}, {"key": "PageUp"}, {"event": "page-turn-painted", "as": "back"}, {"settle": true}, {"key": "PageDown"}, {"event": "page-turn-painted", "as": "again"}, {"settle": true}], "sample": {"timer": true, "stages": {"chapter_painted_ms": {"event": "chapter", "field": "elapsed_ms"}, "swap_painted_ms": {"event": "swap", "field": "elapsed_ms"}, "back_painted_ms": {"event": "back", "field": "elapsed_ms"}}}, "rendering": "hybrid"},
     {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "songbook-1024"}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.page", "steps": [{"mark": true}, {"press": "rrContentsNext"}, {"settle": true}, {"press": "rrContentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}], "teardown": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.jump", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"mark": true}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}], "sample": {"timer": true}},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.panel", "steps": [{"press": "readingPage", "unless": "navigationChapters"}, {"visible": "navigationChapters"}, {"mark": true}, {"press": "navigationChapters"}, {"visible": "chapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "contentsClose"}, {"hidden": "contents"}]},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.page", "steps": [{"mark": true}, {"press": "contentsNext"}, {"settle": true}, {"press": "contentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "readingPage", "unless": "navigationChapters"}, {"press": "navigationChapters"}, {"visible": "chapter0"}], "teardown": [{"press": "contentsClose"}, {"hidden": "contents"}]},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.jump", "steps": [{"press": "readingPage", "unless": "navigationChapters"}, {"press": "navigationChapters"}, {"visible": "chapter0"}, {"mark": true}, {"press": "chapter0"}, {"hidden": "contents"}, {"settle": true}], "sample": {"timer": true}},
     {"kind": "memory", "unit": "KiB", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}},
     {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "songbook-10000"}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.page", "steps": [{"mark": true}, {"press": "rrContentsNext"}, {"settle": true}, {"press": "rrContentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}], "teardown": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
-    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.jump", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"mark": true}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}], "sample": {"timer": true}},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.panel", "steps": [{"press": "readingPage", "unless": "navigationChapters"}, {"visible": "navigationChapters"}, {"mark": true}, {"press": "navigationChapters"}, {"visible": "chapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "contentsClose"}, {"hidden": "contents"}]},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.page", "steps": [{"mark": true}, {"press": "contentsNext"}, {"settle": true}, {"press": "contentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "readingPage", "unless": "navigationChapters"}, {"press": "navigationChapters"}, {"visible": "chapter0"}], "teardown": [{"press": "contentsClose"}, {"hidden": "contents"}]},
+    {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.jump", "steps": [{"press": "readingPage", "unless": "navigationChapters"}, {"press": "navigationChapters"}, {"visible": "chapter0"}, {"mark": true}, {"press": "chapter0"}, {"hidden": "contents"}, {"settle": true}], "sample": {"timer": true}},
     {"kind": "memory", "unit": "KiB", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}},
     {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 3, "id": "reading.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "opened", "fresh": true}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
     {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 120, "id": "reading.turn.paced", "steps": [{"key": "PageDown"}, {"event": "page-turn-painted"}], "after": [{"settle": true}], "sample": {"event": "page-turn-painted", "field": "elapsed_ms", "stages": true}},
@@ -835,44 +835,44 @@
       "book": "benchmark",
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsDisplay"},
-        {"widget": "rrSettingsDisplay", "is": true, "check": "Display opens"},
-        {"reveal": "rrDarkMode"},
-        {"widget": "rrDarkMode", "property": "visible", "is": true, "check": "Display shows Dark mode"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsControls"},
-        {"widget": "rrSettingsControls", "is": true, "check": "Controls opens"},
-        {"reveal": "rrAnnotationInteraction"},
-        {"widget": "rrAnnotationInteraction", "property": "visible", "is": true, "check": "Controls shows the highlight interaction"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsDefaults"},
-        {"widget": "rrSettingsDefaults", "is": true, "check": "Defaults opens"},
-        {"reveal": "rrRestoreBookDefaults"},
-        {"widget": "rrRestoreBookDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore book defaults"},
-        {"reveal": "rrRestoreDefaults"},
-        {"widget": "rrRestoreDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore appearance defaults"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsStyling"},
-        {"widget": "rrSettingsStyling", "is": true, "check": "Styling opens"},
-        {"reveal": "rrWordSpacing"},
-        {"widget": "rrWordSpacing", "property": "visible", "is": true, "check": "Styling shows Word spacing"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsSystem"},
-        {"widget": "rrSettingsSystem", "is": true, "check": "System opens"},
-        {"reveal": "rrTheming"},
-        {"widget": "rrTheming", "property": "visible", "is": true, "check": "System shows Theming"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsKosync"},
-        {"widget": "rrSettingsKosync", "is": true, "check": "KOSync opens"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsAbout"},
-        {"widget": "rrSettingsAbout", "is": true, "check": "About opens"},
-        {"widget": "rrAboutVersion", "property": "visible", "is": true, "check": "About shows the version"}
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsDisplay"},
+        {"widget": "settingsDisplay", "is": true, "check": "Display opens"},
+        {"reveal": "settingsDarkMode"},
+        {"widget": "settingsDarkMode", "property": "visible", "is": true, "check": "Display shows Dark mode"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsControls"},
+        {"widget": "settingsControls", "is": true, "check": "Controls opens"},
+        {"reveal": "settingsAnnotationInteraction"},
+        {"widget": "settingsAnnotationInteraction", "property": "visible", "is": true, "check": "Controls shows the highlight interaction"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsDefaults"},
+        {"widget": "settingsDefaults", "is": true, "check": "Defaults opens"},
+        {"reveal": "settingsRestoreBookDefaults"},
+        {"widget": "settingsRestoreBookDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore book defaults"},
+        {"reveal": "settingsRestoreDefaults"},
+        {"widget": "settingsRestoreDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore appearance defaults"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsStyling"},
+        {"widget": "settingsStyling", "is": true, "check": "Styling opens"},
+        {"reveal": "settingsWordSpacing"},
+        {"widget": "settingsWordSpacing", "property": "visible", "is": true, "check": "Styling shows Word spacing"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsSystem"},
+        {"widget": "settingsSystem", "is": true, "check": "System opens"},
+        {"reveal": "settingsTheming"},
+        {"widget": "settingsTheming", "property": "visible", "is": true, "check": "System shows Theming"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsKosync"},
+        {"widget": "settingsKosync", "is": true, "check": "KOSync opens"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsAbout"},
+        {"widget": "settingsAbout", "is": true, "check": "About opens"},
+        {"widget": "aboutVersion", "property": "visible", "is": true, "check": "About shows the version"}
       ],
       "teardown": [
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose", "if": "settingsClose"}, {"hidden": "settingsPages"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -884,27 +884,27 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"}, {"press": "rrNavText"}, {"visible": "rrLarger"},
-        {"press": "rrLarger"}, {"press": "rrHeavier"},
-        {"press": "rrNavLayout"}, {"visible": "rrWider"}, {"press": "rrWider"},
-        {"press": "rrPage"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "readingPage", "unless": "navigationText"}, {"visible": "navigationText"}, {"press": "navigationText"}, {"visible": "appearanceLarger"},
+        {"press": "appearanceLarger"}, {"press": "appearanceHeavier"},
+        {"press": "navigationLayout"}, {"visible": "appearanceWider"}, {"press": "appearanceWider"},
+        {"press": "readingPage"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"expect": "font_pixels", "above": "start", "timeout": 30000, "check": "Larger raises the text size"},
         {"expect": "weight_steps", "above": "start", "check": "Heavier raises the weight"},
         {"expect": "margin_pixels", "above": "start", "check": "Wider raises the margins"},
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsDefaults"}, {"reveal": "rrRestoreBookDefaults"}, {"press": "rrRestoreBookDefaults"},
-        {"visible": "rrRestoreBookConfirmation"}, {"press": "rrConfirmBookDefaults"}, {"hidden": "rrRestoreBookConfirmation"},
-        {"widget": "rrRestoreBookDefaults", "property": "enabled", "is": false, "check": "Restore book defaults shows the defaults as chosen"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsDefaults"}, {"reveal": "settingsRestoreBookDefaults"}, {"press": "settingsRestoreBookDefaults"},
+        {"visible": "settingsRestoreBookConfirmation"}, {"press": "settingsConfirmBookDefaults"}, {"hidden": "settingsRestoreBookConfirmation"},
+        {"widget": "settingsRestoreBookDefaults", "property": "enabled", "is": false, "check": "Restore book defaults shows the defaults as chosen"},
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose"}, {"hidden": "settingsPages"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"expect": "font_pixels", "same_as": "start", "timeout": 30000, "check": "The text size returns to the default"},
         {"expect": "weight_steps", "same_as": "start", "check": "The weight returns to the default"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "font_pixels", "same_as": "start", "check": "The restored text size is saved"}
       ],
       "teardown": [
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose", "if": "settingsClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -916,27 +916,27 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsStyling"}, {"reveal": "rrInpageFootnotes"},
-        {"remember": "footnotes", "widget": "rrInpageFootnotes"},
-        {"press": "rrInpageFootnotes"},
-        {"widget": "rrInpageFootnotes", "not_as": "footnotes", "check": "In-page footnotes changes"},
-        {"remember": "changed", "widget": "rrInpageFootnotes"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsDefaults"}, {"reveal": "rrRestoreDefaults"}, {"press": "rrRestoreDefaults"},
-        {"visible": "rrRestoreConfirmation"}, {"press": "rrKeepDefaults"}, {"hidden": "rrRestoreConfirmation"},
-        {"widget": "rrInpageFootnotes", "same_as": "changed", "check": "Keep leaves the change"},
-        {"press": "rrRestoreDefaults"}, {"visible": "rrRestoreConfirmation"}, {"press": "rrConfirmDefaults"}, {"hidden": "rrRestoreConfirmation"},
-        {"widget": "rrInpageFootnotes", "same_as": "footnotes", "check": "Restore returns In-page footnotes to the default"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsStyling"}, {"reveal": "settingsInpageFootnotes"},
+        {"remember": "footnotes", "widget": "settingsInpageFootnotes"},
+        {"press": "settingsInpageFootnotes"},
+        {"widget": "settingsInpageFootnotes", "not_as": "footnotes", "check": "In-page footnotes changes"},
+        {"remember": "changed", "widget": "settingsInpageFootnotes"},
+        {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsDefaults"}, {"reveal": "settingsRestoreDefaults"}, {"press": "settingsRestoreDefaults"},
+        {"visible": "settingsRestoreConfirmation"}, {"press": "settingsKeepDefaults"}, {"hidden": "settingsRestoreConfirmation"},
+        {"widget": "settingsInpageFootnotes", "same_as": "changed", "check": "Keep leaves the change"},
+        {"press": "settingsRestoreDefaults"}, {"visible": "settingsRestoreConfirmation"}, {"press": "settingsConfirmDefaults"}, {"hidden": "settingsRestoreConfirmation"},
+        {"widget": "settingsInpageFootnotes", "same_as": "footnotes", "check": "Restore returns In-page footnotes to the default"},
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose"}, {"hidden": "settingsPages"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"expect": "inpage_footnotes", "same_as": "start", "timeout": 30000, "check": "The book shows the default footnotes"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "inpage_footnotes", "same_as": "start", "check": "The restored defaults are saved"}
       ],
       "teardown": [
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose", "if": "settingsClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -948,23 +948,23 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsSystem"}, {"reveal": "rrTheming"}, {"press": "rrTheming"},
-        {"reveal": "rrUiFont"}, {"press": "rrUiFont"}, {"visible": "rrSettingsFontPopup"},
-        {"choose": "Kalam", "in": "rrSettingsFontChoices", "next": "rrSettingsFontNext", "previous": "rrSettingsFontPrevious", "keep": "interface"},
-        {"hidden": "rrSettingsFontPopup", "timeout": 30000},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsSystem"}, {"reveal": "settingsTheming"}, {"press": "settingsTheming"},
+        {"reveal": "settingsUiFont"}, {"press": "settingsUiFont"}, {"visible": "settingsFontPopup"},
+        {"choose": "Kalam", "in": "settingsFontChoices", "next": "settingsFontNext", "previous": "settingsFontPrevious", "keep": "interface"},
+        {"hidden": "settingsFontPopup", "timeout": 30000},
         {"expect": "ui_font_substitute", "is": "Kalam", "timeout": 30000, "check": "The interface uses the chosen typeface"},
-        {"widget": "rrApplyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes"},
-        {"reveal": "rrUiFont"}, {"press": "rrUiFont"}, {"visible": "rrSettingsFontPopup"},
-        {"choose": "@interface", "in": "rrSettingsFontChoices", "next": "rrSettingsFontNext", "previous": "rrSettingsFontPrevious"},
-        {"hidden": "rrSettingsFontPopup", "timeout": 30000},
+        {"widget": "applyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes"},
+        {"reveal": "settingsUiFont"}, {"press": "settingsUiFont"}, {"visible": "settingsFontPopup"},
+        {"choose": "@interface", "in": "settingsFontChoices", "next": "settingsFontNext", "previous": "settingsFontPrevious"},
+        {"hidden": "settingsFontPopup", "timeout": 30000},
         {"expect": "ui_font_substitute", "same_as": "start", "timeout": 30000, "check": "The interface returns to its typeface"},
-        {"widget": "rrApplyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes again"}
+        {"widget": "applyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes again"}
       ],
       "teardown": [
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsBack", "if": "rrSettingsBack"},
-        {"press": "rrSettingsClose", "if": "rrSettingsClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsBack", "if": "settingsBack"},
+        {"press": "settingsClose", "if": "settingsClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -977,28 +977,28 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrNavLight"}, {"visible": "rrNavLight"}, {"press": "rrNavLight"}, {"visible": "rrLightPanel"},
-        {"remember": "brightness", "widget": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
-        {"press": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
-        {"widget": "rrAutomaticBrightness", "not_as": "brightness", "if": "rrAutomaticBrightness", "check": "Automatic brightness turns over"},
-        {"press": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
-        {"widget": "rrAutomaticBrightness", "same_as": "brightness", "if": "rrAutomaticBrightness", "check": "Automatic brightness turns back"},
-        {"remember": "warmth", "widget": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
-        {"press": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
-        {"widget": "rrAutomaticWarmth", "not_as": "warmth", "if": "rrAutomaticWarmth", "check": "Automatic warmth turns over"},
-        {"press": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
-        {"widget": "rrAutomaticWarmth", "same_as": "warmth", "if": "rrAutomaticWarmth", "check": "Automatic warmth turns back"},
-        {"remember": "dark", "widget": "rrLightDarkMode"},
-        {"press": "rrLightDarkMode"},
-        {"widget": "rrLightDarkMode", "not_as": "dark", "check": "Dark mode turns over in the light panel"},
+        {"press": "readingPage", "unless": "navigationLight"}, {"visible": "navigationLight"}, {"press": "navigationLight"}, {"visible": "lightPanel"},
+        {"remember": "brightness", "widget": "automaticBrightness", "if": "automaticBrightness"},
+        {"press": "automaticBrightness", "if": "automaticBrightness"},
+        {"widget": "automaticBrightness", "not_as": "brightness", "if": "automaticBrightness", "check": "Automatic brightness turns over"},
+        {"press": "automaticBrightness", "if": "automaticBrightness"},
+        {"widget": "automaticBrightness", "same_as": "brightness", "if": "automaticBrightness", "check": "Automatic brightness turns back"},
+        {"remember": "warmth", "widget": "automaticWarmth", "if": "automaticWarmth"},
+        {"press": "automaticWarmth", "if": "automaticWarmth"},
+        {"widget": "automaticWarmth", "not_as": "warmth", "if": "automaticWarmth", "check": "Automatic warmth turns over"},
+        {"press": "automaticWarmth", "if": "automaticWarmth"},
+        {"widget": "automaticWarmth", "same_as": "warmth", "if": "automaticWarmth", "check": "Automatic warmth turns back"},
+        {"remember": "dark", "widget": "lightDarkMode"},
+        {"press": "lightDarkMode"},
+        {"widget": "lightDarkMode", "not_as": "dark", "check": "Dark mode turns over in the light panel"},
         {"expect": "dark_mode", "not_as": "start", "timeout": 10000, "check": "The page follows dark mode"},
-        {"press": "rrLightDarkMode"},
-        {"widget": "rrLightDarkMode", "same_as": "dark", "check": "Dark mode turns back in the light panel"},
+        {"press": "lightDarkMode"},
+        {"widget": "lightDarkMode", "same_as": "dark", "check": "Dark mode turns back in the light panel"},
         {"expect": "dark_mode", "same_as": "start", "timeout": 10000, "check": "The page returns from dark mode"}
       ],
       "teardown": [
-        {"press": "rrPage", "if": "rrLightPanel"}, {"hidden": "rrLightPanel"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "readingPage", "if": "lightPanel"}, {"hidden": "lightPanel"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1010,28 +1010,28 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsDisplay"}, {"reveal": "rrDarkMode"},
-        {"remember": "option", "widget": "rrDarkMode"},
-        {"press": "rrDarkMode"},
-        {"widget": "rrDarkMode", "not_as": "option", "check": "Dark mode turns over in Settings"},
-        {"widget": "rrDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages", "timeout": 30000},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsDisplay"}, {"reveal": "settingsDarkMode"},
+        {"remember": "option", "widget": "settingsDarkMode"},
+        {"press": "settingsDarkMode"},
+        {"widget": "settingsDarkMode", "not_as": "option", "check": "Dark mode turns over in Settings"},
+        {"widget": "settingsDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying"},
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose"}, {"hidden": "settingsPages", "timeout": 30000},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"expect": "dark_mode", "not_as": "start", "timeout": 10000, "check": "The page follows dark mode"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "dark_mode", "not_as": "start", "check": "Dark mode is saved"},
-        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
-        {"press": "rrSettingsDisplay"}, {"reveal": "rrDarkMode"}, {"press": "rrDarkMode"},
-        {"widget": "rrDarkMode", "same_as": "option", "check": "Dark mode turns back in Settings"},
-        {"widget": "rrDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying again"},
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "readingPage", "unless": "readingMenuSettings"}, {"visible": "readingMenuSettings"}, {"press": "readingMenuSettings"}, {"visible": "settingsPages"},
+        {"press": "settingsDisplay"}, {"reveal": "settingsDarkMode"}, {"press": "settingsDarkMode"},
+        {"widget": "settingsDarkMode", "same_as": "option", "check": "Dark mode turns back in Settings"},
+        {"widget": "settingsDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying again"},
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose"}, {"hidden": "settingsPages"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"expect": "dark_mode", "same_as": "start", "timeout": 10000, "check": "The page returns from dark mode"}
       ],
       "teardown": [
-        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "settingsBack", "if": "settingsBack"}, {"press": "settingsClose", "if": "settingsClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1044,30 +1044,30 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"}, {"press": "rrNavLayout"},
-        {"reveal": "rrOrientation2", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
-        {"press": "rrOrientation2"},
+        {"press": "readingPage", "unless": "navigationLayout"}, {"visible": "navigationLayout"}, {"press": "navigationLayout"},
+        {"reveal": "orientation2", "next": "appearanceNext", "previous": "appearancePrevious"},
+        {"press": "orientation2"},
         {"expect": "viewport_width", "same_as": "start", "field": "viewport_height", "timeout": 10000, "check": "Landscape swaps the width and the height"},
         {"expect": "screen_orientation", "not_as": "start", "check": "Landscape turns the screen"},
         {"settle": true},
-        {"press": "rrNavLayout"}, {"hidden": "rrOrientation2"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "navigationLayout"}, {"hidden": "orientation2"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"remember": "turned"},
         {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true},
         {"expect": "position", "not_as": "turned", "check": "A page turns in landscape"},
-        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"}, {"press": "rrNavLayout"},
-        {"reveal": "rrOrientation1", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
-        {"press": "rrOrientation1"},
+        {"press": "readingPage", "unless": "navigationLayout"}, {"visible": "navigationLayout"}, {"press": "navigationLayout"},
+        {"reveal": "orientation1", "next": "appearanceNext", "previous": "appearancePrevious"},
+        {"press": "orientation1"},
         {"expect": "viewport_width", "same_as": "start", "timeout": 10000, "check": "Portrait restores the width"},
         {"expect": "screen_orientation", "same_as": "start", "check": "Portrait turns the screen back"}
       ],
       "teardown": [
-        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"},
-        {"press": "rrNavLayout", "unless": "rrOrientation1"},
-        {"reveal": "rrOrientation1", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
-        {"press": "rrOrientation1"}, {"settle": true},
-        {"press": "rrNavLayout"}, {"hidden": "rrOrientation1"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "readingPage", "unless": "navigationLayout"}, {"visible": "navigationLayout"},
+        {"press": "navigationLayout", "unless": "orientation1"},
+        {"reveal": "orientation1", "next": "appearanceNext", "previous": "appearancePrevious"},
+        {"press": "orientation1"}, {"settle": true},
+        {"press": "navigationLayout"}, {"hidden": "orientation1"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1082,27 +1082,27 @@
       ],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrBookmarks"}, {"visible": "rrBookmarks"}, {"press": "rrBookmarks"},
-        {"visible": "rrAnnotationMore"}, {"press": "rrAnnotationMore"}, {"visible": "rrBookmarkAddCurrent"}, {"press": "rrBookmarkAddCurrent"},
+        {"press": "readingPage", "unless": "readingMenuBookmarks"}, {"visible": "readingMenuBookmarks"}, {"press": "readingMenuBookmarks"},
+        {"visible": "annotationMore"}, {"press": "annotationMore"}, {"visible": "bookmarkAddCurrent"}, {"press": "bookmarkAddCurrent"},
         {"expect": "bookmark_count", "above": "start", "by": 1, "check": "Add bookmark adds one bookmark"},
         {"expect": "bookmarked", "is": true, "check": "The page shows its bookmark"},
         {"event": "bookmarks-saved", "where": {"failed": false}, "earlier": true},
-        {"press": "rrBookmarkListClose"}, {"hidden": "rrBookmarkListClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"press": "bookmarkListClose"}, {"hidden": "bookmarkListClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true},
         {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true},
         {"expect": "bookmarked", "is": false, "check": "The next page has no bookmark"},
         {"key": "PageUp"}, {"event": "page-turn-painted"}, {"settle": true},
         {"expect": "bookmarked", "is": true, "check": "The bookmark is there after turning back"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "bookmark_count", "above": "start", "by": 1, "check": "The bookmark is saved"},
-        {"press": "rrPage", "unless": "rrBookmarks"}, {"visible": "rrBookmarks"}, {"press": "rrBookmarks"},
-        {"visible": "rrAnnotationMore"}, {"press": "rrAnnotationMore"}, {"visible": "rrBookmarkRemoveCurrent"}, {"press": "rrBookmarkRemoveCurrent"},
+        {"press": "readingPage", "unless": "readingMenuBookmarks"}, {"visible": "readingMenuBookmarks"}, {"press": "readingMenuBookmarks"},
+        {"visible": "annotationMore"}, {"press": "annotationMore"}, {"visible": "bookmarkRemoveCurrent"}, {"press": "bookmarkRemoveCurrent"},
         {"expect": "bookmark_count", "same_as": "start", "check": "Remove bookmark removes it"},
         {"event": "bookmarks-saved", "where": {"failed": false}, "earlier": true}
       ],
       "teardown": [
-        {"press": "rrBookmarkListClose", "if": "rrBookmarkListClose"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "bookmarkListClose", "if": "bookmarkListClose"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1114,23 +1114,23 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrAnnotate"}, {"visible": "rrAnnotate"}, {"press": "rrAnnotate"}, {"hidden": "rrControlsTop"},
+        {"press": "readingPage", "unless": "readingMenuAnnotate"}, {"visible": "readingMenuAnnotate"}, {"press": "readingMenuAnnotate"}, {"hidden": "readingMenuControlsTop"},
         {"hold": {"text": "discourtesy"}, "ms": 1000},
-        {"visible": "rrAnnotationSave"}, {"press": "rrAnnotationSave"},
+        {"visible": "annotationSave"}, {"press": "annotationSave"},
         {"expect": "highlight_count", "above": "start", "by": 1, "check": "Highlight adds one highlight"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "highlight_count", "above": "start", "by": 1, "timeout": 10000, "check": "The highlight is saved"},
-        {"press": "rrPage", "unless": "rrAnnotate"}, {"visible": "rrAnnotate"}, {"press": "rrAnnotate"}, {"hidden": "rrControlsTop"},
+        {"press": "readingPage", "unless": "readingMenuAnnotate"}, {"visible": "readingMenuAnnotate"}, {"press": "readingMenuAnnotate"}, {"hidden": "readingMenuControlsTop"},
         {"hold": {"text": "discourtesy"}, "ms": 1000},
-        {"visible": "rrAnnotationRemove"}, {"press": "rrAnnotationRemove"},
-        {"visible": "rrConfirmRemoveAnnotation"}, {"press": "rrConfirmRemoveAnnotation"}, {"hidden": "rrConfirmRemoveAnnotation"},
+        {"visible": "annotationRemove"}, {"press": "annotationRemove"},
+        {"visible": "confirmRemoveAnnotation"}, {"press": "confirmRemoveAnnotation"}, {"hidden": "confirmRemoveAnnotation"},
         {"expect": "highlight_count", "same_as": "start", "check": "Remove deletes the highlight"},
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
         {"expect": "highlight_count", "same_as": "start", "timeout": 10000, "check": "The removal is saved"}
       ],
       "teardown": [
-        {"press": "rrAnnotationCancel", "if": "rrAnnotationCancel"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "annotationCancel", "if": "annotationCancel"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1141,21 +1141,21 @@
       "book": "benchmark",
       "setup": [
         {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
-        {"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"press": "rrNavChapters"},
-        {"visible": "rrChapter0"}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}
+        {"press": "readingPage", "unless": "navigationChapters"}, {"visible": "navigationChapters"}, {"press": "navigationChapters"},
+        {"visible": "chapter0"}, {"press": "chapter0"}, {"hidden": "contents"}, {"settle": true}
       ],
       "steps": [
         {"remember": "start"},
-        {"press": "rrPage", "unless": "rrSearchOpen"}, {"visible": "rrSearchOpen"}, {"press": "rrSearchOpen"}, {"visible": "rrSearchQuery"},
-        {"type": "discourtesy", "into": "rrSearchQuery"}, {"press": "rrSearchSubmit"},
-        {"widget": "rrSearchResult0", "property": "visible", "is": true, "timeout": 30000, "check": "Search finds the word"},
-        {"widget": "rrSearchResult0", "property": "enabled", "is": true, "timeout": 30000, "check": "The result can be opened"},
-        {"press": "rrSearchResult0"}, {"hidden": "rrSearchQuery"}, {"settle": true},
+        {"press": "readingPage", "unless": "readingMenuSearchOpen"}, {"visible": "readingMenuSearchOpen"}, {"press": "readingMenuSearchOpen"}, {"visible": "searchQuery"},
+        {"type": "discourtesy", "into": "searchQuery"}, {"press": "searchSubmit"},
+        {"widget": "searchResult0", "property": "visible", "is": true, "timeout": 30000, "check": "Search finds the word"},
+        {"widget": "searchResult0", "property": "enabled", "is": true, "timeout": 30000, "check": "The result can be opened"},
+        {"press": "searchResult0"}, {"hidden": "searchQuery"}, {"settle": true},
         {"expect": "position", "not_as": "start", "check": "The result turns to its page"}
       ],
       "teardown": [
-        {"press": "rrSearchBack", "if": "rrSearchBack"},
-        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+        {"press": "searchBack", "if": "searchBack"},
+        {"press": "readingPage", "if": "readingMenuControlsTop"}, {"hidden": "readingMenuControlsTop"}, {"settle": true}
       ]
     },
     {
@@ -1168,13 +1168,13 @@
       "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
       "steps": [
         {"hold": {"text": "discourtesy"}},
-        {"widget": "rrDictionary", "property": "visible", "is": true, "check": "Holding a word opens the dictionary"},
-        {"widget": "rrDictionaryWord", "property": "text", "is_not": "", "timeout": 10000, "check": "The dictionary shows an entry"},
-        {"press": "rrDictionaryClose"},
-        {"widget": "rrDictionary", "property": "visible", "is": false, "check": "Close dismisses the dictionary"}
+        {"widget": "dictionary", "property": "visible", "is": true, "check": "Holding a word opens the dictionary"},
+        {"widget": "dictionaryWord", "property": "text", "is_not": "", "timeout": 10000, "check": "The dictionary shows an entry"},
+        {"press": "dictionaryClose"},
+        {"widget": "dictionary", "property": "visible", "is": false, "check": "Close dismisses the dictionary"}
       ],
       "teardown": [
-        {"press": "rrDictionaryClose", "if": "rrDictionaryClose"}, {"settle": true}
+        {"press": "dictionaryClose", "if": "dictionaryClose"}, {"settle": true}
       ]
     }
   ]

@@ -236,7 +236,8 @@ public:
                 });
         canvas->cancelGesture = [this] {
             if (auto *reader = controller.window())
-                if (auto *page = static_cast<ReadingPage *>(reader->findChild<QWidget *>("rrPage")))
+                if (auto *page =
+                            static_cast<ReadingPage *>(reader->findChild<QWidget *>("readingPage")))
                     page->cancelHold();
         };
         connect(qApp, &QCoreApplication::aboutToQuit, this,
@@ -265,7 +266,7 @@ public:
             setPalette(reader->palette());
             sizeCanvas();
             if (!android::refreshAvailable())
-                if (auto *control = reader->findChild<QWidget *>("rrScreenRefresh"))
+                if (auto *control = reader->findChild<QWidget *>("settingsScreenRefresh"))
                     control->hide();
             reader->show();
             surfaceHandoff.present(true);

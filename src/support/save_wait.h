@@ -48,7 +48,7 @@ public:
     {
         // A child, so tests can find the timer and run it.
         fallback.setParent(this);
-        fallback.setObjectName("rrSaveWaitFallback");
+        fallback.setObjectName("saveWaitFallback");
         fallback.setSingleShot(true);
         fallback.setInterval(fallbackMilliseconds);
         connect(&fallback, &QTimer::timeout, this, [this] {

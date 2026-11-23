@@ -103,9 +103,9 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
             { strings::get("activity.delete_detail").arg(title),
               strings::get("activity.delete_title"),
               {} },
-            { strings::get("common.cancel"), "rrActivityKeepBook" },
-            { strings::get("activity.delete_confirm"), "rrActivityConfirmDelete" });
-    choice->setObjectName("rrActivityDelete");
+            { strings::get("common.cancel"), "activityKeepBook" },
+            { strings::get("activity.delete_confirm"), "activityConfirmDelete" });
+    choice->setObjectName("activityDelete");
     choice->setDimmed(true);
     choice->setGeometry(rect());
     ui::readerStyle(choice->descriptionLabel(),
@@ -146,7 +146,7 @@ void Reader::finishActivityEdit(bool ok)
 {
     if (!ok)
         showNotice({ strings::get("activity.title"), strings::get("activity.change_not_saved"),
-                     QStringLiteral("rrActivityWriteError") });
+                     QStringLiteral("activityWriteError") });
     if (activityOpen() || !chapterGraph->isHidden())
         loadActivity();
 }
@@ -198,11 +198,11 @@ void Reader::showActivityWelcome()
                                        { strings::get("activity.welcome_description"),
                                          strings::get("activity.welcome_title"),
                                          {},
-                                         "rrActivityWelcomeTitle" },
-                                       { strings::get("common.ok"), "rrActivityWelcomeClose" });
+                                         "activityWelcomeTitle" },
+                                       { strings::get("common.ok"), "activityWelcomeClose" });
     activityWelcome = notice;
-    notice->setObjectName("rrActivityWelcome");
-    notice->descriptionLabel()->setObjectName("rrActivityWelcomeText");
+    notice->setObjectName("activityWelcome");
+    notice->descriptionLabel()->setObjectName("activityWelcomeText");
     notice->setGeometry(rect());
     notice->dismissed = [this] { closePopup(activityWelcome); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,

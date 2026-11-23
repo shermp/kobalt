@@ -70,12 +70,12 @@ void Reader::openMarksActions()
         menu = new ui::ActionMenu(
                 this, header,
                 { ui::actionItem(strings::get("annotations.export_markdown"),
-                                 "rrAnnotationExportMarkdown", ui::ControlIcon::Export,
+                                 "annotationExportMarkdown", ui::ControlIcon::Export,
                                  [this] { askExportMarks(AnnotationExportFormat::Markdown); }),
-                  ui::actionItem(strings::get("annotations.export_html"), "rrAnnotationExportHtml",
+                  ui::actionItem(strings::get("annotations.export_html"), "annotationExportHtml",
                                  ui::ControlIcon::Export,
                                  [this] { askExportMarks(AnnotationExportFormat::Html); }) });
-        menu->setObjectName("rrAnnotationActions");
+        menu->setObjectName("annotationActions");
         const bool enabled = highlights->writable() && highlights->resolved()
                 && !highlights->highlights().isEmpty();
         for (auto *action : menu->actions())
@@ -87,13 +87,13 @@ void Reader::openMarksActions()
                 this, {},
                 { ui::actionItem(
                         strings::get(marked ? "bookmarks.remove_current" : "bookmarks.add_current"),
-                        marked ? "rrBookmarkRemoveCurrent" : "rrBookmarkAddCurrent",
+                        marked ? "bookmarkRemoveCurrent" : "bookmarkAddCurrent",
                         marked ? ui::ControlIcon::BookmarkRemove : ui::ControlIcon::BookmarkAdd,
                         [this, current, marked] {
                             if (session->page() == current && bookmarks->marked(current) == marked)
                                 toggleBookmark();
                         }) });
-        menu->setObjectName("rrBookmarkActions");
+        menu->setObjectName("bookmarkActions");
         menu->actions().first()->setEnabled(bookmarks->writable() && bookmarks->resolved()
                                             && session->pages() > 0);
     }
@@ -158,7 +158,7 @@ void Reader::finishMarksExport(AnnotationExportFormat format, bool saved, const 
                                            : strings::get("annotations.export_saved").arg(location),
               strings::get("annotations.export_format_title").arg(exportFormatName(format)),
               {} },
-            { strings::get("common.ok"), "rrAnnotationExportDone" });
+            { strings::get("common.ok"), "annotationExportDone" });
     removeDialog = notice;
     const auto done = [this, notice] {
         notice->hide();
@@ -194,7 +194,7 @@ void Reader::syncPopoverExclusions()
 void Reader::buildAnnotations()
 {
     annotationPopover = new ui::ModalOverlay(this);
-    annotationPopover->setObjectName("rrAnnotationPopover");
+    annotationPopover->setObjectName("annotationPopover");
     annotationPopover->dismissed = [this] {
         // Quick annotation mode keeps no draft without its menu.
         if (!annotationMode || quickAnnotations()) {
@@ -324,9 +324,9 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
         delete item;
     }
     if (highlights->error() == "overlap" && !annotationDraft->range().start.isEmpty())
-        card->message(strings::get("annotations.overlap"), "rrAnnotationOverlap");
+        card->message(strings::get("annotations.overlap"), "annotationOverlap");
     if (!highlights->writable() && !highlights->error().isEmpty())
-        card->message(strings::get("annotations.load_failed"), "rrAnnotationLoadError");
+        card->message(strings::get("annotations.load_failed"), "annotationLoadError");
     int desiredWidth = metrics::links::popupWidth;
     // The choices have no section captions, so that the card covers less of
     // the page. A saved note comes first.
@@ -334,7 +334,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
     if (!note.isEmpty()) {
         auto *noteRow = new ui::Panel(card);
         // The action buttons below draw the divider.
-        noteRow->setObjectName("rrAnnotationNote");
+        noteRow->setObjectName("annotationNote");
         auto *layout = new QHBoxLayout(noteRow);
         layout->setContentsMargins(metrics::chrome::inset, ui::px(20), metrics::chrome::inset,
                                    ui::px(20));
@@ -347,7 +347,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
         icon->setFixedSize(side, side);
         layout->addWidget(icon, 0, Qt::AlignTop);
         auto *text = new ui::PrivateTextLabel(noteRow);
-        text->setObjectName("rrAnnotationNoteText");
+        text->setObjectName("annotationNoteText");
         text->setTextFormat(Qt::PlainText);
         text->setWordWrap(true);
         text->setMaximumLines(3);
@@ -376,13 +376,13 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
         // keeps the saved highlight, as Discard does in the Color step.
         const bool adjusting = !annotationDraft->editingId().isEmpty();
         menuActions.append(
-                { "rrAnnotationCancel",
+                { "annotationCancel",
                   adjusting ? ui::ControlIcon::Undo : ui::ControlIcon::ClearSelection,
                   strings::get(adjusting ? "annotations.discard" : "annotations.cancel_selection"),
                   [this] { clearAnnotationDraft(); } });
     }
     if (compactActions && annotationMode && minimalAnnotationMode() && !quickAnnotations()) {
-        menuActions.append({ "rrAnnotationCloseMode", ui::ControlIcon::Close,
+        menuActions.append({ "annotationCloseMode", ui::ControlIcon::Close,
                              strings::get("annotations.close"), [this] { leaveAnnotations(); } });
     }
     const int paletteHeight =
@@ -492,7 +492,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
     annotationPopover->show();
     annotationPopover->raise();
     if (auto *palette = dynamic_cast<ui::HighlightPalette *>(
-                annotationPopover->findChild<QWidget *>("rrAnnotationPalette"))) {
+                annotationPopover->findChild<QWidget *>("annotationPalette"))) {
         palette->syncRepairBounds();
     }
 }
@@ -928,7 +928,7 @@ void Reader::showAnnotationActions()
     if (bounds.isEmpty())
         bounds = topControls->geometry();
     if (!annotationMode) {
-        QVector<AnnotationAction> actions{ { "rrSelectionLookup", ui::ControlIcon::Dictionary,
+        QVector<AnnotationAction> actions{ { "selectionLookup", ui::ControlIcon::Dictionary,
                                              strings::get("annotations.look_up"), [this] {
                                                  annotationPopover->hide();
                                                  lookupSelection();
@@ -936,7 +936,7 @@ void Reader::showAnnotationActions()
         const auto target = selectionLinkPoint();
         if (target.x() >= 0) {
             actions.insert(1,
-                           { "rrSelectionLink", ui::ControlIcon::Link,
+                           { "selectionLink", ui::ControlIcon::Link,
                              strings::get("reader.follow_link"), [this, target] {
                                  clearAnnotationDraft();
                                  openLink(target);
@@ -945,7 +945,7 @@ void Reader::showAnnotationActions()
         annotationActionsFor(actions, bounds);
         return;
     }
-    QVector<AnnotationAction> actions{ { "rrAnnotationSave", ui::ControlIcon::SaveHighlight,
+    QVector<AnnotationAction> actions{ { "annotationSave", ui::ControlIcon::SaveHighlight,
                                          strings::get(annotationDraft->editingId().isEmpty()
                                                               ? "annotations.mark_text"
                                                               : "annotations.apply_changes"),
@@ -953,7 +953,7 @@ void Reader::showAnnotationActions()
     const bool quickDraft = quickAnnotations() && annotationDraft->editingId().isEmpty();
     if (annotationDraft->editingId().isEmpty()) {
         // Add note saves the highlight first, then writes the note on it.
-        actions.append({ "rrAnnotationAddNote", ui::ControlIcon::Note,
+        actions.append({ "annotationAddNote", ui::ControlIcon::Note,
                          strings::get("annotations.add_note"), [this] {
                              QSet<QString> before;
                              for (const auto &item : highlights->highlights())
@@ -976,8 +976,7 @@ void Reader::showAnnotationActions()
         for (const auto &item : highlights->highlights())
             if (item.id == id)
                 noted = hasHighlightNote(item);
-        actions.append({ noted ? "rrAnnotationEditNote" : "rrAnnotationAddNote",
-                         ui::ControlIcon::Note,
+        actions.append({ noted ? "annotationEditNote" : "annotationAddNote", ui::ControlIcon::Note,
                          strings::get(noted ? "annotations.edit_note" : "annotations.add_note"),
                          [this, id] {
                              prepareAnnotation(false, [this, id] {
@@ -990,7 +989,7 @@ void Reader::showAnnotationActions()
         // Quick annotation mode also offers the actions of an ordinary
         // selection. Both leave annotation mode first, as the hold had not
         // entered it in toggleable mode.
-        actions.append({ "rrSelectionLookup", ui::ControlIcon::Dictionary,
+        actions.append({ "selectionLookup", ui::ControlIcon::Dictionary,
                          strings::get("annotations.look_up"), [this] {
                              annotationPopover->hide();
                              annotationMode = false;
@@ -1002,7 +1001,7 @@ void Reader::showAnnotationActions()
                          } });
         const auto target = selectionLinkPoint();
         if (target.x() >= 0)
-            actions.append({ "rrSelectionLink", ui::ControlIcon::Link,
+            actions.append({ "selectionLink", ui::ControlIcon::Link,
                              strings::get("reader.follow_link"), [this, target] {
                                  clearAnnotationDraft();
                                  leaveAnnotations(false);
@@ -1030,7 +1029,7 @@ void Reader::showAnnotationActions()
 void Reader::syncAnnotationAppearance()
 {
     if (auto *picker = dynamic_cast<ui::HighlightStylePicker *>(
-                annotationPopover->findChild<QWidget *>("rrAnnotationStyles"))) {
+                annotationPopover->findChild<QWidget *>("annotationStyles"))) {
         picker->setSelectedStyle(annotationStyle);
         picker->setColor(colorAnnotations() ? annotationColor : QString("gray"));
     }
@@ -1435,21 +1434,21 @@ void Reader::editAnnotation(const QString &id, bool navigate)
         && annotationDraft->editingId() != id) {
         QRect anchor =
                 annotationActionAnchor.isEmpty() ? topControls->geometry() : annotationActionAnchor;
-        annotationActionsFor({ { "rrAnnotationSwitchSave", ui::ControlIcon::SaveHighlight,
+        annotationActionsFor({ { "annotationSwitchSave", ui::ControlIcon::SaveHighlight,
                                  strings::get("annotations.save_then_edit"),
                                  [this, id, navigate] {
                                      prepareAnnotation(false, [this, id, navigate] {
                                          editAnnotation(id, navigate);
                                      });
                                  } },
-                               { "rrAnnotationSwitchDiscard", ui::ControlIcon::ClearSelection,
+                               { "annotationSwitchDiscard", ui::ControlIcon::ClearSelection,
                                  strings::get("annotations.discard_then_edit"),
                                  [this, id, navigate] {
                                      clearAnnotationDraft();
                                      editAnnotation(id, navigate);
                                  } } },
                              anchor);
-        annotationPopover->findChild<QPushButton *>("rrAnnotationSwitchSave")
+        annotationPopover->findChild<QPushButton *>("annotationSwitchSave")
                 ->setEnabled(!annotationDraft->range().end.isEmpty());
         return;
     }
@@ -1531,19 +1530,18 @@ void Reader::showSavedAnnotationAt(const QString &id, QRect anchor, bool navigat
     annotationColor = item->color;
     annotationStyle = highlightDisplayStyle(item->style);
     annotationActionsFor(
-            { { "rrAnnotationEditNote", ui::ControlIcon::Note,
-                strings::get("annotations.edit_note"), [this, id] { openNoteEditor(id); } },
-              { "rrAnnotationAppearance", ui::ControlIcon::Styling,
+            { { "annotationEditNote", ui::ControlIcon::Note, strings::get("annotations.edit_note"),
+                [this, id] { openNoteEditor(id); } },
+              { "annotationAppearance", ui::ControlIcon::Styling,
                 strings::get(colorAnnotations() ? "annotations.color" : "annotations.style"),
                 [this, id, anchor, navigate] { showSavedAppearance(id, anchor, navigate, true); } },
-              { "rrAnnotationEdit", ui::ControlIcon::EditHighlight,
-                strings::get("annotations.edit"),
+              { "annotationEdit", ui::ControlIcon::EditHighlight, strings::get("annotations.edit"),
                 [this, id, navigate, anchor] {
                     annotationPopover->hide();
                     annotationActionAnchor = anchor;
                     editAnnotation(id, navigate);
                 } },
-              { "rrAnnotationRemove", ui::ControlIcon::RemoveHighlight,
+              { "annotationRemove", ui::ControlIcon::RemoveHighlight,
                 strings::get("annotations.remove"),
                 [this, id] {
                     annotationPopover->hide();
@@ -1562,7 +1560,7 @@ void Reader::showSavedAppearance(const QString &id, QRect anchor, bool navigate,
         }
     }
     QVector<AnnotationAction> actions{
-        { "rrAnnotationApply", ui::ControlIcon::SaveHighlight,
+        { "annotationApply", ui::ControlIcon::SaveHighlight,
           strings::get("annotations.apply_changes"),
           [this, id, anchor] {
               if (highlights->updateAppearance(id, colorAnnotations() ? annotationColor : QString(),
@@ -1575,7 +1573,7 @@ void Reader::showSavedAppearance(const QString &id, QRect anchor, bool navigate,
                   settleQuickAnnotations();
               } else {
                   auto *picker = dynamic_cast<ui::HighlightStylePicker *>(
-                          annotationPopover->findChild<QWidget *>("rrAnnotationStyles"));
+                          annotationPopover->findChild<QWidget *>("annotationStyles"));
                   if (picker) {
                       picker->setError(strings::get("annotations.save_failed"), annotationStyle);
                       auto *card = annotationPopover->card();
@@ -1589,13 +1587,13 @@ void Reader::showSavedAppearance(const QString &id, QRect anchor, bool navigate,
     if (colorStep) {
         // Discard leaves the choices unsaved and returns to the note.
         actions.append(
-                { "rrAnnotationDiscard", ui::ControlIcon::Undo, strings::get("annotations.discard"),
+                { "annotationDiscard", ui::ControlIcon::Undo, strings::get("annotations.discard"),
                   [this, id, anchor, navigate] { showSavedAnnotationAt(id, anchor, navigate); } });
     } else {
-        actions.append({ "rrAnnotationAddNote", ui::ControlIcon::Note,
+        actions.append({ "annotationAddNote", ui::ControlIcon::Note,
                          strings::get("annotations.add_note"),
                          [this, id] { openNoteEditor(id); } });
-        actions.append({ "rrAnnotationEdit", ui::ControlIcon::EditHighlight,
+        actions.append({ "annotationEdit", ui::ControlIcon::EditHighlight,
                          strings::get("annotations.edit"), [this, id, navigate, anchor] {
                              annotationPopover->hide();
                              annotationActionAnchor = anchor;
@@ -1605,7 +1603,7 @@ void Reader::showSavedAppearance(const QString &id, QRect anchor, bool navigate,
                              annotationStyle = style;
                              annotationColorChosen = annotationStyleChosen = true;
                          } });
-        actions.append({ "rrAnnotationRemove", ui::ControlIcon::RemoveHighlight,
+        actions.append({ "annotationRemove", ui::ControlIcon::RemoveHighlight,
                          strings::get("annotations.remove"), [this, id] {
                              annotationPopover->hide();
                              removeAnnotation(id);
@@ -1690,19 +1688,19 @@ void Reader::showAnnotationMatches(QVector<QString> ids, QRect anchor, int listP
             const auto excerpt = strings::get("common.numbered_title")
                                          .arg(i + 1)
                                          .arg(elideBookmarkExcerpt(item.text.simplified(), 36, 36));
-            const QString name = QString("rrAnnotationMatch%1").arg(i);
+            const QString name = QString("annotationMatch%1").arg(i);
             const QString id = item.id;
             actions.append({ name, ui::ControlIcon::Annotate, excerpt,
                              [this, id, anchor] { showSavedAnnotation(id, anchor); } });
         }
     }
     if (pages > 1) {
-        actions.append({ "rrAnnotationMatchPrevious", ui::ControlIcon::Previous,
+        actions.append({ "annotationMatchPrevious", ui::ControlIcon::Previous,
                          strings::get("annotations.previous_matches"),
                          [this, ids, anchor, listPage, pages] {
                              showAnnotationMatches(ids, anchor, (listPage + pages - 1) % pages);
                          } });
-        actions.append({ "rrAnnotationMatchNext", ui::ControlIcon::Next,
+        actions.append({ "annotationMatchNext", ui::ControlIcon::Next,
                          strings::get("annotations.next_matches"),
                          [this, ids, anchor, listPage, pages] {
                              showAnnotationMatches(ids, anchor, (listPage + 1) % pages);
@@ -1738,14 +1736,14 @@ void Reader::removeAnnotation(const QString &id)
             ? strings::get(screen ? "bookmarks.remove_screen_detail" : "bookmarks.remove_detail")
                       .arg(label, excerpt)
             : excerpt;
-    auto *choice = new ui::ChoiceModal(
-            this, { detail, strings::get("annotations.remove_prompt"), {} },
-            { strings::get("common.cancel"), "rrKeepAnnotation" },
-            { strings::get("annotations.remove"), "rrConfirmRemoveAnnotation" });
+    auto *choice =
+            new ui::ChoiceModal(this, { detail, strings::get("annotations.remove_prompt"), {} },
+                                { strings::get("common.cancel"), "keepAnnotation" },
+                                { strings::get("annotations.remove"), "confirmRemoveAnnotation" });
     removeDialog = choice;
-    choice->setObjectName("rrRemoveAnnotation");
+    choice->setObjectName("removeAnnotation");
     auto *text = choice->descriptionLabel();
-    text->setObjectName("rrRemoveAnnotationDetail");
+    text->setObjectName("removeAnnotationDetail");
     ui::readerStyle(text,
                     ui::styles::font(metrics::chrome::descriptionText)
                             + "color:palette(placeholder-text);");

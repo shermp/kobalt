@@ -53,7 +53,7 @@ protected:
 LightPanel::LightPanel(LightControls &light, QWidget *parent)
     : ui::Panel(parent, Qt::BottomEdge), light(light)
 {
-    setObjectName("rrLightPanel");
+    setObjectName("lightPanel");
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, metrics::control::border, 0, 0);
     outer->setSpacing(0);
@@ -69,14 +69,14 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
                                  ? "light_panel.system_brightness_description"
                                  : "light_panel.automatic_brightness_description"),
             this);
-    automaticBrightness->setObjectName("rrAutomaticBrightness");
+    automaticBrightness->setObjectName("automaticBrightness");
     automaticWarmth =
             new ui::DescribedOption(strings::get("light_panel.automatic_warmth"),
                                     strings::get("light_panel.automatic_warmth_description"), this);
-    automaticWarmth->setObjectName("rrAutomaticWarmth");
+    automaticWarmth->setObjectName("automaticWarmth");
     darkMode = new ui::DescribedOption(strings::get("settings.dark_mode"),
                                        strings::get("settings.night_mode_description"), this);
-    darkMode->setObjectName("rrLightDarkMode");
+    darkMode->setObjectName("lightDarkMode");
     darkMode->hide();
     connect(darkMode, &QCheckBox::clicked, this, [this](bool enabled) {
         if (darkModeChanged)
@@ -105,17 +105,17 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
         this->light.setAutomaticWarmth(enabled);
         refreshValues();
     });
-    brightnessSlider = ui::sliderRow(this, rows, "rrBrightness", "rrBrightnessValue",
-                                     strings::get("light_panel.brightness"), "rrBrightnessLess",
-                                     "rrBrightnessMore", 0, 100, 1, {}, {}, "%");
+    brightnessSlider = ui::sliderRow(this, rows, "brightness", "brightnessValue",
+                                     strings::get("light_panel.brightness"), "brightnessLess",
+                                     "brightnessMore", 0, 100, 1, {}, {}, "%");
     brightnessSlider->setMarkers({ 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 });
-    warmthSlider = ui::sliderRow(this, rows, "rrWarmth", "rrWarmthValue",
-                                 strings::get("light_panel.warmth"), "rrWarmthLess", "rrWarmthMore",
-                                 0, 100, 10, {}, {}, "%");
+    warmthSlider =
+            ui::sliderRow(this, rows, "warmth", "warmthValue", strings::get("light_panel.warmth"),
+                          "warmthLess", "warmthMore", 0, 100, 10, {}, {}, "%");
     warmthSlider->setMarkers({ 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
                              ui::SettingSlider::MarkerMode::Stops);
-    brightnessValue = findChild<QLabel *>("rrBrightnessValue");
-    warmthValue = findChild<QLabel *>("rrWarmthValue");
+    brightnessValue = findChild<QLabel *>("brightnessValue");
+    warmthValue = findChild<QLabel *>("warmthValue");
     warmthRow = ui::controlRowOf(warmthSlider);
     automaticRows = new QWidget(controls);
     auto *automaticSection = new QVBoxLayout(automaticRows);
@@ -132,14 +132,14 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
     rows->addWidget(automaticRows);
     rows->addWidget(darkMode);
     swipeTip = new ui::InterfaceLabel(this);
-    swipeTip->setObjectName("rrLightSwipeTip");
+    swipeTip->setObjectName("lightSwipeTip");
     swipeTip->setWordWrap(true);
     ui::readerStyle(
             swipeTip,
             ui::styles::font(metrics::text::secondary)
                     + "font-style:italic;background:transparent;color:palette(placeholder-text);");
     swipeRow = new SwipeBand(this);
-    swipeRow->setObjectName("rrLightSwipeBand");
+    swipeRow->setObjectName("lightSwipeBand");
     ui::readerStyle(swipeRow, "QWidget{background:transparent;}");
     auto *tipLayout = new QHBoxLayout(swipeRow);
     tipLayout->setContentsMargins(

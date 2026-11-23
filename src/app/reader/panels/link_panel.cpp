@@ -19,16 +19,16 @@ namespace chrome = ui::metrics::chrome;
 LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge)
 {
     setEdgeWidth(chrome::heavyRule);
-    setObjectName("rrLinkPanel");
+    setObjectName("linkPanel");
     heading = new ui::PrivateTextLabel(this);
-    heading->setObjectName("rrLinkHeading");
+    heading->setObjectName("linkHeading");
     QFont headingFont = ui::interfaceFont(chrome::countText);
     headingFont.setCapitalization(QFont::AllUppercase);
     heading->setFont(headingFont);
     heading->setTextFormat(Qt::PlainText);
     ui::readerStyle(heading, ui::styles::font(chrome::countText) + "background:transparent;");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
-    close->setObjectName("rrLinkClose");
+    close->setObjectName("linkClose");
     close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("link_panel.close_footnote_or_link"));
     connect(close, &QPushButton::clicked, this, [this] {
@@ -36,11 +36,11 @@ LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge)
             dismissed();
     });
     text = new ui::PagedText(this);
-    text->setObjectName("rrLinkText");
+    text->setObjectName("linkText");
     text->setTextFont(ui::interfaceFont(chrome::labelText));
     text->setMargins(QMargins(chrome::inset, chrome::blockTop, chrome::inset, chrome::blockTop));
-    pages = new ui::PagerBar(this, "rrLink");
-    pages->counter->setObjectName("rrLinkPages");
+    pages = new ui::PagerBar(this, "link");
+    pages->counter->setObjectName("linkPages");
     connect(pages->previous, &QPushButton::clicked, this, [this] {
         text->setPage(text->page() - 1);
         refresh();
@@ -52,7 +52,7 @@ LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge)
     // Like Return to page, the row names where it goes: the chapter that
     // holds the note, usually the book's notes section.
     passage = new ui::CaptionButton(ui::ControlIcon::Link, this);
-    passage->setObjectName("rrLinkOpen");
+    passage->setObjectName("linkOpen");
     passage->setText(strings::get("link_panel.show_in_book"));
     passage->setChevron(true);
     passage->setRule(Qt::TopEdge);
@@ -175,16 +175,15 @@ public:
 } // namespace
 
 WebsiteDialog::WebsiteDialog(QWidget *parent)
-    : ui::ChoiceModal(
-              parent,
-              { " ", strings::get("link_panel.browser_confirmation"), {}, "rrBrowserPrompt" },
-              { strings::get("common.cancel"), "rrLinkNo" },
-              { strings::get("link_panel.open_browser"), "rrLinkOpen" })
+    : ui::ChoiceModal(parent,
+                      { " ", strings::get("link_panel.browser_confirmation"), {}, "browserPrompt" },
+                      { strings::get("common.cancel"), "linkNo" },
+                      { strings::get("link_panel.open_browser"), "linkOpen" })
 {
-    setObjectName("rrBrowserConfirmation");
+    setObjectName("browserConfirmation");
     auto *content = card();
     address = descriptionLabel();
-    address->setObjectName("rrBrowserUrl");
+    address->setObjectName("browserUrl");
     auto *heading = address->parentWidget();
     auto *headingRows = static_cast<QVBoxLayout *>(heading->layout());
     headingRows->removeWidget(address);
@@ -200,7 +199,7 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
                                       metrics::notice::cardMargins.bottom());
     addressLayout->setSpacing(0);
     scroll = new WebsiteAddressScrollArea(addressRow);
-    scroll->setObjectName("rrBrowserUrlScroll");
+    scroll->setObjectName("browserUrlScroll");
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
     address->setTextFormat(Qt::PlainText);
@@ -213,7 +212,7 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
     addressLayout->addWidget(scroll);
     content->rows()->insertWidget(1, addressRow);
     error = new ui::InterfaceLabel(strings::get("link_panel.browser_unavailable"), content);
-    error->setObjectName("rrBrowserError");
+    error->setObjectName("browserError");
     error->setWordWrap(true);
     error->setAlignment(Qt::AlignCenter);
     content->rows()->insertWidget(2, error);

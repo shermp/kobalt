@@ -26,21 +26,21 @@ QString AboutPage::versionText()
 
 AboutPage::AboutPage(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrAbout");
+    setObjectName("about");
     auto *aboutLayout = new QGridLayout(this);
     aboutLayout->setContentsMargins(metrics::about::margins);
     auto *aboutContent = new QWidget(this);
-    aboutContent->setObjectName("rrAboutContent");
+    aboutContent->setObjectName("aboutContent");
     aboutLayout->addWidget(aboutContent, 0, 0, Qt::AlignCenter);
     auto *aboutRows = new QVBoxLayout(aboutContent);
     aboutRows->setContentsMargins(0, 0, 0, 0);
     aboutRows->setSpacing(metrics::about::gap);
     auto *logo = new kobalt::ui::BrandIcon(this);
-    logo->setObjectName("rrAboutLogo");
+    logo->setObjectName("aboutLogo");
     logo->setFixedSize(metrics::about::logoSize, metrics::about::logoSize);
     aboutRows->addWidget(logo, 0, Qt::AlignHCenter);
     auto *wordmark = new ui::InterfaceLabel(strings::get("app.wordmark"), this);
-    wordmark->setObjectName("rrAboutWordmark");
+    wordmark->setObjectName("aboutWordmark");
     wordmark->setAlignment(Qt::AlignCenter);
     readerStyle(wordmark, styles::brand(metrics::about::wordmarkText));
     aboutRows->addWidget(wordmark);
@@ -55,25 +55,25 @@ AboutPage::AboutPage(QWidget *parent) : QWidget(parent)
     };
     // The rules keep more room on their outer side than next to the build lines.
     aboutRows->addSpacing(metrics::about::sectionGap);
-    buildStart = buildRule("rrAboutBuildTop");
+    buildStart = buildRule("aboutBuildTop");
     auto *build = new QVBoxLayout;
     build->setSpacing(metrics::about::buildGap);
     aboutRows->addLayout(build);
     // "Version 0.4 (Qt6)", then the short commit with "*" for uncommitted changes.
     auto *version = new ui::InterfaceLabel(versionText(), this);
-    version->setObjectName("rrAboutVersion");
+    version->setObjectName("aboutVersion");
     version->setAlignment(Qt::AlignCenter);
     build->addWidget(version);
     auto *commit = new ui::InterfaceLabel(
             QString::fromLatin1(kobaltCommit) + (KOBALT_COMMIT_MODIFIED ? "*" : ""), this);
-    commit->setObjectName("rrAboutCommit");
+    commit->setObjectName("aboutCommit");
     commit->setAlignment(Qt::AlignCenter);
     build->addWidget(commit);
     commit->setVisible(kobaltCommit[0] != '\0');
-    buildRule("rrAboutBuildBottom");
+    buildRule("aboutBuildBottom");
     aboutRows->addSpacing(metrics::about::sectionGap);
     description = new ui::InterfaceLabel(strings::get("about.description"), this);
-    description->setObjectName("rrAboutDescription");
+    description->setObjectName("aboutDescription");
     description->setWordWrap(true);
     description->setAlignment(Qt::AlignCenter);
     description->setFixedWidth(metrics::about::textWidth);
@@ -88,7 +88,7 @@ AboutPage::AboutPage(QWidget *parent) : QWidget(parent)
     aboutRows->addLayout(aboutActions);
     aboutActions->addStretch(1);
     acknowledgmentsButton = new ui::Button(strings::get("acknowledgments.acknowledgments"), this);
-    acknowledgmentsButton->setObjectName("rrOpenAcknowledgments");
+    acknowledgmentsButton->setObjectName("openAcknowledgments");
     acknowledgmentsButton->setFocusPolicy(Qt::NoFocus);
     aboutActions->addWidget(acknowledgmentsButton);
     aboutActions->addStretch(1);

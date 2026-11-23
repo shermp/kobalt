@@ -238,17 +238,16 @@ QJsonObject ChoiceScreen::fontSamples() const
     return result;
 }
 
-ChoiceScreen::ChoiceScreen(QWidget *parent)
-    : kobalt::ui::Panel(parent), navigation(this, "rrChoices")
+ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigation(this, "choices")
 {
-    setObjectName("rrChoices");
+    setObjectName("choices");
     fontHeader = new ui::Panel(this, ui::Edges(Qt::TopEdge));
     fontHeader->setEdgeWidth(metrics::chrome::heavyRule);
     fontTitle = new ui::InterfaceLabel(strings::get("reader.choose_typeface"), fontHeader);
-    fontTitle->setObjectName("rrFontTitle");
+    fontTitle->setObjectName("fontTitle");
     readerStyle(fontTitle, styles::font(metrics::text::body, true) + "background:transparent;");
     auto *close = new ui::CellButton(ui::ControlIcon::Close, fontHeader);
-    close->setObjectName("rrFontClose");
+    close->setObjectName("fontClose");
     close->setAccessibleName(strings::get("reader.close_fonts"));
     close->setRule(Qt::LeftEdge);
     connect(close, &QPushButton::clicked, this, [this] {
@@ -256,7 +255,7 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
             back();
     });
     fontClose = close;
-    fontPager = new ui::PagerBar(this, "rrFontPager");
+    fontPager = new ui::PagerBar(this, "fontPager");
     connect(fontPager->previous, &QPushButton::clicked, this, [this] {
         if (pageCount() > 1) {
             page = fontPager->turnTarget(-1);
@@ -270,11 +269,11 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
         }
     });
     fontSectionBar = new ui::Panel(this);
-    fontSectionBar->setObjectName("rrFontSectionBar");
+    fontSectionBar->setObjectName("fontSectionBar");
     fontSectionBar->setFill(QPalette::Midlight);
     fontSectionBar->setDividers(Qt::TopEdge);
     fontSection = new ui::InterfaceLabel(fontSectionBar);
-    fontSection->setObjectName("rrFontSection");
+    fontSection->setObjectName("fontSection");
     fontSection->setFont(ui::captionFont(ui::px(18)));
     readerStyle(fontSection, styles::caption() + "background:transparent;");
     fontHeader->hide();

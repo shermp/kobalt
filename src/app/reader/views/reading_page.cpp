@@ -661,7 +661,7 @@ ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     : QWidget(parent), cancelAnimation(std::move(cancelAnimation))
 {
     Q_ASSERT(this->cancelAnimation);
-    pageTurnAnimation.setObjectName("rrPageTurn");
+    pageTurnAnimation.setObjectName("pageTurn");
     pageTurnAnimation.setParent(this);
     pageTurnAnimation.setDuration(180);
     pageTurnAnimation.setEasingCurve(QEasingCurve::InOutSine);
@@ -678,12 +678,12 @@ ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
         animationFrom = animationTo = {};
         update();
     });
-    setObjectName("rrPage");
+    setObjectName("readingPage");
     setAttribute(Qt::WA_AcceptTouchEvents);
     setAttribute(Qt::WA_OpaquePaintEvent);
     textRefresh(this);
     holdTimer.setParent(this);
-    holdTimer.setObjectName("rrHoldTimer");
+    holdTimer.setObjectName("readingPageHoldTimer");
     holdTimer.setSingleShot(true);
     holdTimer.setInterval(metrics::lookup::holdMilliseconds);
     connect(&holdTimer, &QTimer::timeout, this, [this] { triggerHold(); });

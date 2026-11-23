@@ -317,10 +317,10 @@ void addReaderChoice(void *controller, const void *volume, QMenu *menu)
     auto *widget = item(controller, menu,
                         (choice.kobalt ? strings::get("native_ui.read_with_kobalt")
                                        : strings::get("native_ui.read_with_nickel")),
-                        false, false, "rrAlternativeReaderAction");
+                        false, false, "alternativeReaderAction");
     if (!widget)
         return;
-    widget->setObjectName("rrAlternativeReaderAction");
+    widget->setObjectName("alternativeReaderAction");
     auto *alternate = action(controller, menu, widget, true, true, true);
     if (!alternate) {
         widget->deleteLater();

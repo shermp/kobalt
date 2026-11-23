@@ -31,9 +31,9 @@ inline QString reader()
 {
     return QString("QWidget{font-weight:400;font-family:\"%4\";background:palette(window);color:palette(window-text);} QPushButton{font-size:%1px;min-height:%2px;border:none;padding:%3px;} "
                    "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);} QLabel{font-size:%1px;} "
-                   "QFrame#rrControlsTop,QFrame#rrControlsBottom,QFrame#rrMenu,QFrame#rrGeneralSettings{border:none;} "
-                   "QPushButton#rrReturn,QPushButton#rrChapters{font-weight:bold;} "
-                   "QPushButton#rrLight:checked,QPushButton#rrTypography:checked,QPushButton#rrLayout:checked,QPushButton#rrSettings:checked,QPushButton#rrGraph:checked{background:palette(window-text);color:palette(window);}")
+                   "QFrame#readingMenuControlsTop,QFrame#readingMenuControlsBottom,QFrame#readingMenuPanel,QFrame#settingsPanel{border:none;} "
+                   "QPushButton#readingMenuReturn,QPushButton#readingMenuChapters{font-weight:bold;} "
+                   "QPushButton#readingMenuLight:checked,QPushButton#readingMenuTypography:checked,QPushButton#readingMenuLayout:checked,QPushButton#readingMenuSettings:checked,QPushButton#readingMenuGraph:checked{background:palette(window-text);color:palette(window);}")
             .arg(int(metrics::text::body))
             .arg(int(metrics::control::minimumHeight))
             .arg(int(metrics::control::padding))

@@ -32,7 +32,7 @@ public:
                platform::SleepRefresh &refresh)
         : QWidget(parent), image(std::move(image)), orientation(orientation), refresh(refresh)
     {
-        setObjectName("rrSleepFrame");
+        setObjectName("sleepFrame");
         setAttribute(Qt::WA_OpaquePaintEvent);
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setFocusPolicy(Qt::NoFocus);
@@ -228,7 +228,7 @@ public:
         // library's backing store until that synchronous continuation returns.
         QPointer<QWidget> background = dialog.parentWidget();
         QPointer<QLabel> cover = new QLabel(background);
-        cover->setObjectName("rrHandoffCover");
+        cover->setObjectName("handoffCover");
         cover->setGeometry(background->rect());
         cover->setPixmap(dialog.grab());
         cover->show();

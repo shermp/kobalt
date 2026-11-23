@@ -56,7 +56,7 @@ public:
                 accepted = queue.present(submitActive);
                 return;
             }
-            auto *page = static_cast<ReadingPage *>(content->findChild<QWidget *>("rrPage"));
+            auto *page = static_cast<ReadingPage *>(content->findChild<QWidget *>("readingPage"));
             policy.prepare(content, this->canvas->viewport(), page, region,
                            [this, &submitActive](RefreshFrame frame) {
                                frame.clean = frame.clean || cleanPending;

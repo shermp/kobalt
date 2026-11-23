@@ -30,7 +30,7 @@ QRect stripBounds(const QRect &page, qreal scale, const QImage &image, bool foot
 
 AppearancePreview::AppearancePreview(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrAppearancePreview");
+    setObjectName("appearancePreview");
     // A tap in this space still reaches the page and closes the panel.
     setAttribute(Qt::WA_TransparentForMouseEvents);
     // It paints its whole rectangle. Without this, an update of the page behind it
@@ -65,7 +65,7 @@ void AppearancePreview::setContent(Content next)
     // it first appears, and each repaint is a visible e-ink update.
     if (content.text && !textHeader) {
         textHeader = new ui::ListHeader(this);
-        textHeader->setObjectName("rrTextPreviewHeader");
+        textHeader->setObjectName("textPreviewHeader");
         textHeader->setShaded(true);
         textHeader->setCaptions(strings::get("reader.appearance_preview").toUpper());
         textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());

@@ -291,7 +291,7 @@ void paintCellRules(QPainter &painter, const QWidget *view, const QVector<StatsC
 class WeekBars final : public QWidget
 {
 public:
-    explicit WeekBars(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityWeek"); }
+    explicit WeekBars(QWidget *parent) : QWidget(parent) { setObjectName("activityWeek"); }
 
     void setWeek(const QVector<qint64> &values, int todayIndex)
     {
@@ -418,18 +418,18 @@ class ActivityOverview final : public ActivityPage
 public:
     explicit ActivityOverview(QWidget *parent) : ActivityPage(parent)
     {
-        setObjectName("rrActivityOverview");
-        todayCell = new StatsCell(this, "rrActivityToday", strings::get("activity.today"));
-        streakCell = new StatsCell(this, "rrActivityStreak", strings::get("activity.streak"));
-        weekBand = band(this, "rrActivityWeekBand");
+        setObjectName("activityOverview");
+        todayCell = new StatsCell(this, "activityToday", strings::get("activity.today"));
+        streakCell = new StatsCell(this, "activityStreak", strings::get("activity.streak"));
+        weekBand = band(this, "activityWeekBand");
         week = new WeekBars(this);
-        totalBand = band(this, "rrActivityTotalBand");
+        totalBand = band(this, "activityTotalBand");
         const char *const names[] = { "Reading", "Finished", "Sessions", "Days", "Words", "Books" };
         const char *const titles[] = { "activity.reading",     "activity.finished",
                                        "activity.sessions",    "activity.days_read",
                                        "activity.saved_words", "activity.books" };
         for (int index = 0; index < 6; ++index)
-            totals.append(new StatsCell(this, QString("rrActivity") + names[index],
+            totals.append(new StatsCell(this, QString("activity") + names[index],
                                         strings::get(titles[index])));
     }
 
@@ -585,7 +585,7 @@ namespace {
 class MonthGrid final : public QWidget
 {
 public:
-    explicit MonthGrid(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityMonth"); }
+    explicit MonthGrid(QWidget *parent) : QWidget(parent) { setObjectName("activityMonth"); }
 
     void setMonth(const QDate &first, const QMap<QDate, qint64> &values, const QDate &now,
                   const QDate &since)
@@ -707,7 +707,7 @@ protected:
 class YearStrip final : public QWidget
 {
 public:
-    explicit YearStrip(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityYear"); }
+    explicit YearStrip(QWidget *parent) : QWidget(parent) { setObjectName("activityYear"); }
 
     int setYear(const QMap<QDate, qint64> &values, const QDate &now, const QDate &since)
     {
@@ -794,20 +794,20 @@ class ActivityCalendar final : public ActivityPage
 public:
     explicit ActivityCalendar(QWidget *parent) : ActivityPage(parent)
     {
-        setObjectName("rrActivityCalendar");
-        months = new ui::PagerBar(this, "rrActivityMonths");
+        setObjectName("activityCalendar");
+        months = new ui::PagerBar(this, "activityMonths");
         months->setTopDivider(false);
         ui::readerStyle(months->counter,
                         ui::styles::font(ui::metrics::text::small, true)
                                 + "background:transparent;");
         connect(months->previous, &QPushButton::clicked, this, [this] { step(-1); });
         connect(months->next, &QPushButton::clicked, this, [this] { step(1); });
-        streak = new StatsCell(this, "rrActivityCurrentStreak", strings::get("activity.streak"));
-        longest = new StatsCell(this, "rrActivityLongest", strings::get("activity.longest"));
-        month = new StatsCell(this, "rrActivityMonthTotal", strings::get("activity.this_month"));
+        streak = new StatsCell(this, "activityCurrentStreak", strings::get("activity.streak"));
+        longest = new StatsCell(this, "activityLongest", strings::get("activity.longest"));
+        month = new StatsCell(this, "activityMonthTotal", strings::get("activity.this_month"));
         grid = new MonthGrid(this);
         legend = new ShadeLegend(this);
-        yearBand = band(this, "rrActivityYearBand");
+        yearBand = band(this, "activityYearBand");
         year = new YearStrip(this);
         cells = { streak, longest, month };
     }
@@ -1180,7 +1180,7 @@ public:
         if (!hiddenRow)
             return;
         hiddenLink =
-                new LinkRow(this, "rrActivityHiddenBooks", strings::get("activity.hidden_books"));
+                new LinkRow(this, "activityHiddenBooks", strings::get("activity.hidden_books"));
         hiddenLink->hide();
         connect(hiddenLink, &QPushButton::clicked, this, [this] {
             if (hiddenRequested)
@@ -1311,7 +1311,7 @@ private:
                 const auto &month = months[item.month];
                 if (item.book < 0) {
                     if (bandsUsed == bands.size())
-                        bands.append(band(this, "rrActivityMonthBand"));
+                        bands.append(band(this, "activityMonthBand"));
                     auto *header = bands[bandsUsed++];
                     setBand(header,
                             month.month.isValid()
@@ -1409,7 +1409,7 @@ namespace {
 class HourBars final : public QWidget
 {
 public:
-    explicit HourBars(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityHours"); }
+    explicit HourBars(QWidget *parent) : QWidget(parent) { setObjectName("activityHours"); }
 
     void setHours(const QVector<qint64> &values, int peak)
     {
@@ -1627,7 +1627,7 @@ int badgeColumn(const QVector<activity::Milestone> &milestones)
 class Badges final : public QWidget
 {
 public:
-    explicit Badges(QWidget *parent, const QString &name = QStringLiteral("rrActivityMilestones"))
+    explicit Badges(QWidget *parent, const QString &name = QStringLiteral("activityMilestones"))
         : QWidget(parent)
     {
         setObjectName(name);
@@ -1771,15 +1771,15 @@ class ActivityRecordsPage final : public ActivityPage
 public:
     explicit ActivityRecordsPage(QWidget *parent) : ActivityPage(parent)
     {
-        setObjectName("rrActivityRecords");
-        hoursBand = band(this, "rrActivityHoursBand");
+        setObjectName("activityRecords");
+        hoursBand = band(this, "activityHoursBand");
         hours = new HourBars(this);
-        recordsBand = band(this, "rrActivityRecordsBand");
+        recordsBand = band(this, "activityRecordsBand");
         for (int index = 0; index < 3; ++index)
             records.append(new RecordRow(this));
-        milestonesBand = band(this, "rrActivityMilestonesBand");
+        milestonesBand = band(this, "activityMilestonesBand");
         badges = new Badges(this);
-        all = new LinkRow(this, "rrActivityAllMilestones", strings::get("activity.all_milestones"));
+        all = new LinkRow(this, "activityAllMilestones", strings::get("activity.all_milestones"));
         connect(all, &QPushButton::clicked, this, [this] {
             if (allRequested)
                 allRequested();
@@ -1948,13 +1948,13 @@ public:
     explicit ActivityMilestones(QWidget *parent) : ActivityPage(parent)
     {
         // Not "…MilestonesPage": the pager names its counter that.
-        setObjectName("rrActivityMilestonesScreen");
+        setObjectName("activityMilestonesScreen");
         const char *const names[] = { "Books", "Hours", "Streak", "Days" };
         for (int kind = 0; kind < 4; ++kind) {
-            bands.append(band(this, QString("rrActivity%1MilestonesBand").arg(names[kind])));
-            ladders.append(new Badges(this, QString("rrActivity%1Milestones").arg(names[kind])));
+            bands.append(band(this, QString("activity%1MilestonesBand").arg(names[kind])));
+            ladders.append(new Badges(this, QString("activity%1Milestones").arg(names[kind])));
             auto *phrase = new ui::InterfaceLabel(this);
-            phrase->setObjectName(QString("rrActivity%1MilestonesPhrase").arg(names[kind]));
+            phrase->setObjectName(QString("activity%1MilestonesPhrase").arg(names[kind]));
             phrase->setWordWrap(true);
             phrase->setAlignment(Qt::AlignLeft | Qt::AlignTop);
             ui::readerStyle(phrase,
@@ -1962,7 +1962,7 @@ public:
                                     + "background:transparent;color:palette(placeholder-text);");
             phrases.append(phrase);
         }
-        pager = new ui::PagerBar(this, "rrActivityMilestones");
+        pager = new ui::PagerBar(this, "activityMilestones");
         connect(pager->previous, &QPushButton::clicked, this, [this] {
             page = pager->turnTarget(-1);
             arrange();
@@ -2183,7 +2183,7 @@ public:
                 + sizes::labelGap + ui::px(110);
     }
 
-    explicit BookChart(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityBookChart"); }
+    explicit BookChart(QWidget *parent) : QWidget(parent) { setObjectName("activityBookChart"); }
 
     // Percent at the end of each reading day, oldest first, and the projected
     // finish date or an invalid date.
@@ -2419,7 +2419,7 @@ public:
 
     explicit BookHeading(QWidget *parent) : QWidget(parent)
     {
-        setObjectName("rrActivityBookHeading");
+        setObjectName("activityBookHeading");
     }
 
     void setBook(const QString &name, const QString &by, int value, bool done)
@@ -2531,17 +2531,17 @@ class ActivityBookPage final : public ActivityPage
 public:
     explicit ActivityBookPage(QWidget *parent) : ActivityPage(parent)
     {
-        setObjectName("rrActivityBookPage");
+        setObjectName("activityBookPage");
         heading = new BookHeading(this);
-        timeCell = new StatsCell(this, "rrActivityBookTime", strings::get("activity.time_read"));
+        timeCell = new StatsCell(this, "activityBookTime", strings::get("activity.time_read"));
         sessionsCell =
-                new StatsCell(this, "rrActivityBookSessions", strings::get("activity.sessions"));
-        lastCell = new StatsCell(this, "rrActivityBookLast", strings::get("activity.to_finish"));
+                new StatsCell(this, "activityBookSessions", strings::get("activity.sessions"));
+        lastCell = new StatsCell(this, "activityBookLast", strings::get("activity.to_finish"));
         cells = { timeCell, sessionsCell, lastCell };
-        chartBand = band(this, "rrActivityChartBand");
+        chartBand = band(this, "activityChartBand");
         chart = new BookChart(this);
-        sessionsBand = band(this, "rrActivitySessionsBand");
-        pager = new ui::PagerBar(this, "rrActivitySessions");
+        sessionsBand = band(this, "activitySessionsBand");
+        pager = new ui::PagerBar(this, "activitySessions");
         connect(pager->previous, &QPushButton::clicked, this,
                 [this] { showSessions(pager->turnTarget(-1)); });
         connect(pager->next, &QPushButton::clicked, this,
@@ -2752,12 +2752,12 @@ private:
 
 ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
 {
-    setObjectName("rrActivity");
+    setObjectName("activity");
     header = new ui::Panel(this, Qt::BottomEdge);
-    header->setObjectName("rrActivityHeader");
+    header->setObjectName("activityHeader");
     static_cast<ui::Panel *>(header)->setEdgeWidth(chrome::heavyRule);
     back = new ui::CellButton(ui::ControlIcon::Back, header);
-    back->setObjectName("rrActivityBack");
+    back->setObjectName("activityBack");
     back->setAccessibleName(strings::get("common.back"));
     back->setRule(Qt::RightEdge);
     back->hide();
@@ -2770,12 +2770,12 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
         arrange();
     });
     title = new reader::SettingsTitle(strings::get("activity.title"), header);
-    title->setObjectName("rrActivityTitle");
+    title->setObjectName("activityTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     // A book's page can hide the book from the lists or delete its activity.
     hideCell = new ui::CellButton(ui::ControlIcon::Hidden, header);
-    hideCell->setObjectName("rrActivityHideBook");
+    hideCell->setObjectName("activityHideBook");
     hideCell->setCheckable(true);
     hideCell->setRule(Qt::LeftEdge);
     hideCell->hide();
@@ -2784,7 +2784,7 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
             hideRequested(bookKey, hidden);
     });
     deleteCell = new ui::CellButton(ui::ControlIcon::Trash, header);
-    deleteCell->setObjectName("rrActivityDeleteBook");
+    deleteCell->setObjectName("activityDeleteBook");
     deleteCell->setAccessibleName(strings::get("activity.delete_book"));
     deleteCell->setToolTip(strings::get("activity.delete_book"));
     deleteCell->setRule(Qt::LeftEdge);
@@ -2794,7 +2794,7 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
             deleteRequested(bookKey, activity::bookTotal(records, bookKey, summary.today).title);
     });
     close = new ui::CellButton(ui::ControlIcon::Close, header);
-    close->setObjectName("rrActivityClose");
+    close->setObjectName("activityClose");
     close->setAccessibleName(strings::get("activity.close"));
     close->setRule(Qt::LeftEdge);
     connect(close, &QPushButton::clicked, this, [this] {
@@ -2802,13 +2802,13 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
             closed();
     });
     message = new ui::InterfaceLabel(this);
-    message->setObjectName("rrActivityMessage");
+    message->setObjectName("activityMessage");
     message->setAlignment(Qt::AlignCenter);
     message->setWordWrap(true);
     ui::readerStyle(message, ui::styles::font(chrome::labelText) + "background:transparent;");
     overview = new ActivityOverview(this);
     calendar = new ActivityCalendar(this);
-    books = new ActivityBooks(this, "rrActivityBooks", "rrActivityBook", true);
+    books = new ActivityBooks(this, "activityBooks", "activityBook", true);
     books->chosen = [this](QDate month, const QString &key) {
         for (const auto &group : summary.months)
             if (group.month == month && group.copies.contains(key)) {
@@ -2831,13 +2831,13 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
         detail = Detail::Hidden;
         arrange();
     };
-    hiddenPage = new ActivityBooks(this, "rrActivityHidden", "rrActivityHiddenBook", false);
+    hiddenPage = new ActivityBooks(this, "activityHidden", "activityHiddenBook", false);
     hiddenPage->chosen = [this](QDate, const QString &key) {
         openBook(key);
         bookReturn = Detail::Hidden;
     };
     hiddenPage->coversRequested = books->coversRequested;
-    copiesPage = new ActivityBooks(this, "rrActivityCopies", "rrActivityCopy", false);
+    copiesPage = new ActivityBooks(this, "activityCopies", "activityCopy", false);
     copiesPage->showCopySource = true;
     copiesPage->chosen = [this](QDate, const QString &key) {
         openBook(key);
@@ -2860,7 +2860,7 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
                                       ui::ControlIcon::Books, ui::ControlIcon::Crown };
     for (int index = 0; index < 4; ++index) {
         auto *tab = new ui::CellButton(icons[index], header);
-        tab->setObjectName(QString("rrActivity%1Tab").arg(names[index]));
+        tab->setObjectName(QString("activity%1Tab").arg(names[index]));
         tab->setAccessibleName(strings::get(labels[index]));
         tab->setToolTip(strings::get(labels[index]));
         tab->setCheckable(true);

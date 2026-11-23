@@ -135,8 +135,8 @@ public:
     Cell(QWidget *parent, int slot, bool editable)
         : ui::Button(parent), slot(slot), editable(editable)
     {
-        setObjectName(QString(editable ? "rrHeaderFooterSlot%1" : "rrHeaderFooterPresetSlot%1")
-                              .arg(slot));
+        setObjectName(
+                QString(editable ? "headerFooterSlot%1" : "headerFooterPresetSlot%1").arg(slot));
         setFocusPolicy(Qt::NoFocus);
         setEnabled(editable);
     }
@@ -218,7 +218,7 @@ private:
 
 SlotMap::SlotMap(QWidget *parent, bool editable) : QWidget(parent)
 {
-    setObjectName(editable ? "rrHeaderFooterCustomMap" : "rrHeaderFooterPresetMap");
+    setObjectName(editable ? "headerFooterCustomMap" : "headerFooterPresetMap");
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
         cells[slot] = new Cell(this, slot, editable);
@@ -387,7 +387,7 @@ void SlotMap::paintEvent(QPaintEvent *)
 PresetCard::PresetCard(Preset preset, QWidget *parent)
     : ui::Button(parent), value(preset), miniature(headerfooter::presetLayout(preset))
 {
-    setObjectName("rrHeaderFooterPreset_" + headerfooter::presetValue(preset));
+    setObjectName("headerFooterPreset_" + headerfooter::presetValue(preset));
     setCheckable(true);
     setFocusPolicy(Qt::NoFocus);
     setAccessibleName(headerfooter::presetLabel(preset));
@@ -546,18 +546,18 @@ void paintBarRule(QWidget *owner, int height)
 
 HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent)
 {
-    setObjectName("rrHeaderFooterView");
+    setObjectName("headerFooterView");
     heading = new ui::Panel(this, Qt::BottomEdge);
     heading->setEdgeWidth(metrics::chrome::heavyRule);
-    title = barTitle(heading, "rrHeaderFooterTitle");
+    title = barTitle(heading, "headerFooterTitle");
     title->setText(strings::get("header_footer.customize_title"));
     title->setWordWrap(true);
     fontButton = new ui::CellButton(ui::ControlIcon::Typography, heading);
-    fontButton->setObjectName("rrStripFontPicker");
+    fontButton->setObjectName("stripFontPicker");
     fontButton->setAccessibleName(strings::get("settings.header_footer_font"));
     fontButton->setRule(Qt::LeftEdge);
     close = new ui::CellButton(ui::ControlIcon::Close, heading);
-    close->setObjectName("rrHeaderFooterClose");
+    close->setObjectName("headerFooterClose");
     close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("header_footer.close"));
     connect(close, &QPushButton::clicked, this, [this] {
@@ -565,9 +565,9 @@ HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent)
             closed();
     });
     clip = new QWidget(this);
-    clip->setObjectName("rrHeaderFooterClip");
+    clip->setObjectName("headerFooterClip");
     content = new QWidget(clip);
-    pager = new ui::PagerBar(this, "rrHeaderFooter");
+    pager = new ui::PagerBar(this, "headerFooter");
     connect(pager->previous, &QPushButton::clicked, this,
             [this] { showPage(pager->turnTarget(-1)); });
     connect(pager->next, &QPushButton::clicked, this, [this] { showPage(pager->turnTarget(1)); });
@@ -651,21 +651,21 @@ void HeaderFooterView::showPage(int page)
 
 FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent)
 {
-    setObjectName("rrHeaderFooterChooser");
+    setObjectName("headerFooterChooser");
     // The same close cell as Chapters: it leaves without a new choice.
     auto *close = new ui::CellButton(ui::ControlIcon::Close, this);
     close->setRule(Qt::LeftEdge);
-    close->setObjectName("rrHeaderFooterFieldsClose");
+    close->setObjectName("headerFooterFieldsClose");
     close->setAccessibleName(strings::get("header_footer.close_fields"));
     finish = close;
     connect(finish, &QPushButton::clicked, this, [this] {
         if (done)
             done();
     });
-    title = barTitle(this, "rrHeaderFooterChooserTitle");
+    title = barTitle(this, "headerFooterChooserTitle");
     // The slot's own case, as a settings checkbox on the right of the bar.
     uppercase = new ui::DescribedOption(strings::get("header_footer.uppercase"), {}, this);
-    uppercase->setObjectName("rrHeaderFooterUppercase");
+    uppercase->setObjectName("headerFooterUppercase");
     auto look = uppercase->presentation();
     look.indicator = ui::DescribedOption::Indicator::Square;
     // The same size as the checkboxes in Settings and the Light panel.
@@ -679,24 +679,24 @@ FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent)
             uppercaseChanged(on);
     });
     heading = new ui::ListHeader(this);
-    heading->setObjectName("rrHeaderFooterChooserHeading");
+    heading->setObjectName("headerFooterChooserHeading");
     heading->setCaptions(strings::get("header_footer.fields"), strings::get("header_footer.shows"));
     // A pick-one list: the slot's field has the filled radio, and each row
     // shows on its right what the field would show now.
     list = new ui::RadioList(this);
-    list->setObjectName("rrHeaderFooterFields");
+    list->setObjectName("headerFooterFields");
     list->setMinimumRowHeight(headerFooterMetrics::fieldRowHeight);
     // Only the described fields need the room for a second line.
     list->setUniformRows(false);
     for (const auto field : headerfooter::choosableFields)
-        list->add("rrHeaderFooterField_" + headerfooter::fieldValue(field),
+        list->add("headerFooterField_" + headerfooter::fieldValue(field),
                   headerfooter::fieldLabel(field), headerfooter::fieldDescription(field));
     list->chosen = [this](int index) {
         if (selected)
             selected(headerfooter::choosableFields[index]);
     };
     // Rows that do not fit go to further pages, with the same pager as Chapters.
-    pager = new ui::PagerBar(this, "rrHeaderFooterFields");
+    pager = new ui::PagerBar(this, "headerFooterFields");
     pager->previous->setAccessibleName(strings::get("header_footer.previous_fields"));
     pager->next->setAccessibleName(strings::get("header_footer.next_fields"));
     connect(pager->previous, &QPushButton::clicked, this, [this] {

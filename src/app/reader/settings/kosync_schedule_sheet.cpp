@@ -308,7 +308,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
                                          const kosync::Schedule &schedule, Features features)
     : ui::ModalOverlay(parent), automatic_(automatic), schedule_(schedule)
 {
-    setObjectName("rrKosyncAutomaticPopup");
+    setObjectName("kosyncAutomaticPopup");
     setDimmed(true);
     setGeometry(parent->rect());
     dismissed = [this] {
@@ -330,12 +330,12 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     headerRow->setContentsMargins(0, 0, 0, metrics::control::border);
     headerRow->setSpacing(0);
     auto *title = new ui::InterfaceLabel(strings::get("kosync.automatic"), header);
-    title->setObjectName("rrKosyncAutomaticTitle");
+    title->setObjectName("kosyncAutomaticTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title, ui::styles::font(chrome::labelText, true));
     headerRow->addWidget(title, 1);
     auto *close = new ui::CellButton(ui::ControlIcon::Close, header);
-    close->setObjectName("rrKosyncAutomaticClose");
+    close->setObjectName("kosyncAutomaticClose");
     close->setAccessibleName(strings::get("settings.close"));
     close->setRule(Qt::LeftEdge);
     close->setFixedSize(chrome::cellWidth, chrome::actionHeight - metrics::control::border);
@@ -350,17 +350,17 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     // can page between them.
     QVBoxLayout *modeRows = nullptr;
     auto *mode = padded(card, rows, { 0, px(24), 0, 0 }, &modeRows);
-    mode->setObjectName("rrKosyncAutomaticModeRow");
+    mode->setObjectName("kosyncAutomaticModeRow");
     // The segmented row keeps the sheet's side inset; the rule below spans the card.
     auto *choiceArea = new QWidget(mode);
     auto *choiceRows = new QVBoxLayout(choiceArea);
     choiceRows->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     choiceRows->setSpacing(0);
     modeRows->addWidget(choiceArea);
-    ui::SegmentedRow modeChoice(choiceArea, choiceRows, "rrKosyncAutomaticMode",
+    ui::SegmentedRow modeChoice(choiceArea, choiceRows, "kosyncAutomaticMode",
                                 strings::get("kosync.automatic"));
-    off_ = modeChoice.add("rrKosyncAutomaticOff", strings::get("common.off"));
-    on_ = modeChoice.add("rrKosyncAutomaticOn", strings::get("common.on"));
+    off_ = modeChoice.add("kosyncAutomaticOff", strings::get("common.off"));
+    on_ = modeChoice.add("kosyncAutomaticOn", strings::get("common.on"));
     connect(off_, &QPushButton::clicked, this, [this] {
         if (!automatic_)
             return;
@@ -387,7 +387,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     details_.append(
             padded(card, rows, { chrome::inset, px(32), chrome::inset, px(8) }, &headingRows));
     headingRows->addWidget(sheetLabel(details_.last(), strings::get("kosync.when_heading"),
-                                      "rrKosyncWhenHeading", chrome::labelText, false));
+                                      "kosyncWhenHeading", chrome::labelText, false));
     // Each moment: an icon, what happens, and for reading its interval.
     const auto moment = [&](ui::ControlIcon icon, const char *name, const char *titleKey,
                             const char *descriptionKey, QWidget *trailing) {
@@ -442,7 +442,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     };
     // While you read comes first: its interval is the choice on this list.
     interval_ = new ui::DropdownButton(card);
-    interval_->setObjectName("rrKosyncInterval");
+    interval_->setObjectName("kosyncInterval");
     interval_->setFocusPolicy(Qt::NoFocus);
     const int dropdownHeight = metrics::control::segmentHeight
             + 2 * int(metrics::control::segmentVerticalPadding) + 2 * int(metrics::control::border);
@@ -458,15 +458,15 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     // DropdownButton keeps fontButtonWidthReserve for its padding and arrow.
     interval_->setFixedWidth(intervalWidth + int(metrics::choices::fontButtonWidthReserve) + px(8));
     connect(interval_, &QPushButton::clicked, this, [this] { showIntervals(); });
-    moment(ui::ControlIcon::Clock, "rrKosyncWhenReading", "kosync.when_reading",
+    moment(ui::ControlIcon::Clock, "kosyncWhenReading", "kosync.when_reading",
            "kosync.when_reading_description", interval_);
-    switchable(ui::ControlIcon::Dictionary, "rrKosyncOnOpen", "kosync.when_open",
+    switchable(ui::ControlIcon::Dictionary, "kosyncOnOpen", "kosync.when_open",
                "kosync.when_open_description", &kosync::Schedule::onOpen);
     // Only a device with a sleep and wake lifecycle offers this moment.
     if (features.sleepWake)
-        switchable(ui::ControlIcon::Moon, "rrKosyncOnSleepWake", "kosync.when_sleep_wake",
+        switchable(ui::ControlIcon::Moon, "kosyncOnSleepWake", "kosync.when_sleep_wake",
                    "kosync.when_sleep_wake_description", &kosync::Schedule::onSleepWake);
-    switchable(ui::ControlIcon::Door, "rrKosyncOnClose", "kosync.when_close",
+    switchable(ui::ControlIcon::Door, "kosyncOnClose", "kosync.when_close",
                "kosync.when_close_description", &kosync::Schedule::onClose);
     // The gap before the Wi-Fi divider belongs to the list, so a page that
     // starts with the Wi-Fi section has its divider right under the header.
@@ -476,7 +476,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
     // Only a host that can turn on Wi-Fi for a sync offers the Wi-Fi choice.
     if (features.wifi) {
         wifi_ = new QWidget(card);
-        wifi_->setObjectName("rrKosyncWifiRow");
+        wifi_->setObjectName("kosyncWifiRow");
         auto *wifiBlock = new QVBoxLayout(wifi_);
         wifiBlock->setContentsMargins(0, 0, 0, 0);
         wifiBlock->setSpacing(0);
@@ -490,14 +490,14 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic,
         padded(wifi_, wifiBlock, { chrome::inset, px(32), chrome::inset, px(36) }, &wifiRows);
         wifiRows->setSpacing(px(20));
         wifiRows->addWidget(sheetLabel(wifi_, strings::get("kosync.wifi_heading"),
-                                       "rrKosyncWifiHeading", chrome::labelText, false));
+                                       "kosyncWifiHeading", chrome::labelText, false));
         auto *tiles = new QHBoxLayout;
         tiles->setSpacing(px(32));
         wait_ = new KosyncWifiTile(
-                "rrKosyncWifiWait", { ui::ControlIcon::WifiDisconnected, ui::ControlIcon::Clock },
+                "kosyncWifiWait", { ui::ControlIcon::WifiDisconnected, ui::ControlIcon::Clock },
                 strings::get("kosync.wifi_wait_picture"), strings::get("kosync.wifi_wait"),
                 strings::get("kosync.wifi_wait_outcome"), wifi_);
-        wake_ = new KosyncWifiTile("rrKosyncWifiWake",
+        wake_ = new KosyncWifiTile("kosyncWifiWake",
                                    { ui::ControlIcon::WifiHigh, ui::ControlIcon::Sync,
                                      ui::ControlIcon::WifiDisconnected },
                                    strings::get("kosync.wifi_wake_picture"),
@@ -570,22 +570,22 @@ void KosyncScheduleSheet::showIntervals()
     // closes it and returns to the sheet.
     auto *list = new ui::ModalOverlay(parentWidget());
     intervals_ = list;
-    list->setObjectName("rrKosyncIntervalPopup");
+    list->setObjectName("kosyncIntervalPopup");
     list->setDimmed(true);
     list->setGeometry(parentWidget()->rect());
     list->dismissed = [this] { dismissIntervals(); };
     auto *card = list->card();
     card->heading(strings::get("kosync.when_reading"), strings::get("kosync.interval_description"),
-                  "rrKosyncIntervalTitle", "rrKosyncIntervalHint");
+                  "kosyncIntervalTitle", "kosyncIntervalHint");
     const int cardWidth = qMin<int>(metrics::notice::cardWidth,
                                     parentWidget()->width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
-    choices->setObjectName("rrKosyncIntervalChoices");
+    choices->setObjectName("kosyncIntervalChoices");
     choices->setUniformRows(false);
     choices->setMinimumRowHeight(chrome::listActionHeight);
     const auto &values = kosync::scheduleMinutes();
     for (const int minutes : values)
-        choices->add("rrKosyncInterval_" + intervalKey(minutes), intervalLabel(minutes));
+        choices->add("kosyncInterval_" + intervalKey(minutes), intervalLabel(minutes));
     choices->setCurrent(qMax(0, values.indexOf(schedule_.minutes)));
     choices->chosen = [this, values](int index) {
         const int minutes = values.value(index, schedule_.minutes);
@@ -603,7 +603,7 @@ void KosyncScheduleSheet::showIntervals()
     // A phone in landscape pages the rows, as Reader::openSleepChoice does.
     const int available = parentWidget()->height() - 2 * metrics::notice::sideClearance;
     if (card->height() > available) {
-        auto *pager = new ui::PagerBar(card, "rrKosyncIntervalPopup");
+        auto *pager = new ui::PagerBar(card, "kosyncIntervalPopup");
         card->rows()->addWidget(pager);
         const int fixed = card->height() - choices->height();
         const int room = qMax(1, available - fixed - int(chrome::actionHeight));

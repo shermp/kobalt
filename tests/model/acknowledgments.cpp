@@ -79,12 +79,12 @@ int main(int argc, char **argv)
         button(name)->click();
         app.processEvents();
     };
-    auto *counter = panel.findChild<QLabel *>("rrAcknowledgmentsPage");
-    auto *heading = panel.findChild<QLabel *>("rrAcknowledgmentsGroup_kobalt");
+    auto *counter = panel.findChild<QLabel *>("acknowledgmentsPage");
+    auto *heading = panel.findChild<QLabel *>("acknowledgmentsGroup_kobalt");
     require(heading && heading->isVisibleTo(&panel)
                     && heading->text() == kobalt::strings::get("acknowledgments.group_kobalt"),
             "The first page does not start with the Kobalt heading");
-    auto *engine = panel.findChild<QLabel *>("rrAcknowledgmentsGroup_engine");
+    auto *engine = panel.findChild<QLabel *>("acknowledgmentsGroup_engine");
     require(engine, "The engine heading is missing");
     bool statement = false;
     for (auto *label : panel.findChildren<QLabel *>())
@@ -92,23 +92,23 @@ int main(int argc, char **argv)
                 && label->text().startsWith(kobalt::strings::get(
                         "acknowledgments.kobalt_is_distributed_under_the_gnu_agpl_v3_without_any_warranty"));
     require(statement, "The license and warranty statement is not shown");
-    require(button("rrAcknowledgmentsPrevious")->isEnabled(),
+    require(button("acknowledgmentsPrevious")->isEnabled(),
             "Previous cannot wrap on first list page");
-    click("rrAcknowledgmentsPrevious");
+    click("acknowledgmentsPrevious");
     const auto finalListPage = counter->text().split(" of ");
     require(finalListPage.first() == finalListPage.last(),
             "Acknowledgments did not wrap backwards");
-    click("rrAcknowledgmentsNext");
+    click("acknowledgmentsNext");
     require(counter->text().startsWith("1 of"), "Acknowledgments did not wrap forwards");
-    click("rrAcknowledgmentsNext");
+    click("acknowledgmentsNext");
     require(counter->text().startsWith("2 of"), "Project list did not advance");
-    click("rrAcknowledgmentsPrevious");
-    click("rrAcknowledgment0");
-    require(button("rrAcknowledgmentsNext")->isEnabled(), "Long license was not paginated");
-    auto *license = panel.findChild<QWidget *>("rrLicenseText");
+    click("acknowledgmentsPrevious");
+    click("acknowledgment0");
+    require(button("acknowledgmentsNext")->isEnabled(), "Long license was not paginated");
+    auto *license = panel.findChild<QWidget *>("licenseText");
     require(QFontInfo(license->font()).fixedPitch(), "License font is not monospace");
     auto checkBottom = [&] {
-        auto *text = panel.findChild<QWidget *>("rrLicenseText");
+        auto *text = panel.findChild<QWidget *>("licenseText");
         const auto image = text->grab().toImage();
         const auto paper = text->palette().color(QPalette::Window);
         for (int y = image.height() - 4; y < image.height(); ++y)
@@ -117,19 +117,19 @@ int main(int argc, char **argv)
                         "License line reaches the screen cut-off");
     };
     checkBottom();
-    click("rrAcknowledgmentsNext");
+    click("acknowledgmentsNext");
     require(counter->text().startsWith("2 of"), "License did not advance");
     panel.resize(1448, 1072);
     app.processEvents();
     require(counter->text().startsWith("2 of"), "Rotation lost the license page");
     int turns = 0;
-    while (button("rrAcknowledgmentsNext")->isEnabled() && turns++ < 200) {
-        click("rrAcknowledgmentsNext");
+    while (button("acknowledgmentsNext")->isEnabled() && turns++ < 200) {
+        click("acknowledgmentsNext");
         checkBottom();
     }
     require(turns < 200, "License paging did not stop at its end");
-    click("rrAcknowledgmentsBack");
-    auto *title = panel.findChild<QLabel *>("rrAcknowledgmentsTitle");
+    click("acknowledgmentsBack");
+    auto *title = panel.findChild<QLabel *>("acknowledgmentsTitle");
     require(title->text() == kobalt::strings::get("acknowledgments.acknowledgments"),
             "Back did not return to projects");
     // On a Libra Colour, a short notice fits on one page and its pager stays hidden.
@@ -140,19 +140,19 @@ int main(int argc, char **argv)
         if (entries.at(i).toObject().value("name").toString() == "xxHash")
             index = i;
     require(index >= 0, "The short xxHash notice is missing");
-    const auto name = QString("rrAcknowledgment%1").arg(index).toUtf8();
+    const auto name = QString("acknowledgment%1").arg(index).toUtf8();
     for (int turns = 0; !(panel.findChild<QPushButton *>(name.constData())
                           && panel.findChild<QPushButton *>(name.constData())->isVisible())
          && turns < 10;
          ++turns)
-        click("rrAcknowledgmentsNext");
+        click("acknowledgmentsNext");
     click(name.constData());
-    require(title->text() == "xxHash" && !button("rrAcknowledgmentsNext")->isVisibleTo(&panel),
+    require(title->text() == "xxHash" && !button("acknowledgmentsNext")->isVisibleTo(&panel),
             "A one-page notice shows a pager");
-    click("rrAcknowledgmentsBack");
+    click("acknowledgmentsBack");
     bool finished = false;
     panel.finished = [&] { finished = true; };
-    click("rrAcknowledgmentsBack");
+    click("acknowledgmentsBack");
     require(finished, "Back did not return to settings");
     std::puts("PASS: embedded notices, project and license paging, rotation and back navigation");
 }

@@ -4,17 +4,17 @@
 #include <QPointer>
 #include <QScrollArea>
 #include <QTouchEvent>
+#include <QVariant>
 #include <QWidget>
 
 namespace kobalt::nickel_qt5 {
 namespace {
-// Kobalt names its top-level windows with an "rr" prefix. Its popups are
-// separate windows whose parent widgets lead back to the reader.
+// Popups inherit touch handling from their owning reader or opening window.
 bool ownWindow(const QWidget *widget)
 {
     for (const QWidget *window = widget ? widget->window() : nullptr; window;
          window = window->parentWidget() ? window->parentWidget()->window() : nullptr)
-        if (window->objectName().startsWith("rr"))
+        if (window->property("kobalt_touch_window").toBool())
             return true;
     return false;
 }

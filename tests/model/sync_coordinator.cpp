@@ -151,7 +151,7 @@ void waitingRead(const QString &path, Coordinator::Readiness readiness, bool not
         if (!timer->isActive())
             continue;
         require(timer->isSingleShot(), "Waiting for the reader left a repeating timer running");
-        if (timer->objectName() != "rrKosyncDeadline") {
+        if (timer->objectName() != "kosyncDeadline") {
             require(readiness != Coordinator::Readiness::Hidden,
                     "Hidden reader kept a readiness timer");
             require(timer->interval() >= 1000, "Busy reader kept a fast readiness timer");
@@ -289,7 +289,7 @@ void finalUpload(const QString &path, bool timeout)
     current.queueSyncTime = true;
     int done = 0;
     owner.flush(true, [&] { ++done; });
-    auto *deadline = owner.findChild<QTimer *>("rrKosyncDeadline");
+    auto *deadline = owner.findChild<QTimer *>("kosyncDeadline");
     require(deadline && deadline->isActive() && deadline->interval() == 2000 && owner.finalPending()
                     && !oldUpload->isFinished() && http.replies.size() == 2 && done == 0
                     && radio->released == 0,

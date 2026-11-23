@@ -179,7 +179,7 @@ QAction *alternative(QMenu &menu)
 #endif
     for (auto *action : menu.actions()) {
         auto *item = qobject_cast<QWidgetAction *>(action);
-        if (item && item->defaultWidget()->objectName() == "rrAlternativeReaderAction")
+        if (item && item->defaultWidget()->objectName() == "alternativeReaderAction")
             return action;
     }
     return nullptr;

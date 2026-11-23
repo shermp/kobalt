@@ -299,7 +299,7 @@ class SectionChevron final : public QWidget
 public:
     explicit SectionChevron(QPushButton *row) : QWidget(row), row(row)
     {
-        setObjectName("rrSettingsSectionChevron");
+        setObjectName("settingsSectionChevron");
         ui::readerStyle(this, "background:transparent;");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         row->installEventFilter(this);
@@ -341,7 +341,7 @@ class StylingPreview final : public QWidget
 public:
     explicit StylingPreview(QWidget *parent) : QWidget(parent)
     {
-        setObjectName("rrStylingPreview");
+        setObjectName("settingsStylingPreview");
         setAttribute(Qt::WA_OpaquePaintEvent);
     }
 
@@ -575,14 +575,14 @@ void SettingsTitle::paintEvent(QPaintEvent *event)
 SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     : ui::Panel(parent, Qt::BottomEdge), inputs(inputs)
 {
-    setObjectName("rrGeneralSettings");
+    setObjectName("settingsPanel");
     setSoftEdges(true);
     auto *generalRows = new QVBoxLayout(this);
     generalRows->setSizeConstraint(QLayout::SetNoConstraint);
     generalRows->setContentsMargins(0, 0, 0, 0);
     generalRows->setSpacing(0);
     auto *heading = new ui::Panel(this, Qt::BottomEdge);
-    heading->setObjectName("rrSettingsHeader");
+    heading->setObjectName("settingsHeader");
     heading->setEdgeWidth(chrome::heavyRule);
     heading->setFixedHeight(chrome::actionHeight);
     auto *headingRows = new QHBoxLayout(heading);
@@ -590,7 +590,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     headingRows->setContentsMargins(0, 0, 0, chrome::heavyRule);
     headingRows->setSpacing(0);
     backButton = new ui::CellButton(ui::ControlIcon::Back, heading);
-    backButton->setObjectName("rrSettingsBack");
+    backButton->setObjectName("settingsBack");
     backButton->setAccessibleName(strings::get("common.back"));
     backButton->setRule(Qt::RightEdge);
     backButton->setFixedWidth(chrome::cellWidth);
@@ -607,14 +607,14 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             refitRequested();
     });
     settingsTitle = new SettingsTitle(strings::get("settings.title"), heading);
-    settingsTitle->setObjectName("rrSettingsTitle");
+    settingsTitle->setObjectName("settingsTitle");
     settingsTitle->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     readerStyle(settingsTitle, styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(settingsTitle, 1);
     // The close cell sits on the right, as in Text Presets. An open section
     // replaces it with the back cell on the left.
     closeButton = new ui::CellButton(ui::ControlIcon::Close, heading);
-    closeButton->setObjectName("rrSettingsClose");
+    closeButton->setObjectName("settingsClose");
     closeButton->setAccessibleName(strings::get("settings.close"));
     closeButton->setRule(Qt::LeftEdge);
     closeButton->setFixedWidth(chrome::cellWidth);
@@ -628,7 +628,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     sectionRows->setContentsMargins(0, 0, 0, 0);
     sectionRows->setSpacing(0);
     tabRail = new QWidget(sections);
-    tabRail->setObjectName("rrSettingsRail");
+    tabRail->setObjectName("settingsRail");
     auto *settingsTabs = new QBoxLayout(QBoxLayout::TopToBottom, tabRail);
     settingsTabs->setContentsMargins(0, 0, 0, 0);
     settingsTabs->setSpacing(0);
@@ -640,11 +640,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     optionsRows->setSizeConstraint(QLayout::SetNoConstraint);
     sectionRows->addWidget(optionsColumn, 1);
     optionsViewport = new ui::Panel(optionsColumn, Qt::LeftEdge);
-    optionsViewport->setObjectName("rrSettingsViewport");
+    optionsViewport->setObjectName("settingsViewport");
     optionsRows->addWidget(optionsViewport, 1);
     optionsClip = new QWidget(optionsViewport);
-    optionsClip->setObjectName("rrSettingsPageClip");
-    optionsPager = new ui::PagerBar(optionsColumn, "rrSettingsOptions");
+    optionsClip->setObjectName("settingsPageClip");
+    optionsPager = new ui::PagerBar(optionsColumn, "settingsOptions");
     optionsPager->previous->setRule(ui::Edges(Qt::LeftEdge) | Qt::RightEdge);
     optionsPager->next->setRule(ui::Edges(Qt::LeftEdge) | Qt::RightEdge);
     optionsRows->addWidget(optionsPager);
@@ -656,14 +656,14 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsPages = new QStackedWidget(optionsClip);
     settingsPages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     settingsPages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
-    settingsPages->setObjectName("rrSettingsPages");
+    settingsPages->setObjectName("settingsPages");
     readerStyle(settingsPages,
                 QString("QStackedWidget{border:0;border-left:%1px solid palette(window-text);}")
                         .arg(int(metrics::control::border)));
     auto *tabGroup = new QButtonGroup(this);
-    const char *tabNames[] = { "rrSettingsDisplay", "rrSettingsControls",     "rrSettingsDefaults",
-                               "rrSettingsStyling", "rrSettingsDictionaries", "rrSettingsSystem",
-                               "rrSettingsAbout",   "rrSettingsKosync",       "rrSettingsDebug" };
+    const char *tabNames[] = { "settingsDisplay", "settingsControls",     "settingsDefaults",
+                               "settingsStyling", "settingsDictionaries", "settingsSystem",
+                               "settingsAbout",   "settingsKosync",       "settingsDebug" };
     const ui::ControlIcon tabIcons[] = { ui::ControlIcon::Display,      ui::ControlIcon::Swipe,
                                          ui::ControlIcon::Undo,         ui::ControlIcon::Styling,
                                          ui::ControlIcon::Dictionaries, ui::ControlIcon::System,
@@ -812,11 +812,11 @@ void SettingsPanel::ensurePage(SettingsPage page)
 
 void SettingsPanel::buildDisplay(QWidget *displayPage)
 {
-    displayPage->setObjectName("rrDisplayOptions");
+    displayPage->setObjectName("settingsDisplayOptions");
     auto *generalOptions = new QVBoxLayout(displayPage);
     generalOptions->setContentsMargins(0, 0, 0, 0);
     generalOptions->setSpacing(0);
-    darkOption = darkModeOption(displayPage, "rrDarkMode");
+    darkOption = darkModeOption(displayPage, "settingsDarkMode");
     const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
     const auto animationDescription =
             strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
@@ -824,34 +824,35 @@ void SettingsPanel::buildDisplay(QWidget *displayPage)
                                  : animationsSupported ? "settings.animations_description"
                                                        : "settings.unsupported_description");
     animationOption =
-            settingsOption(displayPage, "rrPageAnimations",
+            settingsOption(displayPage, "settingsPageAnimations",
                            strings::get("reader.enable_page_animations"), animationDescription);
     animationOption->setLeadingIcon(ui::ControlIcon::Note);
     animationOption->setEnabled(animationsSupported);
-    bionicOption =
-            settingsOption(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
-                           strings::get("reader.bionic_description"));
+    bionicOption = settingsOption(displayPage, "settingsBionicReading",
+                                  strings::get("reader.bold_reading"),
+                                  strings::get("reader.bionic_description"));
     bionicOption->setLeadingIcon(ui::ControlIcon::TextB);
-    section(displayPage, generalOptions, "rrDisplayModesSection",
+    section(displayPage, generalOptions, "settingsDisplayModesHeading",
             strings::get("settings.section_modes"));
-    zenModeOption = settingsOption(displayPage, "rrZenMode", strings::get("settings.zen_mode"),
-                                   strings::get("settings.zen_mode_description"));
+    zenModeOption =
+            settingsOption(displayPage, "settingsZenMode", strings::get("settings.zen_mode"),
+                           strings::get("settings.zen_mode_description"));
     zenModeOption->setLeadingIcon(ui::ControlIcon::Lotus);
-    auto *displayMark = ui::makeZenMark(zenModeOption, "rrDisplayZenMark");
+    auto *displayMark = ui::makeZenMark(zenModeOption, "settingsDisplayZenMark");
     displayMark->setText(zenModeOption->text().toUpper());
     zenModeOption->setTitleLabel(displayMark);
     generalOptions->addWidget(zenModeOption);
     generalOptions->addWidget(darkOption);
     generalOptions->addWidget(bionicOption);
-    section(displayPage, generalOptions, "rrDisplayLayoutSection",
+    section(displayPage, generalOptions, "settingsDisplayLayoutHeading",
             strings::get("reader.page_layout"));
-    columnsButton = listAction(displayPage, generalOptions, "rrColumnsSettings",
+    columnsButton = listAction(displayPage, generalOptions, "settingsColumnsSettings",
                                strings::get("settings.landscape_column_layout"), [] { });
     columnsButton->setIconVisible(true);
     ui::buttonIcon(columnsButton, ui::ControlIcon::TwoColumns);
-    section(displayPage, generalOptions, "rrDisplayScreenSection",
+    section(displayPage, generalOptions, "settingsDisplayScreenHeading",
             strings::get("settings.section_screen"));
-    refreshButton = listAction(displayPage, nullptr, "rrScreenRefresh",
+    refreshButton = listAction(displayPage, nullptr, "settingsScreenRefresh",
                                strings::get("reader.refresh_the_screen"), [] { });
     refreshButton->setIconVisible(true);
     ui::buttonIcon(refreshButton, ui::ControlIcon::Refresh);
@@ -862,58 +863,58 @@ void SettingsPanel::buildDisplay(QWidget *displayPage)
 
 void SettingsPanel::buildControls(QWidget *controlsPage)
 {
-    controlsPage->setObjectName("rrControlsOptions");
+    controlsPage->setObjectName("settingsControlsOptions");
     auto *controlsRows = new QVBoxLayout(controlsPage);
     controlsRows->setContentsMargins(0, 0, 0, 0);
     controlsRows->setSpacing(0);
-    section(controlsPage, controlsRows, "rrControlsNavigationSection",
+    section(controlsPage, controlsRows, "settingsControlsNavigationHeading",
             strings::get("settings.section_navigation"));
-    pageNavigationButton = listAction(controlsPage, nullptr, "rrPageNavigation",
+    pageNavigationButton = listAction(controlsPage, nullptr, "settingsPageNavigation",
                                       strings::get("settings.page_navigation"), [] { });
     controlsRows->addWidget(pageNavigationButton);
-    buttonControlsButton = listAction(controlsPage, nullptr, "rrButtonControls",
+    buttonControlsButton = listAction(controlsPage, nullptr, "settingsButtonControls",
                                       strings::get("buttons.hardware_title"), [] { });
     controlsRows->addWidget(buttonControlsButton);
-    tapZonesButton = listAction(controlsPage, nullptr, "rrTapZones",
+    tapZonesButton = listAction(controlsPage, nullptr, "settingsTapZones",
                                 strings::get("settings.tap_zones"), [] { });
     controlsRows->addWidget(tapZonesButton);
-    section(controlsPage, controlsRows, "rrControlsChapterListSection",
+    section(controlsPage, controlsRows, "settingsControlsChapterListHeading",
             strings::get("settings.section_chapter_list"));
-    chapterGroupsButton = listAction(controlsPage, nullptr, "rrChapterGroups",
+    chapterGroupsButton = listAction(controlsPage, nullptr, "settingsChapterGroups",
                                      strings::get("settings.chapter_groups"), [] { });
     controlsRows->addWidget(chapterGroupsButton);
-    section(controlsPage, controlsRows, "rrControlsLinksSection",
+    section(controlsPage, controlsRows, "settingsControlsLinksHeading",
             strings::get("settings.section_links"));
-    tappableLinksButton = listAction(controlsPage, nullptr, "rrTappableLinks",
+    tappableLinksButton = listAction(controlsPage, nullptr, "settingsTappableLinks",
                                      strings::get("settings.tappable_links"), [] { });
     controlsRows->addWidget(tappableLinksButton);
-    section(controlsPage, controlsRows, "rrControlsAnnotationsSection",
+    section(controlsPage, controlsRows, "settingsControlsAnnotationsHeading",
             strings::get("settings.section_annotations"));
     annotationInteractionButton =
-            listAction(controlsPage, nullptr, "rrAnnotationInteraction",
+            listAction(controlsPage, nullptr, "settingsAnnotationInteraction",
                        strings::get("settings.annotation_interaction"), [] { });
     controlsRows->addWidget(annotationInteractionButton);
-    section(controlsPage, controlsRows, "rrControlsMenuSection",
+    section(controlsPage, controlsRows, "settingsControlsMenuHeading",
             strings::get("settings.section_reading_menu"));
-    menuViewButton = listAction(controlsPage, nullptr, "rrDefaultMenuView",
+    menuViewButton = listAction(controlsPage, nullptr, "settingsDefaultMenuView",
                                 strings::get("settings.default_menu_view"), [] { });
     controlsRows->addWidget(menuViewButton);
-    section(controlsPage, controlsRows, "rrControlsNavigationBarSection",
+    section(controlsPage, controlsRows, "settingsControlsNavigationBarHeading",
             strings::get("settings.section_navigation_bar"));
-    navigationBarButton = listAction(controlsPage, nullptr, "rrNavigationBarButtons",
+    navigationBarButton = listAction(controlsPage, nullptr, "settingsNavigationBarButtons",
                                      strings::get("settings.navigation_bar_buttons"), [] { });
     controlsRows->addWidget(navigationBarButton);
     minimalAnnotationOption =
-            settingsOption(controlsPage, "rrMinimalAnnotationMode",
+            settingsOption(controlsPage, "settingsMinimalAnnotationMode",
                            strings::get("settings.minimal_annotation_mode"),
                            strings::get("settings.minimal_annotation_mode_description"));
     minimalAnnotationOption->hide();
-    section(controlsPage, controlsRows, "rrControlsLightSection",
+    section(controlsPage, controlsRows, "settingsControlsLightHeading",
             strings::get(inputs.screenBrightness ? "light_panel.brightness"
                                                  : "settings.section_frontlight"));
     const bool lightSupported = inputs.lightSupported;
     edgeLightOption = settingsOption(
-            controlsPage, "rrEdgeLight",
+            controlsPage, "settingsEdgeLight",
             strings::get(inputs.screenBrightness ? "reader.edge_brightness" : "reader.edge_light"),
             !lightSupported ? strings::get("settings.unsupported_description")
                     : inputs.warmthSupported
@@ -922,7 +923,7 @@ void SettingsPanel::buildControls(QWidget *controlsPage)
     edgeLightOption->setEnabled(lightSupported);
     controlsRows->addWidget(edgeLightOption);
     lightGestureFeedbackOption = settingsOption(
-            controlsPage, "rrLightGestureFeedback",
+            controlsPage, "settingsLightGestureFeedback",
             strings::get(inputs.screenBrightness ? "settings.brightness_gesture_feedback"
                                                  : "settings.light_gesture_feedback"),
             strings::get("settings.light_gesture_feedback_description"));
@@ -947,36 +948,36 @@ void SettingsPanel::buildControls(QWidget *controlsPage)
 
 void SettingsPanel::buildDefaults(QWidget *defaultsPage)
 {
-    defaultsPage->setObjectName("rrDefaultsOptions");
+    defaultsPage->setObjectName("settingsDefaultsOptions");
     auto *defaultsRows = new QVBoxLayout(defaultsPage);
     defaultsRows->setContentsMargins(0, 0, 0, 0);
     defaultsRows->setSpacing(0);
-    section(defaultsPage, defaultsRows, "rrDefaultsNewBooksSection",
+    section(defaultsPage, defaultsRows, "settingsDefaultsNewBooksHeading",
             strings::get("settings.section_new_books"));
-    textForNewBooksButton = listAction(defaultsPage, defaultsRows, "rrTextForNewBooks",
+    textForNewBooksButton = listAction(defaultsPage, defaultsRows, "settingsTextForNewBooks",
                                        strings::get("settings.text_for_new_books"), [] { });
-    section(defaultsPage, defaultsRows, "rrDefaultsGlobalFontSection",
+    section(defaultsPage, defaultsRows, "settingsDefaultsGlobalFontHeading",
             strings::get("settings.section_default_global_font"));
-    defaultFontButton = listAction(defaultsPage, nullptr, "rrDefaultFont",
+    defaultFontButton = listAction(defaultsPage, nullptr, "settingsDefaultFont",
                                    strings::get("reader.default_font"), [] { });
     defaultsRows->addWidget(defaultFontButton);
     // Fallback fonts are global font defaults too, so they sit with the
     // default font rather than with the typography settings.
-    section(defaultsPage, defaultsRows, "rrFontsFamiliesSection",
+    section(defaultsPage, defaultsRows, "settingsDefaultsFontsFamiliesHeading",
             strings::get("settings.font_families"));
-    serifFontButton = listAction(defaultsPage, defaultsRows, "rrSerifFont",
+    serifFontButton = listAction(defaultsPage, defaultsRows, "settingsSerifFont",
                                  strings::get("settings.serif_font"), [] { });
-    sansFontButton = listAction(defaultsPage, defaultsRows, "rrSansFont",
+    sansFontButton = listAction(defaultsPage, defaultsRows, "settingsSansFont",
                                 strings::get("settings.sans_font"), [] { });
-    monoFontButton = listAction(defaultsPage, defaultsRows, "rrMonoFont",
+    monoFontButton = listAction(defaultsPage, defaultsRows, "settingsMonoFont",
                                 strings::get("settings.mono_font"), [] { });
-    section(defaultsPage, defaultsRows, "rrDefaultsRestoreSection",
+    section(defaultsPage, defaultsRows, "settingsDefaultsRestoreHeading",
             strings::get("reader.restore_defaults"));
     // Only this book's text, as a new book would start now.
     auto *bookRow = kobalt::ui::horizontalRow();
     defaultsRows->addLayout(bookRow);
     bookRow->addStretch(1);
-    resetBook = listAction(defaultsPage, bookRow, "rrRestoreBookDefaults",
+    resetBook = listAction(defaultsPage, bookRow, "settingsRestoreBookDefaults",
                            strings::get("reader.restore_book_defaults"), [this] {
                                settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                auto *dialog = restoreBookConfirmation();
@@ -988,7 +989,7 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
     auto *resetRow = kobalt::ui::horizontalRow();
     defaultsRows->addLayout(resetRow);
     resetRow->addStretch(1);
-    resetDefaults = listAction(defaultsPage, resetRow, "rrRestoreDefaults",
+    resetDefaults = listAction(defaultsPage, resetRow, "settingsRestoreDefaults",
                                strings::get("reader.restore_appearance_defaults"), [this] {
                                    settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                    auto *dialog = restoreConfirmation();
@@ -1002,7 +1003,7 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
     auto *presetsRow = kobalt::ui::horizontalRow();
     defaultsRows->addLayout(presetsRow);
     presetsRow->addStretch(1);
-    resetPresets = listAction(defaultsPage, presetsRow, "rrRestorePresets",
+    resetPresets = listAction(defaultsPage, presetsRow, "settingsRestorePresets",
                               strings::get("text_presets.restore"), [this] {
                                   settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                   auto *dialog = restorePresetsConfirmation();
@@ -1021,52 +1022,52 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
 
 void SettingsPanel::buildStyling(QWidget *stylingPage)
 {
-    stylingPage->setObjectName("rrStylingOptions");
+    stylingPage->setObjectName("settingsStylingOptions");
     auto *stylingRows = new QVBoxLayout(stylingPage);
     stylingRows->setContentsMargins(0, 0, 0, 0);
     stylingRows->setSpacing(0);
     // Group line styling, paragraph layout and page spacing separately.
-    section(stylingPage, stylingRows, "rrAdvancedTextSection",
+    section(stylingPage, stylingRows, "settingsStylingAdvancedTextHeading",
             strings::get("settings.section_words_letters"));
     wordSpacingButton = listAction(
-            stylingPage, stylingRows, "rrWordSpacing", strings::get("settings.word_spacing"),
+            stylingPage, stylingRows, "settingsWordSpacing", strings::get("settings.word_spacing"),
             [] { }, true);
     trackingButton = listAction(
-            stylingPage, stylingRows, "rrJustificationTracking",
+            stylingPage, stylingRows, "settingsJustificationTracking",
             strings::get("settings.justification_tracking"), [] { }, true);
     hangingPunctuationButton = listAction(
-            stylingPage, stylingRows, "rrHangingPunctuation",
+            stylingPage, stylingRows, "settingsHangingPunctuation",
             strings::get("settings.hanging_punctuation"), [] { }, true);
     hangingPunctuationButton->setDescription(strings::get("settings.hanging_punctuation_summary"));
-    section(stylingPage, stylingRows, "rrParagraphSpacingSection",
+    section(stylingPage, stylingRows, "settingsStylingParagraphSpacingHeading",
             strings::get("settings.section_paragraphs"));
     paragraphSpacingButton = listAction(
-            stylingPage, stylingRows, "rrParagraphSpacing",
+            stylingPage, stylingRows, "settingsParagraphSpacing",
             strings::get("settings.paragraph_spacing"), [] { }, true);
     paragraphSpacingButton->setDescription(strings::get("settings.paragraph_spacing_summary"));
     widowsOrphansButton = listAction(
-            stylingPage, stylingRows, "rrWidowsOrphans", strings::get("settings.widows_orphans"),
-            [] { }, true);
-    section(stylingPage, stylingRows, "rrVerticalSpacingSection",
+            stylingPage, stylingRows, "settingsWidowsOrphans",
+            strings::get("settings.widows_orphans"), [] { }, true);
+    section(stylingPage, stylingRows, "settingsStylingVerticalSpacingHeading",
             strings::get("settings.section_page_breaks"));
     verticalSpacingButton = listAction(
-            stylingPage, stylingRows, "rrVerticalSpacing",
+            stylingPage, stylingRows, "settingsVerticalSpacing",
             strings::get("settings.vertical_spacing_mode"), [] { }, true);
     verticalSpacingButton->setDescription(strings::get("settings.vertical_spacing_description"));
-    section(stylingPage, stylingRows, "rrNormalizationSection",
+    section(stylingPage, stylingRows, "settingsStylingNormalizationHeading",
             strings::get("reader.book_beautifier"));
     beautifierButton = listAction(
-            stylingPage, stylingRows, "rrBeautifierSettings",
+            stylingPage, stylingRows, "settingsBeautifierSettings",
             strings::get("reader.book_beautifier"), [] { }, true);
     beautifierButton->setDescription(strings::get("settings.beautifier_summary"));
-    section(stylingPage, stylingRows, "rrAdvancedContentSection",
+    section(stylingPage, stylingRows, "settingsStylingAdvancedContentHeading",
             strings::get("settings.section_book_content"));
     hideNonlinearOption =
-            settingsOption(stylingPage, "rrHideNonlinearFragments",
+            settingsOption(stylingPage, "settingsHideNonlinearFragments",
                            strings::get("reader.hide_nonlinear_fragments"),
                            strings::get("settings.hide_nonlinear_fragments_description"));
     stylingRows->addWidget(hideNonlinearOption);
-    inpageFootnotesOption = settingsOption(stylingPage, "rrInpageFootnotes",
+    inpageFootnotesOption = settingsOption(stylingPage, "settingsInpageFootnotes",
                                            strings::get("settings.inpage_footnotes"),
                                            strings::get("settings.inpage_footnotes_description"));
     stylingRows->addWidget(inpageFootnotesOption);
@@ -1091,18 +1092,19 @@ void SettingsPanel::buildStyling(QWidget *stylingPage)
 
 void SettingsPanel::buildSystem(QWidget *systemPage)
 {
-    systemPage->setObjectName("rrSystemOptions");
+    systemPage->setObjectName("settingsSystemOptions");
     auto *systemRows = new QVBoxLayout(systemPage);
     systemRows->setContentsMargins(0, 0, 0, 0);
     systemRows->setSpacing(0);
     if (inputs.showNativeReaderOptions)
-        section(systemPage, systemRows, "rrSystemIntegrationSection",
+        section(systemPage, systemRows, "settingsSystemIntegrationHeading",
                 strings::get("settings.section_system_integration"));
-    automaticOpeningOption = settingsOption(
-            systemPage, "rrAutomaticBookOpening", strings::get("settings.automatic_book_opening"),
-            inputs.automaticBookOpeningSupported
-                    ? strings::get("settings.automatic_book_opening_description")
-                    : strings::get("settings.unsupported_description"));
+    automaticOpeningOption =
+            settingsOption(systemPage, "settingsAutomaticBookOpening",
+                           strings::get("settings.automatic_book_opening"),
+                           inputs.automaticBookOpeningSupported
+                                   ? strings::get("settings.automatic_book_opening_description")
+                                   : strings::get("settings.unsupported_description"));
     automaticOpeningOption->setEnabled(inputs.automaticBookOpeningSupported);
     automaticOpeningOption->setVisible(inputs.showNativeReaderOptions);
     automaticOpeningOption->setLeadingIcon(ui::ControlIcon::Dictionary);
@@ -1123,106 +1125,111 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             dialog->secondaryButton()->setFocus();
         });
     }
-    section(systemPage, systemRows, "rrSystemVisibilitySection",
+    section(systemPage, systemRows, "settingsSystemVisibilityHeading",
             strings::get("settings.section_feature_visibility"));
-    disabledFeaturesButton = listAction(systemPage, systemRows, "rrDisabledFeatures",
+    disabledFeaturesButton = listAction(systemPage, systemRows, "settingsDisabledFeatures",
                                         strings::get("settings.hidden_features"),
                                         [this] { showDisabledFeatures(); });
-    section(systemPage, systemRows, "rrSystemSleepSection", strings::get("settings.section_sleep"));
+    section(systemPage, systemRows, "settingsSystemSleepHeading",
+            strings::get("settings.section_sleep"));
     hideBookOnSleepOption =
-            settingsOption(systemPage, "rrHideBookOnSleepScreen",
+            settingsOption(systemPage, "settingsHideBookOnSleepScreen",
                            strings::get("settings.hide_book_on_sleep_screen"),
                            strings::get("settings.hide_book_on_sleep_screen_description"));
     hideBookOnSleepOption->setEnabled(inputs.sleepScreenSupported);
     hideBookOnSleepOption->setLeadingIcon(ui::ControlIcon::EyeClosed);
     systemRows->addWidget(hideBookOnSleepOption);
-    sleepScreenButton = listAction(systemPage, nullptr, "rrSleepScreen",
+    sleepScreenButton = listAction(systemPage, nullptr, "settingsSleepScreen",
                                    strings::get("settings.sleep_screen"), [] { });
     sleepScreenButton->setEnabled(inputs.sleepScreenSupported);
     if (!inputs.sleepScreenSupported)
         sleepScreenButton->setCaption(strings::get("settings.unsupported_caption"));
     systemRows->addWidget(sleepScreenButton);
-    sessionTimeoutButton = listAction(systemPage, nullptr, "rrSessionTimeout",
+    sessionTimeoutButton = listAction(systemPage, nullptr, "settingsSessionTimeout",
                                       strings::get("settings.session_timeout"), [] { });
     systemRows->addWidget(sessionTimeoutButton);
     if (inputs.wifiPowerSaverSupported) {
         wifiPowerSaverOption = settingsOption(
-                systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
+                systemPage, "settingsWifiPowerSaver", strings::get("settings.wifi_power_saver"),
                 strings::get("settings.wifi_power_saver_description"));
         wifiPowerSaverOption->setLeadingIcon(ui::ControlIcon::WifiHigh);
         systemRows->addWidget(wifiPowerSaverOption);
     }
-    section(systemPage, systemRows, "rrSystemNitpicksSection",
+    section(systemPage, systemRows, "settingsSystemNitpicksHeading",
             strings::get("settings.section_nitpicks"));
-    timeRemainingFormatButton = listAction(systemPage, nullptr, "rrTimeRemainingFormat",
+    timeRemainingFormatButton = listAction(systemPage, nullptr, "settingsTimeRemainingFormat",
                                            strings::get("settings.time_remaining_format"), [] { });
     systemRows->addWidget(timeRemainingFormatButton);
-    percentageFormatButton = listAction(systemPage, nullptr, "rrPercentageFormat",
+    percentageFormatButton = listAction(systemPage, nullptr, "settingsPercentageFormat",
                                         strings::get("settings.percentage_format"), [] { });
     systemRows->addWidget(percentageFormatButton);
-    secondaryNumbersButton = listAction(systemPage, nullptr, "rrSecondaryNumbers",
+    secondaryNumbersButton = listAction(systemPage, nullptr, "settingsSecondaryNumbers",
                                         strings::get("settings.secondary_numbers"), [] { });
     systemRows->addWidget(secondaryNumbersButton);
-    publisherPageOption = settingsOption(
-            systemPage, "rrPublisherPageNumbers", strings::get("settings.publisher_page_numbers"),
-            strings::get("settings.publisher_page_numbers_description"));
+    publisherPageOption =
+            settingsOption(systemPage, "settingsPublisherPageNumbers",
+                           strings::get("settings.publisher_page_numbers"),
+                           strings::get("settings.publisher_page_numbers_description"));
     auto publisherPageStyle = publisherPageOption->presentation();
     publisherPageStyle.wrapLabel = true;
     publisherPageOption->setPresentation(publisherPageStyle);
     publisherPageOption->setLeadingIcon(ui::ControlIcon::Books);
     systemRows->addWidget(publisherPageOption);
-    sideloadedFontsFirstOption = settingsOption(
-            systemPage, "rrSideloadedFontsFirst", strings::get("settings.sideloaded_fonts_first"),
-            strings::get("settings.sideloaded_fonts_first_description"));
+    sideloadedFontsFirstOption =
+            settingsOption(systemPage, "settingsSideloadedFontsFirst",
+                           strings::get("settings.sideloaded_fonts_first"),
+                           strings::get("settings.sideloaded_fonts_first_description"));
     sideloadedFontsFirstOption->setLeadingIcon(ui::ControlIcon::Typography);
     systemRows->addWidget(sideloadedFontsFirstOption);
-    openingCoverOption =
-            settingsOption(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
-                           strings::get("settings.opening_cover_description"));
+    openingCoverOption = settingsOption(systemPage, "settingsHideOpeningCover",
+                                        strings::get("settings.opening_cover"),
+                                        strings::get("settings.opening_cover_description"));
     openingCoverOption->setLeadingIcon(ui::ControlIcon::Image);
     systemRows->addWidget(openingCoverOption);
-    section(systemPage, systemRows, "rrSystemInterfaceSection",
+    section(systemPage, systemRows, "settingsSystemInterfaceHeading",
             strings::get("settings.section_user_interface"));
-    hideTabLabelsOption =
-            settingsOption(systemPage, "rrHideTabLabels", strings::get("settings.hide_tab_labels"),
-                           strings::get("settings.hide_tab_labels_description"));
+    hideTabLabelsOption = settingsOption(systemPage, "settingsHideTabLabels",
+                                         strings::get("settings.hide_tab_labels"),
+                                         strings::get("settings.hide_tab_labels_description"));
     hideTabLabelsOption->setLeadingIcon(ui::ControlIcon::TextTSlash);
     systemRows->addWidget(hideTabLabelsOption);
-    themingButton = listAction(systemPage, systemRows, "rrTheming",
+    themingButton = listAction(systemPage, systemRows, "settingsTheming",
                                strings::get("settings.theming"), [this] {
                                    returnOptionPage = optionPage;
                                    settingsPages->setCurrentIndex(int(SettingsPage::Theming));
                                });
     if (!selectedTheme.isEmpty())
         themingButton->setCaption(shownThemeName(selectedTheme).toUpper());
-    section(systemPage, systemRows, "rrSystemDictionarySection",
+    section(systemPage, systemRows, "settingsSystemDictionaryHeading",
             strings::get("settings.section_dictionary_ui"));
-    saveWordsOption = settingsOption(systemPage, "rrSaveWords", strings::get("settings.save_words"),
-                                     strings::get("settings.save_words_description"));
+    saveWordsOption =
+            settingsOption(systemPage, "settingsSaveWords", strings::get("settings.save_words"),
+                           strings::get("settings.save_words_description"));
     saveWordsOption->setLeadingIcon(ui::ControlIcon::Bookmark);
     systemRows->addWidget(saveWordsOption);
-    dictionaryFontButton = listAction(systemPage, nullptr, "rrDictionaryFont",
+    dictionaryFontButton = listAction(systemPage, nullptr, "settingsDictionaryFont",
                                       strings::get("settings.dictionary_font"), [] { });
-    dictionaryFontSizeButton = listAction(systemPage, nullptr, "rrDictionaryFontSize",
+    dictionaryFontSizeButton = listAction(systemPage, nullptr, "settingsDictionaryFontSize",
                                           strings::get("settings.dictionary_font_size"), [] { });
     systemRows->addWidget(dictionaryFontButton);
     systemRows->addWidget(dictionaryFontSizeButton);
-    section(systemPage, systemRows, "rrSystemEngineSection",
+    section(systemPage, systemRows, "settingsSystemEngineHeading",
             strings::get("settings.section_engine"));
     renderingButton = listAction(
-            systemPage, systemRows, "rrRendering", strings::get("settings.rendering"), [] { },
+            systemPage, systemRows, "settingsRendering", strings::get("settings.rendering"), [] { },
             true);
     renderingButton->setDescription(strings::get("settings.rendering_summary"));
-    section(systemPage, systemRows, "rrSystemDeveloperSection",
+    section(systemPage, systemRows, "settingsSystemDeveloperHeading",
             strings::get("settings.section_developer"));
-    debugModeOption = settingsOption(systemPage, "rrDebugMode", strings::get("settings.debug_mode"),
-                                     strings::get("settings.debug_mode_description"));
+    debugModeOption =
+            settingsOption(systemPage, "settingsDebugMode", strings::get("settings.debug_mode"),
+                           strings::get("settings.debug_mode_description"));
     debugModeOption->setLeadingIcon(ui::ControlIcon::Debug);
     systemRows->addWidget(debugModeOption);
     connect(debugModeOption, &QCheckBox::toggled, this, [this](bool on) { showDebug(on); });
     if (inputs.readerStandbySupported) {
         disableStandbyOption =
-                settingsOption(systemPage, "rrDisableReaderStandby",
+                settingsOption(systemPage, "settingsDisableReaderStandby",
                                strings::get("settings.disable_reader_standby"),
                                strings::get("settings.disable_reader_standby_description"));
         disableStandbyOption->setLeadingIcon(ui::ControlIcon::Coffee);
@@ -1261,32 +1268,32 @@ void SettingsPanel::buildTheming()
     themeRows->setSpacing(0);
     // The presets differ mostly in color, so they pause with color themes.
     if (ui::colorThemes) {
-        section(themingPage, themeRows, "rrThemeSelectionSection",
+        section(themingPage, themeRows, "settingsThemingSelectionHeading",
                 strings::get("settings.theme_selection"));
-        presetButton = listAction(themingPage, themeRows, "rrThemePreset",
+        presetButton = listAction(themingPage, themeRows, "settingsThemePreset",
                                   strings::get("settings.theme_preset"), [] { });
     }
-    section(themingPage, themeRows, "rrThemeDetailsSection",
+    section(themingPage, themeRows, "settingsThemingDetailsHeading",
             strings::get("settings.theme_details"));
-    iconThemeButton = listAction(themingPage, themeRows, "rrIconTheme",
+    iconThemeButton = listAction(themingPage, themeRows, "settingsIconTheme",
                                  strings::get("settings.icon_theme"), [] { });
     if (ui::colorThemes)
-        paletteButton = listAction(themingPage, themeRows, "rrColorTheme",
+        paletteButton = listAction(themingPage, themeRows, "settingsColorTheme",
                                    strings::get("settings.palette"), [] { });
-    uiFontButton =
-            listAction(themingPage, nullptr, "rrUiFont", strings::get("settings.ui_font"), [] { });
-    uiMonoFontButton = listAction(themingPage, nullptr, "rrUiMonoFont",
+    uiFontButton = listAction(themingPage, nullptr, "settingsUiFont",
+                              strings::get("settings.ui_font"), [] { });
+    uiMonoFontButton = listAction(themingPage, nullptr, "settingsUiMonoFont",
                                   strings::get("settings.ui_mono_font"), [] { });
-    headerFooterFontButton = listAction(themingPage, nullptr, "rrHeaderFooterFont",
+    headerFooterFontButton = listAction(themingPage, nullptr, "settingsHeaderFooterFont",
                                         strings::get("settings.header_footer_font"), [] { });
-    section(themingPage, themeRows, "rrPrimaryTypographySection",
+    section(themingPage, themeRows, "settingsThemingPrimaryTypographyHeading",
             strings::get("settings.primary_typography"));
     themeRows->addWidget(uiFontButton);
     themeRows->addWidget(uiMonoFontButton);
-    section(themingPage, themeRows, "rrSecondaryTypographySection",
+    section(themingPage, themeRows, "settingsThemingSecondaryTypographyHeading",
             strings::get("settings.secondary_typography"));
     themeRows->addWidget(headerFooterFontButton);
-    headerFooterWeightButton = listAction(themingPage, nullptr, "rrHeaderFooterWeight",
+    headerFooterWeightButton = listAction(themingPage, nullptr, "settingsHeaderFooterWeight",
                                           strings::get("settings.header_footer_weight"), [] { });
     themeRows->addWidget(headerFooterWeightButton);
     themeRows->addStretch(1);
@@ -1299,7 +1306,7 @@ void SettingsPanel::buildAbout()
     if (inputs.debugProgressAvailable) {
         auto *debugRow = kobalt::ui::horizontalRow();
         aboutLayout->addLayout(debugRow, 0, 0, Qt::AlignRight | Qt::AlignBottom);
-        debugProgress = actionButton(aboutPage, debugRow, "rrDebugProgress", {});
+        debugProgress = actionButton(aboutPage, debugRow, "settingsDebugProgress", {});
         const auto label = strings::get("reader.debug_progress");
         debugProgress->setAccessibleName(label);
         debugProgress->setToolTip(label);
@@ -1315,36 +1322,40 @@ void SettingsPanel::buildAbout()
 
 void SettingsPanel::buildDebug(QWidget *debugPage)
 {
-    debugPage->setObjectName("rrDebugOptions");
+    debugPage->setObjectName("settingsDebugOptions");
     auto *debugRows = new QVBoxLayout(debugPage);
     debugRows->setContentsMargins(0, 0, 0, 0);
     debugRows->setSpacing(0);
-    section(debugPage, debugRows, "rrDebugCacheSection", strings::get("debug.section_caches"));
+    section(debugPage, debugRows, "settingsDebugCacheHeading",
+            strings::get("debug.section_caches"));
     evictBookCacheButton = listAction(
-            debugPage, debugRows, "rrDebugEvictCache", strings::get("debug.evict_cache"), [] { },
-            true);
+            debugPage, debugRows, "settingsDebugEvictCache", strings::get("debug.evict_cache"),
+            [] { }, true);
     evictBookCacheButton->setDescription(strings::get("debug.evict_cache_description"));
     clearCachesButton = listAction(
-            debugPage, debugRows, "rrDebugClearCaches", strings::get("debug.clear_caches"), [] { },
-            true);
+            debugPage, debugRows, "settingsDebugClearCaches", strings::get("debug.clear_caches"),
+            [] { }, true);
     clearCachesButton->setDescription(strings::get("debug.clear_caches_description"));
-    section(debugPage, debugRows, "rrDebugDiagnosticsSection",
+    section(debugPage, debugRows, "settingsDebugDiagnosticsHeading",
             strings::get("debug.section_diagnostics"));
-    detailedDiagnosticsOption = settingsOption(
-            debugPage, "rrDebugDetailedDiagnostics", strings::get("debug.detailed_diagnostics"),
-            strings::get("debug.detailed_diagnostics_description"));
+    detailedDiagnosticsOption =
+            settingsOption(debugPage, "settingsDebugDetailedDiagnostics",
+                           strings::get("debug.detailed_diagnostics"),
+                           strings::get("debug.detailed_diagnostics_description"));
     debugRows->addWidget(detailedDiagnosticsOption);
-    clearDiagnosticLogButton = listAction(debugPage, debugRows, "rrDebugClearLog",
+    clearDiagnosticLogButton = listAction(debugPage, debugRows, "settingsDebugClearLog",
                                           strings::get("debug.clear_log"), [] { });
-    section(debugPage, debugRows, "rrDebugDeviceSection", strings::get("debug.section_device"));
-    debugVersionButton = listAction(debugPage, debugRows, "rrDebugVersion",
+    section(debugPage, debugRows, "settingsDebugDeviceHeading",
+            strings::get("debug.section_device"));
+    debugVersionButton = listAction(debugPage, debugRows, "settingsDebugVersion",
                                     strings::get("debug.version"), [] { });
-    debugQtButton = listAction(debugPage, debugRows, "rrDebugQt", strings::get("debug.qt"), [] { });
-    debugFirmwareButton = listAction(debugPage, debugRows, "rrDebugFirmware",
+    debugQtButton =
+            listAction(debugPage, debugRows, "settingsDebugQt", strings::get("debug.qt"), [] { });
+    debugFirmwareButton = listAction(debugPage, debugRows, "settingsDebugFirmware",
                                      strings::get("debug.firmware"), [] { });
-    debugCoresButton =
-            listAction(debugPage, debugRows, "rrDebugCores", strings::get("debug.cores"), [] { });
-    debugStorageButton = listAction(debugPage, debugRows, "rrDebugStorage",
+    debugCoresButton = listAction(debugPage, debugRows, "settingsDebugCores",
+                                  strings::get("debug.cores"), [] { });
+    debugStorageButton = listAction(debugPage, debugRows, "settingsDebugStorage",
                                     strings::get("debug.storage"), [] { });
     // The facts open nothing: a tap reads them again.
     for (auto *fact : { debugVersionButton, debugQtButton, debugFirmwareButton, debugCoresButton,
@@ -1363,14 +1374,14 @@ void SettingsPanel::buildZen()
     zenMarkBox = new QWidget(closeButton->parentWidget());
     auto *zenMarkRows = new QHBoxLayout(zenMarkBox);
     zenMarkRows->setContentsMargins(0, 0, chrome::inset, 0);
-    auto *zenMark = ui::makeZenMark(zenMarkBox, "rrSettingsZenMark");
+    auto *zenMark = ui::makeZenMark(zenMarkBox, "settingsZenMark");
     zenMarkRows->addWidget(zenMark, 0, Qt::AlignVCenter);
     zenMarkBox->hide();
     headingLayout->insertWidget(headingLayout->indexOf(closeButton), zenMarkBox);
     // The way out of Zen mode sits on the bottom edge, where the tabs are.
     auto *leaveBar = new ui::Panel(optionsColumn, Qt::TopEdge);
     zenLeaveBar = leaveBar;
-    leaveBar->setObjectName("rrZenLeaveBar");
+    leaveBar->setObjectName("settingsZenLeaveBar");
     leaveBar->setEdgeWidth(chrome::heavyRule);
     auto *leaveRows = new QVBoxLayout(leaveBar);
     leaveLayout = leaveRows;
@@ -1379,12 +1390,12 @@ void SettingsPanel::buildZen()
     leaveRows->setSpacing(ui::px(12));
     auto *leave = new HoldButton(strings::get("settings.zen_leave"),
                                  strings::get("settings.zen_leave_holding"), leaveBar);
-    leave->setObjectName("rrZenLeave");
+    leave->setObjectName("settingsZenLeave");
     leave->setCell(false);
     leaveRows->addWidget(leave);
     zenLeave = leave;
     auto *leaveNote = new ui::InterfaceLabel(strings::get("settings.zen_leave_note"), leaveBar);
-    leaveNote->setObjectName("rrZenLeaveNote");
+    leaveNote->setObjectName("settingsZenLeaveNote");
     leaveNote->setAlignment(Qt::AlignCenter);
     leaveNote->setWordWrap(true);
     readerStyle(leaveNote,
@@ -1410,37 +1421,38 @@ void SettingsPanel::buildZen()
         widgetCreated(zenMarkBox);
         widgetCreated(zenLeaveBar);
     }
-    zenPage->setObjectName("rrZenSettings");
+    zenPage->setObjectName("settingsZenSettings");
     auto *zenRows = new QVBoxLayout(zenPage);
     zenRows->setContentsMargins(0, 0, 0, 0);
     zenRows->setSpacing(0);
-    section(zenPage, zenRows, "rrZenDisplaySection", strings::get("settings.display"));
-    zenDarkOption = darkModeOption(zenPage, "rrZenDarkMode");
+    section(zenPage, zenRows, "settingsZenDisplayHeading", strings::get("settings.display"));
+    zenDarkOption = darkModeOption(zenPage, "settingsZenDarkMode");
     zenRows->addWidget(zenDarkOption);
-    zenLightButton =
-            listAction(zenPage, zenRows, "rrZenLight", strings::get("settings.zen_light"), [this] {
-                if (zenLightRequested)
-                    zenLightRequested();
-            });
+    zenLightButton = listAction(zenPage, zenRows, "settingsZenLight",
+                                strings::get("settings.zen_light"), [this] {
+                                    if (zenLightRequested)
+                                        zenLightRequested();
+                                });
     zenLightButton->setCaption(strings::get(inputs.warmthSupported
                                                     ? "settings.zen_light_caption"
                                                     : "settings.zen_light_brightness"));
-    zenSyncSection = section(zenPage, zenRows, "rrZenSyncSection", strings::get("kosync.title"));
+    zenSyncSection =
+            section(zenPage, zenRows, "settingsZenSyncHeading", strings::get("kosync.title"));
     zenSyncButton = listAction(
-            zenPage, zenRows, "rrZenSyncNow", strings::get("kosync.sync_now"),
+            zenPage, zenRows, "settingsZenSyncNow", strings::get("kosync.sync_now"),
             [this] {
                 if (zenSyncRequested)
                     zenSyncRequested();
             },
             true);
-    zenAutomaticButton = listAction(zenPage, zenRows, "rrZenAutomaticSync",
+    zenAutomaticButton = listAction(zenPage, zenRows, "settingsZenAutomaticSync",
                                     strings::get("kosync.automatic"), [this] {
                                         if (zenScheduleRequested)
                                             zenScheduleRequested();
                                     });
-    section(zenPage, zenRows, "rrZenAboutSection", strings::get("settings.about"));
+    section(zenPage, zenRows, "settingsZenAboutHeading", strings::get("settings.about"));
     zenAboutButton = listAction(
-            zenPage, zenRows, "rrZenAbout", strings::get("settings.zen_about"),
+            zenPage, zenRows, "settingsZenAbout", strings::get("settings.zen_about"),
             [this] {
                 returnOptionPage = optionPage;
                 settingsPages->setCurrentIndex(int(SettingsPage::About));
@@ -1557,7 +1569,9 @@ void SettingsPanel::showThemeChoices(ThemeChoice kind, const InterfaceStyle &sty
     if (sheet)
         return;
     const bool icons = kind == ThemeChoice::Icons, palette = kind == ThemeChoice::Palette;
-    const QString name = icons ? "rrIconTheme" : palette ? "rrColorTheme" : "rrTheme";
+    const QString name = icons ? "settingsIconTheme"
+            : palette          ? "settingsColorTheme"
+                               : "settingsTheme";
     auto *choices = openChoiceSheet(name,
                                     strings::get(icons             ? "settings.icon_theme"
                                                          : palette ? "settings.palette"
@@ -1611,7 +1625,7 @@ void SettingsPanel::styleTabs(bool list)
         }
         // A list shows no selection; the rail marks the open section.
         button->setCheckable(!list);
-        auto *chevron = button->findChild<QWidget *>("rrSettingsSectionChevron");
+        auto *chevron = button->findChild<QWidget *>("settingsSectionChevron");
         if (!chevron && list)
             chevron = new SectionChevron(button);
         if (chevron)
@@ -1921,19 +1935,19 @@ public:
     {
         setDimmed(true);
         auto *rows = card()->rows();
-        heading = card()->heading({}, {}, "rrSettingsFontTitle").title;
+        heading = card()->heading({}, {}, "settingsFontTitle").title;
         section = new ui::ListHeader(card());
-        section->setObjectName("rrSettingsFontSection");
+        section->setObjectName("settingsFontSection");
         section->setShaded(true);
         section->setFixedHeight(section->sizeHint().height());
         rows->addWidget(section);
         choices = new ui::RadioList(card());
-        choices->setObjectName("rrSettingsFontChoices");
+        choices->setObjectName("settingsFontChoices");
         choices->setMinimumRowHeight(metrics::list::oneLine);
         // fit() selects the first page after the entire catalog is available.
         choices->showRows(0, 0);
         rows->addWidget(choices);
-        pager = new ui::PagerBar(card(), "rrSettingsFont");
+        pager = new ui::PagerBar(card(), "settingsFont");
         rows->addWidget(pager);
         connect(pager->previous, &QPushButton::clicked, this,
                 [this] { showPage(pager->turnTarget(-1)); });
@@ -1961,7 +1975,7 @@ public:
             const auto label = family.isEmpty() ? emptyLabel : fontDisplayName(family);
             auto *option = index < choices->options().size()
                     ? choices->options()[index]
-                    : choices->add(QString("rrSettingsFontChoice%1").arg(index), label);
+                    : choices->add(QString("settingsFontChoice%1").arg(index), label);
             option->setText(label);
             option->setProperty("reader_font_family", family);
             const bool tooLarge =
@@ -2084,7 +2098,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         };
     }
     sheet = popup;
-    popup->setObjectName("rrSettingsFontPopup");
+    popup->setObjectName("settingsFontPopup");
     popup->configure(title, fonts, current, emptyLabel, interfaceFonts, sideloadedFirst,
                      std::move(chosen));
     presentSheet();
@@ -2156,21 +2170,21 @@ void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, 
         return;
     const bool compact = isPhoneScreen(parentWidget()->size(), ui::density());
     auto *choices = openChoiceSheet(
-            "rrDictionaryFontSize", strings::get("settings.dictionary_font_size"), {}, {},
+            "settingsDictionaryFontSize", strings::get("settings.dictionary_font_size"), {}, {},
             { family, customFont, compact,
               ui::privateLayoutKey(DictionaryPanel::definitionFont(family, 100)) });
     if (choices->options().isEmpty()) {
         choices->setMinimumRowHeight(metrics::list::oneLine);
         for (int percent : appearance::dictionaryFontSizes) {
             auto *option = choices->add(
-                    QString("rrDictionaryFontSize%1").arg(percent),
+                    QString("settingsDictionaryFontSize%1").arg(percent),
                     ui::textScale() >= 1.5 ? QString() : dictionaryFontSizeLabel(percent, compact));
             option->setAccessibleName(dictionaryFontSizeLabel(percent));
             const auto font = DictionaryPanel::definitionFont(family, percent);
             const int lineHeight = DictionaryPanel::definitionLineHeight(percent, customFont);
             const auto sample = strings::get("settings.dictionary_font_sample");
             auto *preview = new QWidget(option);
-            preview->setObjectName(QString("rrDictionaryFontPreview%1").arg(percent));
+            preview->setObjectName(QString("settingsDictionaryFontPreview%1").arg(percent));
             const int padding = ui::px(12);
             auto *layout = new QHBoxLayout(preview);
             layout->setContentsMargins(padding, padding, padding, padding);
@@ -2207,15 +2221,15 @@ void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont
 {
     if (sheet)
         return;
-    auto *choices =
-            openChoiceSheet("rrHeaderFooterWeight", strings::get("settings.header_footer_weight"),
-                            {}, "rrHeaderFooterWeightTitle", { sampleFont, ui::interfaceWeight() });
+    auto *choices = openChoiceSheet(
+            "settingsHeaderFooterWeight", strings::get("settings.header_footer_weight"), {},
+            "settingsHeaderFooterWeightTitle", { sampleFont, ui::interfaceWeight() });
     const QVector<int> weights{ 0, 2, 4, 6, 8 };
     if (choices->options().isEmpty()) {
         choices->setMinimumRowHeight(metrics::list::oneLine);
         for (int steps : weights) {
             auto *option = choices->add(
-                    QString("rrHeaderFooterWeight%1").arg(steps),
+                    QString("settingsHeaderFooterWeight%1").arg(steps),
                     steps ? strings::get("settings.header_footer_weight_heavier").arg(steps)
                           : strings::get("settings.header_footer_weight_lighter"));
             ui::DescribedOption::ValueStyle sample;
@@ -2246,7 +2260,7 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     if (sheet)
         return;
     sheet = new ui::ModalOverlay(parentWidget());
-    sheet->setObjectName("rrBeautifierPopup");
+    sheet->setObjectName("settingsBeautifierPopup");
     sheet->setDimmed(true);
     sheet->setGeometry(parentWidget()->rect());
     sheet->dismissed = [this] { dismissSheet(); };
@@ -2264,8 +2278,8 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     presetLayout->setSpacing(0);
     auto *presets = new QButtonGroup(card);
     const QStringList presetNames{ "recommended", "full", "custom" };
-    const QStringList presetObjects{ "rrNormalizationRecommended", "rrNormalizationFull",
-                                     "rrNormalizationCustom" };
+    const QStringList presetObjects{ "settingsNormalizationRecommended",
+                                     "settingsNormalizationFull", "settingsNormalizationCustom" };
     auto draft = std::make_shared<QJsonObject>(appearance::normalizationSettings(current));
     (*draft)[appearance::normalizationPresetKey] = appearance::normalizationPreset(current);
     for (int i = 0; i < presetNames.size(); ++i) {
@@ -2278,9 +2292,9 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     presets->buttons().last()->setProperty("segment_last", true);
     rows->addWidget(presetRow);
     QVector<ui::DescribedOption *> options;
-    const QStringList names{ "rrNormalizationMargins", "rrNormalizationChapters",
-                             "rrBeautifierInitials",   "rrBeautifierSpacing",
-                             "rrBeautifierIndent",     "rrNormalizationTextColors" };
+    const QStringList names{ "settingsNormalizationMargins", "settingsNormalizationChapters",
+                             "settingsBeautifierInitials",   "settingsBeautifierSpacing",
+                             "settingsBeautifierIndent",     "settingsNormalizationTextColors" };
     const QStringList labels{
         "settings.normalization_margins", "settings.normalization_chapters",
         "settings.beautifier_initials",   "settings.beautifier_spacing",
@@ -2311,9 +2325,9 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
         });
     }
     auto *cancel = ui::makeModalButton(
-            card, { strings::get("common.cancel"), "rrBeautifierCancel" }, false);
-    auto *done =
-            ui::makeModalButton(card, { strings::get("common.done"), "rrBeautifierDone" }, true);
+            card, { strings::get("common.cancel"), "settingsBeautifierCancel" }, false);
+    auto *done = ui::makeModalButton(
+            card, { strings::get("common.done"), "settingsBeautifierDone" }, true);
     card->adaptiveActions({ cancel, done });
     connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft, chosen] {
@@ -2341,13 +2355,13 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
 {
     if (sheet)
         return;
-    auto *choices =
-            openChoiceSheet("rrTimeRemainingFormat", strings::get("settings.time_remaining_format"),
-                            strings::get("settings.time_remaining_format_description"));
+    auto *choices = openChoiceSheet("settingsTimeRemainingFormat",
+                                    strings::get("settings.time_remaining_format"),
+                                    strings::get("settings.time_remaining_format_description"));
     const QStringList formats{ "detailed", "approximate" };
     if (choices->options().isEmpty())
         for (const auto &format : formats)
-            choices->add(QString("rrTimeRemainingFormat_%1").arg(format),
+            choices->add(QString("settingsTimeRemainingFormat_%1").arg(format),
                          timeRemainingFormatLabel(format),
                          strings::get(QString("settings.time_remaining_%1_description")
                                               .arg(format)
@@ -2368,7 +2382,7 @@ void SettingsPanel::showSecondaryNumbers(const QString &current,
     if (sheet)
         return;
     auto *choices =
-            openChoiceSheet("rrSecondaryNumbers", strings::get("settings.secondary_numbers"),
+            openChoiceSheet("settingsSecondaryNumbers", strings::get("settings.secondary_numbers"),
                             strings::get("settings.secondary_numbers_hint"));
     const auto &styles = secondaryNumberStyles();
     if (choices->options().isEmpty())
@@ -2379,7 +2393,7 @@ void SettingsPanel::showSecondaryNumbers(const QString &current,
                 front.append(bookPageLabel(n - 1, 27, 27, style));
                 back.append(bookPageLabel(27 + n, 27, 27, style));
             }
-            choices->add("rrSecondaryNumbers_" + style, secondaryNumberLabel(style),
+            choices->add("settingsSecondaryNumbers_" + style, secondaryNumberLabel(style),
                          strings::get("settings.secondary_preview")
                                  .arg(front.join(", "), back.join(", ")));
         }
@@ -2399,14 +2413,16 @@ void SettingsPanel::showPercentageFormats(const QString &current,
     if (sheet)
         return;
     auto *choices =
-            openChoiceSheet("rrPercentageFormat", strings::get("settings.percentage_format"),
+            openChoiceSheet("settingsPercentageFormat", strings::get("settings.percentage_format"),
                             strings::get("settings.percentage_format_description"));
     const QStringList formats{ "whole", "decimal" };
     if (choices->options().isEmpty()) {
-        choices->add(QStringLiteral("rrPercentageFormat_whole"), percentageFormatLabel("whole"),
+        choices->add(QStringLiteral("settingsPercentageFormat_whole"),
+                     percentageFormatLabel("whole"),
                      strings::get("settings.percentage_whole_description")
                              .arg(strings::percentArgument(8)));
-        choices->add(QStringLiteral("rrPercentageFormat_decimal"), percentageFormatLabel("decimal"),
+        choices->add(QStringLiteral("settingsPercentageFormat_decimal"),
+                     percentageFormatLabel("decimal"),
                      strings::get("settings.percentage_decimal_description")
                              .arg(strings::percentArgument(8.1, 1)));
     }
@@ -2430,11 +2446,11 @@ void SettingsPanel::showRenderingModes(const QString &current,
     QStringList modes{ "hybrid", "accurate" };
     if (debugModeOption && debugModeOption->isChecked())
         modes.insert(1, "fast");
-    auto *choices = openChoiceSheet("rrRendering", strings::get("settings.rendering"),
+    auto *choices = openChoiceSheet("settingsRendering", strings::get("settings.rendering"),
                                     strings::get("settings.rendering_description"), {}, { modes });
     if (choices->options().isEmpty())
         for (const auto &mode : modes)
-            choices->add(QString("rrRendering_%1").arg(mode), renderingModeLabel(mode),
+            choices->add(QString("settingsRendering_%1").arg(mode), renderingModeLabel(mode),
                          strings::get(mode == "accurate" ? "settings.rendering_accurate_description"
                                               : mode == "fast"
                                               ? "settings.rendering_fast_description"
@@ -2448,7 +2464,7 @@ void SettingsPanel::showColumns(bool landscape, bool alignChapters, int spacing,
     if (sheet)
         return;
     sheet = new ui::ModalOverlay(parentWidget());
-    sheet->setObjectName("rrColumnsPopup");
+    sheet->setObjectName("settingsColumnsPopup");
     sheet->setDimmed(true);
     sheet->setGeometry(parentWidget()->rect());
     sheet->dismissed = [this] { dismissSheet(); };
@@ -2459,12 +2475,12 @@ void SettingsPanel::showColumns(bool landscape, bool alignChapters, int spacing,
     rows->setSpacing(0);
     card->heading(strings::get("reader.columns"), strings::get("settings.columns_description"));
 
-    auto *columns =
-            checklistOption(card, "rrLandscapeColumns", strings::get("settings.landscape_columns"),
-                            strings::get("settings.landscape_columns_description"), true);
-    auto *chapters =
-            checklistOption(card, "rrChapterStartsSpread", strings::get("settings.chapter_spread"),
-                            strings::get("settings.chapter_spread_description"), false);
+    auto *columns = checklistOption(card, "settingsLandscapeColumns",
+                                    strings::get("settings.landscape_columns"),
+                                    strings::get("settings.landscape_columns_description"), true);
+    auto *chapters = checklistOption(card, "settingsChapterStartsSpread",
+                                     strings::get("settings.chapter_spread"),
+                                     strings::get("settings.chapter_spread_description"), false);
     rows->addWidget(columns);
     rows->addWidget(chapters);
     columns->setChecked(landscape);
@@ -2476,9 +2492,10 @@ void SettingsPanel::showColumns(bool landscape, bool alignChapters, int spacing,
     auto *controls = new QVBoxLayout(area);
     controls->setContentsMargins(chrome::inset, ui::px(32), chrome::inset, ui::px(32));
     rows->addWidget(area);
-    auto *gap = ui::sliderRow(area, controls, "rrColumnSpacingSetting", "rrColumnSpacingValue",
-                              strings::get("reader.column_spacing"), "rrColumnSpacingLess",
-                              "rrColumnSpacingMore", 100, 300, 50, {});
+    auto *gap = ui::sliderRow(area, controls, "settingsColumnSpacingSetting",
+                              "settingsColumnSpacingValue", strings::get("reader.column_spacing"),
+                              "settingsColumnSpacingLess", "settingsColumnSpacingMore", 100, 300,
+                              50, {});
     gap->setMarkers({ 100, 150, 200, 250, 300 }, ui::SettingSlider::MarkerMode::Stops);
     const auto showValue = [gap](int value) {
         const auto label = columnSpacingLabel(value);
@@ -2491,9 +2508,10 @@ void SettingsPanel::showColumns(bool landscape, bool alignChapters, int spacing,
     area->setEnabled(landscape);
     connect(columns, &QCheckBox::toggled, area, &QWidget::setEnabled);
 
-    auto *cancel =
-            ui::makeModalButton(card, { strings::get("common.cancel"), "rrColumnsCancel" }, false);
-    auto *done = ui::makeModalButton(card, { strings::get("common.done"), "rrColumnsDone" }, true);
+    auto *cancel = ui::makeModalButton(
+            card, { strings::get("common.cancel"), "settingsColumnsCancel" }, false);
+    auto *done =
+            ui::makeModalButton(card, { strings::get("common.done"), "settingsColumnsDone" }, true);
     card->adaptiveActions({ cancel, done });
     connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, columns, chapters, gap, chosen] {
@@ -2638,32 +2656,32 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     switch (feature) {
     case AdvancedText::ParagraphSpacing:
         key = "settings.paragraph_spacing";
-        prefix = "rrParagraphSpacing";
+        prefix = "settingsParagraphSpacing";
         break;
     case AdvancedText::WordSpacing:
         key = "settings.word_spacing";
-        prefix = "rrWordSpacing";
+        prefix = "settingsWordSpacing";
         values = { "narrow", "normal", "wide" };
         break;
     case AdvancedText::Tracking:
         key = "settings.justification_tracking";
-        prefix = "rrTracking";
+        prefix = "settingsTracking";
         values = { "off", "subtle", "more" };
         break;
     case AdvancedText::HangingPunctuation:
         key = "settings.hanging_punctuation";
-        prefix = "rrHangingPunctuation";
+        prefix = "settingsHangingPunctuation";
         values = { "off", "on" };
         break;
     case AdvancedText::Pagination:
         key = "settings.widows_orphans";
-        prefix = "rrWidowsOrphans";
+        prefix = "settingsWidowsOrphans";
         values = { "publisher", "avoid", "allow" };
         break;
     case AdvancedText::VerticalSpacing:
         // Centering is the recommended adjustment, so it comes before Expand.
         key = "settings.vertical_spacing";
-        prefix = "rrVerticalSpacing";
+        prefix = "settingsVerticalSpacing";
         values = { "off", "center", "expand" };
         break;
     }
@@ -2688,7 +2706,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     headerRow->setContentsMargins(0, 0, 0, 0);
     headerRow->setSpacing(0);
     auto *title = new ui::InterfaceLabel(text(""), header);
-    title->setObjectName("rrAdvancedTextTitle");
+    title->setObjectName("settingsAdvancedTextTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     readerStyle(title, styles::font(chrome::labelText, true));
     headerRow->addWidget(title, 1);
@@ -2731,7 +2749,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
         return std::make_pair(area, areaRows);
     };
     const auto [same, sameRows] = padded({ chrome::inset, ui::px(12), chrome::inset, 0 });
-    same->setObjectName("rrStylingSameNote");
+    same->setObjectName("settingsStylingSameNote");
     auto *sameText = new ui::InterfaceLabel(strings::get("settings.styling_preview_same"), same);
     sameText->setAlignment(Qt::AlignCenter);
     sameText->setWordWrap(true);
@@ -2753,7 +2771,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     rows->addWidget(choices);
     const auto [texts, textRows] = padded({ chrome::inset, ui::px(16), chrome::inset, ui::px(24) });
     auto *description = new ui::InterfaceLabel(texts);
-    description->setObjectName("rrAdvancedTextDescription");
+    description->setObjectName("settingsAdvancedTextDescription");
     description->setWordWrap(true);
     readerStyle(description, styles::font(chrome::descriptionText));
     textRows->addWidget(description);
@@ -2774,7 +2792,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
             note = note.arg(strings::percentArgument(100));
     }
     auto *hint = new ui::InterfaceLabel(note, texts);
-    hint->setObjectName(tracking ? "rrTrackingAlignmentNotice" : "rrAdvancedTextHint");
+    hint->setObjectName(tracking ? "settingsTrackingAlignmentNotice" : "settingsAdvancedTextHint");
     hint->setWordWrap(true);
     readerStyle(hint,
                 styles::font(chrome::descriptionText)
@@ -2799,22 +2817,22 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
         const auto section = padded({ chrome::inset, ui::px(12), chrome::inset, ui::px(16) });
         auto *area = section.first;
         auto *controls = section.second;
-        area->setObjectName("rrParagraphControls");
+        area->setObjectName("settingsParagraphControls");
         rows->removeWidget(area);
         rows->insertWidget(rows->indexOf(choices), area);
         choices->hide();
         auto *slider = ui::sliderRow(
-                area, controls, "rrParagraphSpacingSlider", "rrParagraphSpacingValue",
-                strings::get("settings.paragraph_gap"), "rrParagraphSpacingLess",
-                "rrParagraphSpacingMore", -1, 200, 1, {}, {}, {},
+                area, controls, "settingsParagraphSpacingSlider", "settingsParagraphSpacingValue",
+                strings::get("settings.paragraph_gap"), "settingsParagraphSpacingLess",
+                "settingsParagraphSpacingMore", -1, 200, 1, {}, {}, {},
                 { strings::get("reader.publisher_spacing"), "0", strings::percentage(50),
                   strings::percentage(100), strings::percentage(150), strings::percentage(200) });
         slider->setMarkers({ -1, 0, 50, 100, 150, 200 }, ui::SettingSlider::MarkerMode::Stops);
         slider->setAdditionalStops({ 25, 75, 125, 175 });
         description->setText(strings::get("settings.paragraph_choices_description"));
-        area->findChild<QLabel *>("rrParagraphSpacingSliderCurrentPrefix")->hide();
+        area->findChild<QLabel *>("settingsParagraphSpacingSliderCurrentPrefix")->hide();
         const auto showValue = [slider, area](int value) {
-            area->findChild<QLabel *>("rrParagraphSpacingValue")
+            area->findChild<QLabel *>("settingsParagraphSpacingValue")
                     ->setText(strings::get("controls.currently") + ' '
                               + paragraphSpacingLabel(value));
             slider->setAccessibleDescription(paragraphSpacingLabel(value));
@@ -2823,16 +2841,16 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
         slider->setValue(current);
         showValue(current);
         auto *indentSlider = ui::sliderRow(
-                area, controls, "rrParagraphIndentSlider", "rrParagraphIndentValue",
-                strings::get("settings.paragraph_indent"), "rrParagraphIndentLess",
-                "rrParagraphIndentMore", -1, 300, 1, {}, {}, {},
+                area, controls, "settingsParagraphIndentSlider", "settingsParagraphIndentValue",
+                strings::get("settings.paragraph_indent"), "settingsParagraphIndentLess",
+                "settingsParagraphIndentMore", -1, 300, 1, {}, {}, {},
                 { strings::get("reader.publisher_spacing"), "0", strings::percentage(100),
                   strings::percentage(200), strings::percentage(300) });
         indentSlider->setMarkers({ -1, 0, 100, 200, 300 }, ui::SettingSlider::MarkerMode::Stops);
         indentSlider->setAdditionalStops({ 25, 50, 75, 125, 150, 175 });
-        area->findChild<QLabel *>("rrParagraphIndentSliderCurrentPrefix")->hide();
+        area->findChild<QLabel *>("settingsParagraphIndentSliderCurrentPrefix")->hide();
         const auto showIndent = [indentSlider, area](int value) {
-            area->findChild<QLabel *>("rrParagraphIndentValue")
+            area->findChild<QLabel *>("settingsParagraphIndentValue")
                     ->setText(strings::get("controls.currently") + ' '
                               + paragraphSpacingLabel(value));
             indentSlider->setAccessibleDescription(paragraphSpacingLabel(value));
@@ -2852,7 +2870,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     if (vertical && pairChosen) {
         auto selection = std::make_shared<std::pair<int, int>>(current, secondary);
         auto *area = new QWidget(card);
-        area->setObjectName("rrVerticalSpacingScopeControls");
+        area->setObjectName("settingsVerticalSpacingScopeControls");
         auto *rows = new QVBoxLayout(area);
         rows->setContentsMargins(chrome::inset, 0, chrome::inset, ui::px(24));
         rows->setSpacing(ui::px(16));
@@ -2869,9 +2887,9 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                 / 2;
         for (int index = 0; index < values.size(); ++index) {
             const QString key = "settings.vertical_spacing_scope_" + values[index];
-            auto *button =
-                    segmentButton(area, segments, group, "rrVerticalSpacingScope_" + values[index],
-                                  strings::get(key.toUtf8().constData()));
+            auto *button = segmentButton(area, segments, group,
+                                         "settingsVerticalSpacingScope_" + values[index],
+                                         strings::get(key.toUtf8().constData()));
             button->setAccessibleName(button->text());
             button->setAccessibleDescription(
                     strings::get((key + "_description").toUtf8().constData()));
@@ -2975,7 +2993,7 @@ void SettingsPanel::showStylingPreview()
         stylingSampleReady = {};
         ready();
     }
-    if (auto *same = sheet ? sheet->findChild<QWidget *>("rrStylingSameNote") : nullptr) {
+    if (auto *same = sheet ? sheet->findChild<QWidget *>("settingsStylingSameNote") : nullptr) {
         const bool shown = sample.valid() && !sample.differs;
         if (same->isVisible() != shown) {
             same->setVisible(shown);
@@ -3055,11 +3073,11 @@ ui::ChoiceModal *SettingsPanel::restoreConfirmation()
                       "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c"),
               strings::get("reader.restore_appearance_defaults_prompt"),
               {},
-              "rrRestoreTitle" },
-            { strings::get("common.cancel"), "rrKeepDefaults" },
-            { strings::get("reader.restore_defaults"), "rrConfirmDefaults" });
-    restoreDialog->setObjectName("rrRestoreConfirmation");
-    restoreDialog->descriptionLabel()->setObjectName("rrRestoreDescription");
+              "settingsRestoreTitle" },
+            { strings::get("common.cancel"), "settingsKeepDefaults" },
+            { strings::get("reader.restore_defaults"), "settingsConfirmDefaults" });
+    restoreDialog->setObjectName("settingsRestoreConfirmation");
+    restoreDialog->descriptionLabel()->setObjectName("settingsRestoreDescription");
     connect(restoreDialog->secondaryButton(), &QPushButton::clicked, this,
             [this] { dismissRestore(); });
     connect(restoreDialog->primaryButton(), &QPushButton::clicked, this, [this] {
@@ -3081,9 +3099,9 @@ ui::ChoiceModal *SettingsPanel::restoreBookConfirmation()
             { strings::get("reader.restore_book_defaults_detail"),
               strings::get("reader.restore_book_defaults_prompt"),
               {} },
-            { strings::get("common.cancel"), "rrKeepBookDefaults" },
-            { strings::get("reader.restore_defaults"), "rrConfirmBookDefaults" });
-    restoreBookDialog->setObjectName("rrRestoreBookConfirmation");
+            { strings::get("common.cancel"), "settingsKeepBookDefaults" },
+            { strings::get("reader.restore_defaults"), "settingsConfirmBookDefaults" });
+    restoreBookDialog->setObjectName("settingsRestoreBookConfirmation");
     connect(restoreBookDialog->secondaryButton(), &QPushButton::clicked, this,
             [this] { dismissRestore(); });
     connect(restoreBookDialog->primaryButton(), &QPushButton::clicked, this, [this] {
@@ -3105,9 +3123,9 @@ ui::ChoiceModal *SettingsPanel::restorePresetsConfirmation()
             { strings::get("text_presets.restore_detail"),
               strings::get("text_presets.restore_prompt"),
               {} },
-            { strings::get("common.cancel"), "rrKeepPresets" },
-            { strings::get("text_presets.restore_confirm"), "rrConfirmPresets" });
-    restorePresetsDialog->setObjectName("rrRestorePresetsConfirmation");
+            { strings::get("common.cancel"), "settingsKeepPresets" },
+            { strings::get("text_presets.restore_confirm"), "settingsConfirmPresets" });
+    restorePresetsDialog->setObjectName("settingsRestorePresetsConfirmation");
     connect(restorePresetsDialog->secondaryButton(), &QPushButton::clicked, this,
             [this] { dismissRestore(); });
     connect(restorePresetsDialog->primaryButton(), &QPushButton::clicked, this, [this] {
@@ -3126,15 +3144,15 @@ ui::ChoiceModal *SettingsPanel::automaticOpeningConfirmation()
         return automaticOpeningDialog;
     // Turning automatic opening off sends every later book to Kobo's
     // reader, so ask first.
-    automaticOpeningDialog =
-            new ui::ChoiceModal(parentWidget(),
-                                { strings::get("settings.automatic_book_opening_off_description"),
-                                  strings::get("settings.automatic_book_opening_off_title"),
-                                  {} },
-                                { strings::get("common.cancel"), "rrKeepAutomaticBookOpening" },
-                                { strings::get("settings.automatic_book_opening_off"),
-                                  "rrConfirmAutomaticBookOpeningOff" });
-    automaticOpeningDialog->setObjectName("rrAutomaticBookOpeningConfirmation");
+    automaticOpeningDialog = new ui::ChoiceModal(
+            parentWidget(),
+            { strings::get("settings.automatic_book_opening_off_description"),
+              strings::get("settings.automatic_book_opening_off_title"),
+              {} },
+            { strings::get("common.cancel"), "settingsKeepAutomaticBookOpening" },
+            { strings::get("settings.automatic_book_opening_off"),
+              "settingsConfirmAutomaticBookOpeningOff" });
+    automaticOpeningDialog->setObjectName("settingsAutomaticBookOpeningConfirmation");
     connect(automaticOpeningDialog->secondaryButton(), &QPushButton::clicked, this,
             [this] { dismissAutomaticOpeningConfirmation(); });
     connect(automaticOpeningDialog->primaryButton(), &QPushButton::clicked, this, [this] {
@@ -3156,9 +3174,9 @@ ui::ChoiceModal *SettingsPanel::standbyConfirmation()
             { strings::get("settings.disable_reader_standby_warning"),
               strings::get("settings.disable_reader_standby_title"),
               {} },
-            { strings::get("common.cancel"), "rrKeepReaderStandby" },
-            { strings::get("settings.disable_reader_standby"), "rrConfirmDisableStandby" });
-    standbyDialog->setObjectName("rrStandbyConfirmation");
+            { strings::get("common.cancel"), "settingsKeepReaderStandby" },
+            { strings::get("settings.disable_reader_standby"), "settingsConfirmDisableStandby" });
+    standbyDialog->setObjectName("settingsStandbyConfirmation");
     connect(standbyDialog->secondaryButton(), &QPushButton::clicked, this,
             [this] { dismissStandbyConfirmation(); });
     connect(standbyDialog->primaryButton(), &QPushButton::clicked, this, [this] {
@@ -3268,11 +3286,11 @@ void SettingsPanel::updateFeatureOptions()
     }
     if (navigationBarButton) {
         const bool annotations = features::enabled(featurePreferences, features::Annotations);
-        findChild<QWidget *>("rrControlsNavigationBarSection")->setVisible(navigate);
+        findChild<QWidget *>("settingsControlsNavigationBarHeading")->setVisible(navigate);
         navigationBarButton->setVisible(navigate);
         annotationInteractionButton->setVisible(annotations);
-        findChild<QWidget *>("rrControlsAnnotationsSection")->setVisible(annotations);
-        findChild<QWidget *>("rrControlsMenuSection")->setVisible(navigate || stats);
+        findChild<QWidget *>("settingsControlsAnnotationsHeading")->setVisible(annotations);
+        findChild<QWidget *>("settingsControlsMenuHeading")->setVisible(navigate || stats);
         menuViewButton->setVisible(navigate || stats);
     }
     auto *syncTab = settingsTabButtons[int(SettingsPage::Kosync)];
@@ -3286,7 +3304,7 @@ void SettingsPanel::showDisabledFeatures()
     if (sheet)
         return;
     sheet = new ui::ModalOverlay(parentWidget());
-    sheet->setObjectName("rrDisabledFeaturesPopup");
+    sheet->setObjectName("settingsDisabledFeaturesPopup");
     sheet->setDimmed(true);
     sheet->setGeometry(parentWidget()->rect());
     sheet->dismissed = [this] { dismissSheet(); };
@@ -3303,7 +3321,7 @@ void SettingsPanel::showDisabledFeatures()
     for (const auto &entry : featureOptions) {
         const auto *key = features::keys[entry.feature];
         auto *option = checklistOption(
-                card, QString("rrDisableFeature_%1").arg(key), strings::get(entry.label),
+                card, QString("settingsDisableFeature_%1").arg(key), strings::get(entry.label),
                 strings::get((QByteArray(entry.label) + "_description").constData()),
                 options.isEmpty());
         auto presentation = option->presentation();
@@ -3333,9 +3351,9 @@ void SettingsPanel::showDisabledFeatures()
     connect(stats, &QCheckBox::clicked, card, updateActivity);
     updateActivity();
     auto *cancel = ui::makeModalButton(
-            card, { strings::get("common.cancel"), "rrDisabledFeaturesCancel" }, false);
+            card, { strings::get("common.cancel"), "settingsDisabledFeaturesCancel" }, false);
     auto *done = ui::makeModalButton(
-            card, { strings::get("common.done"), "rrDisabledFeaturesDone" }, true);
+            card, { strings::get("common.done"), "settingsDisabledFeaturesDone" }, true);
     card->adaptiveActions({ cancel, done });
     connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft] {

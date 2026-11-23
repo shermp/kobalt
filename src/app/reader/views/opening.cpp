@@ -74,7 +74,7 @@ class OpeningCover final : public QWidget
 public:
     explicit OpeningCover(QWidget *parent) : QWidget(parent)
     {
-        setObjectName("rrOpeningCover");
+        setObjectName("openingCover");
         setAttribute(Qt::WA_OpaquePaintEvent);
         hide();
     }
@@ -135,7 +135,7 @@ class OpeningRedirect final : public QWidget
 public:
     explicit OpeningRedirect(QWidget *parent) : QWidget(parent)
     {
-        setObjectName("rrOpeningRedirect");
+        setObjectName("openingRedirect");
         hide();
     }
 
@@ -161,7 +161,8 @@ public:
         Q_ASSERT(presentation);
         // Start as a child. Creating a dialog under an embedded reader first
         // leaves a separate graphics proxy even after clearing its window flag.
-        setObjectName("rrOpening");
+        setObjectName("opening");
+        setProperty("kobalt_touch_window", true);
         setWindowModality(embedded ? Qt::NonModal : Qt::ApplicationModal);
         setProperty("reader_dark", dark);
         setAutoFillBackground(true);
@@ -191,14 +192,14 @@ public:
         ui::readerStyle(this, ui::styles::reader());
         cover = new OpeningCover(this);
         brand = new ui::InterfaceLabel(strings::get("app.wordmark"), this);
-        brand->setObjectName("rrOpeningBrand");
+        brand->setObjectName("openingBrand");
         brand->setAlignment(Qt::AlignCenter);
         label = new ui::InterfaceLabel(strings::get("opening.loading"), this);
-        label->setObjectName("rrOpeningLabel");
+        label->setObjectName("openingLabel");
         label->setAlignment(Qt::AlignCenter);
         redirect = new OpeningRedirect(this);
         progress = new QProgressBar(this);
-        progress->setObjectName("rrOpeningProgress");
+        progress->setObjectName("openingProgress");
         progress->setRange(0, 100);
         progress->setValue(0);
         progress->setTextVisible(false);
@@ -209,7 +210,7 @@ public:
         // caption's capitals in the text itself.
         hint = new ui::InterfaceLabel(QLocale().toUpper(strings::get("opening.may_take_a_while")),
                                       this);
-        hint->setObjectName("rrOpeningHint");
+        hint->setObjectName("openingHint");
         hint->setAlignment(Qt::AlignCenter);
         hint->setText(QLocale().toUpper(strings::get("opening.preparing")));
         hintTimer.setSingleShot(true);
@@ -221,7 +222,7 @@ public:
             }
         });
         cancel = new ui::BackButton(QString(), this);
-        cancel->setObjectName("rrCancelOpening");
+        cancel->setObjectName("openingCancel");
         cancel->setAccessibleName(strings::get("common.cancel"));
         cancel->setVisible(!embedded);
         connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -541,9 +542,9 @@ private:
                                       storageFailure ? strings::get("opening.storage_failed")
                                                      : strings::get("opening.failed"),
                                       {} },
-                                    { strings::get("opening.go_back"), "rrOpeningBack" },
-                                    { strings::get("opening.try_native"), "rrOpeningNative" });
-        failureDialog->setObjectName("rrOpeningFailure");
+                                    { strings::get("opening.go_back"), "openingBack" },
+                                    { strings::get("opening.try_native"), "openingNative" });
+        failureDialog->setObjectName("openingFailure");
         connect(failureDialog->primaryButton(), &QPushButton::clicked, this, &QDialog::accept);
         connect(failureDialog->secondaryButton(), &QPushButton::clicked, this, &QDialog::reject);
         for (auto *widget : failureDialog->findChildren<QWidget *>())
@@ -742,10 +743,10 @@ SaveErrorView::SaveErrorView(QWidget *parent)
                       { strings::get("sleep.reading_time_failed_detail"),
                         strings::get("sleep.reading_time_failed"),
                         {} },
-                      { strings::get("closing.return"), "rrSleepSaveReturn" },
-                      { strings::get("sleep.retry_save"), "rrSleepSaveRetry" })
+                      { strings::get("closing.return"), "sleepSaveReturn" },
+                      { strings::get("sleep.retry_save"), "sleepSaveRetry" })
 {
-    setObjectName("rrSleepSaveError");
+    setObjectName("sleepSaveError");
 }
 
 SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried, Cause cause,
@@ -761,14 +762,14 @@ SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried
                                    : QString()),
                 strings::get(cause == Cause::TimedOut ? "closing.timeout" : "closing.failed"),
                 {} },
-              { strings::get("closing.return"), "rrCloseSaveReturn" },
-              { strings::get("closing.retry"), "rrCloseSaveRetry" })
+              { strings::get("closing.return"), "closeSaveReturn" },
+              { strings::get("closing.retry"), "closeSaveRetry" })
 {
-    setObjectName("rrCloseSaveError");
+    setObjectName("closeSaveError");
     if (retried || savedLocally) {
         quit = ui::makeModalButton(
                 card(),
-                { strings::get(retried ? "closing.quit" : "closing.close_now"), "rrCloseSaveQuit" },
+                { strings::get(retried ? "closing.quit" : "closing.close_now"), "closeSaveQuit" },
                 false);
         quit->ensurePolished();
         quit->setFixedHeight(ui::metrics::chrome::actionHeight);

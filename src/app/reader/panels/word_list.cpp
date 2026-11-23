@@ -25,9 +25,9 @@ void confirmWordRemoval(QWidget *host, const SavedWord &word, std::function<void
                                 { strings::get("words.remove_detail").arg(word.word),
                                   strings::get("words.remove_prompt"),
                                   {} },
-                                { strings::get("common.cancel"), "rrKeepWord" },
-                                { strings::get("words.remove_confirm"), "rrConfirmRemoveWord" });
-    choice->setObjectName("rrRemoveWord");
+                                { strings::get("common.cancel"), "keepWord" },
+                                { strings::get("words.remove_confirm"), "confirmRemoveWord" });
+    choice->setObjectName("removeWord");
     choice->setDimmed(true);
     choice->setGeometry(host->rect());
     ui::readerStyle(choice->descriptionLabel(),
@@ -52,10 +52,10 @@ void confirmWordRemoval(QWidget *host, const SavedWord &word, std::function<void
 
 WordList::WordList(QWidget *parent, Scope scope) : ui::Panel(parent), scope(scope)
 {
-    setObjectName(scope == Scope::Book ? "rrWordList" : "rrMyWords");
+    setObjectName(scope == Scope::Book ? "wordList" : "myWords");
     if (scope == Scope::Library) {
         backButton = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
-        backButton->setObjectName("rrMyWordsBack");
+        backButton->setObjectName("myWordsBack");
         backButton->setRule(Qt::RightEdge);
         backButton->setAccessibleName(strings::get("library.back"));
         connect(backButton, &QPushButton::clicked, this, [this] {
@@ -66,7 +66,7 @@ WordList::WordList(QWidget *parent, Scope scope) : ui::Panel(parent), scope(scop
         title->setTextFormat(Qt::PlainText);
         ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
         count = new ui::InterfaceLabel({}, this);
-        count->setObjectName("rrMyWordsCount");
+        count->setObjectName("myWordsCount");
         count->setTextFormat(Qt::PlainText);
         count->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         ui::readerStyle(count,
@@ -75,20 +75,20 @@ WordList::WordList(QWidget *parent, Scope scope) : ui::Panel(parent), scope(scop
         // The strip below the bar, as in the Library: the book filter on the
         // left and the sort on the right.
         sortButton = new ui::CellButton(ui::ControlIcon::Sort, this);
-        sortButton->setObjectName("rrMyWordsSort");
+        sortButton->setObjectName("myWordsSort");
         sortButton->setAccessibleName(strings::get("marks.sort_title"));
         sortButton->setRule(ui::Edges(Qt::LeftEdge) | Qt::BottomEdge);
         ui::readerStyle(sortButton, "QPushButton{min-height:0;}");
         sortButton->setMinimumHeight(0);
         connect(sortButton, &QPushButton::clicked, this, [this] { openSort(); });
         filter = new ui::CaptionDropdown(this);
-        filter->setObjectName("rrWordsFilter");
+        filter->setObjectName("wordsFilter");
         filter->setAccessibleName(strings::get("words.filter"));
         filter->label = strings::get("words.filter");
         connect(filter, &QPushButton::clicked, this, [this] { openFilter(); });
     }
     empty = new ui::InterfaceLabel(strings::get("words.empty"), this);
-    empty->setObjectName("rrWordListEmpty");
+    empty->setObjectName("wordListEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setAlignment(Qt::AlignCenter);
     ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
@@ -99,7 +99,7 @@ WordList::WordList(QWidget *parent, Scope scope) : ui::Panel(parent), scope(scop
     ui::readerStyle(emptyHint,
                     ui::styles::font(chrome::descriptionText)
                             + "color:palette(placeholder-text);background:transparent;");
-    pager = new ui::PagerBar(this, scope == Scope::Book ? "rrWords" : "rrMyWords");
+    pager = new ui::PagerBar(this, scope == Scope::Book ? "words" : "myWords");
     connect(pager->previous, &QPushButton::clicked, this, [this] {
         page = pager->turnTarget(-1);
         redraw();
@@ -361,9 +361,9 @@ void WordList::redraw()
         const int index = first + row;
         const auto &word = items[index];
         auto *item = buttons[row];
-        item->setObjectName(QString(scope == Scope::Book ? "rrWord%1" : "rrMyWord%1").arg(index));
+        item->setObjectName(QString(scope == Scope::Book ? "word%1" : "myWord%1").arg(index));
         removes[row]->setObjectName(
-                QString(scope == Scope::Book ? "rrWordRemove%1" : "rrMyWordRemove%1").arg(index));
+                QString(scope == Scope::Book ? "wordRemove%1" : "myWordRemove%1").arg(index));
         removes[row]->setAccessibleName(strings::get("words.remove"));
         item->setGeometry(0, y, width(), height);
         item->setActionIcon(ui::ControlIcon::Trash);
@@ -406,7 +406,7 @@ void WordList::openSort()
 {
     closePopup();
     popup = new ui::ModalOverlay(this);
-    popup->setObjectName("rrMyWordsSortPopup");
+    popup->setObjectName("myWordsSortPopup");
     popup->setGeometry(rect());
     popup->setDimmed(true);
     popup->dismissed = [this] { closePopup(); };
@@ -423,7 +423,7 @@ void WordList::openSort()
     const QStringList values{ "newest", "oldest", "alphabetical" };
     const QStringList keys{ "marks.sort_newest", "marks.sort_oldest", "words.sort_alphabetical" };
     for (int i = 0; i < values.size(); ++i) {
-        options->add("rrMyWordsSort_" + values[i], strings::get(keys[i].toLatin1().constData()),
+        options->add("myWordsSort_" + values[i], strings::get(keys[i].toLatin1().constData()),
                      strings::get((keys[i] + "_description").toLatin1().constData()));
         if (order == values[i])
             options->setCurrent(i);
@@ -457,7 +457,7 @@ void WordList::openFilter()
             names.append(word.title.isEmpty() ? strings::get("words.untitled") : word.title);
         }
     popup = new ui::ModalOverlay(this);
-    popup->setObjectName("rrMyWordsFilterPopup");
+    popup->setObjectName("myWordsFilterPopup");
     popup->setGeometry(rect());
     popup->setDimmed(true);
     popup->dismissed = [this] { closePopup(); };
@@ -472,7 +472,7 @@ void WordList::openFilter()
     options->setMinimumRowHeight(chrome::listActionHeight);
     options->setTopDivider(true);
     for (int i = 0; i < names.size(); ++i) {
-        options->add(QString("rrMyWordsBook%1").arg(i), names[i]);
+        options->add(QString("myWordsBook%1").arg(i), names[i]);
         if (keys[i] == book)
             options->setCurrent(i);
     }
@@ -482,7 +482,7 @@ void WordList::openFilter()
     const int rowsHeight = options->rowHeight(cardWidth - 4);
     const int room = height() - 4 * chrome::actionHeight;
     const int perPage = qMax(1, room / qMax(1, rowsHeight));
-    auto *paging = new ui::PagerBar(card, "rrMyWordsBooks");
+    auto *paging = new ui::PagerBar(card, "myWordsBooks");
     auto shownPage = std::make_shared<int>(qMax(0, int(keys.indexOf(book))) / perPage);
     const int pageCount = (int(names.size()) + perPage - 1) / perPage;
     const auto showPage = [options, paging, shownPage, perPage, pageCount, names, cardWidth] {

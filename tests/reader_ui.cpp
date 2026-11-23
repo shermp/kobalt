@@ -270,7 +270,7 @@ private slots:
         page.image = destination;
         page.animationDirection = 1;
         page.refreshContent(true);
-        auto *animation = page.findChild<QTimeLine *>("rrPageTurn");
+        auto *animation = page.findChild<QTimeLine *>("pageTurn");
         QVERIFY(animation);
         QCOMPARE(animation->duration(), 180);
         QCOMPARE(animation->easingCurve().type(), QEasingCurve::InOutSine);
@@ -336,9 +336,9 @@ private slots:
         chapters->showChapters("Test book", choices, {});
         qApp->removeEventFilter(&shows);
         QCoreApplication::processEvents();
-        auto *counter = chapters->findChild<QLabel *>("rrContentsPage");
-        auto *next = chapters->findChild<QPushButton *>("rrContentsNext");
-        auto *previous = chapters->findChild<QPushButton *>("rrContentsPrevious");
+        auto *counter = chapters->findChild<QLabel *>("contentsPage");
+        auto *next = chapters->findChild<QPushButton *>("contentsNext");
+        auto *previous = chapters->findChild<QPushButton *>("contentsPrevious");
         QVERIFY(counter && next && previous);
         const auto first = counter->text();
         auto *row = chapters->findChild<QPushButton *>("chapter0");
@@ -429,7 +429,7 @@ private slots:
         QCoreApplication::processEvents();
         QVERIFY(chapters->currentPage() > 0);
         QCOMPARE(selected, 0);
-        QVERIFY(click(canvas, chapters->findChild<QPushButton *>("rrContentsNext")));
+        QVERIFY(click(canvas, chapters->findChild<QPushButton *>("contentsNext")));
         QCOMPARE(chapters->currentPage(), 0);
         QVERIFY(disclosure()->isChecked());
         QVERIFY(click(canvas, chapters->findChild<QPushButton *>("chapter0")));
@@ -518,9 +518,9 @@ private slots:
         host.show();
         picker.showChoices("Fonts", choices, {}, ChoiceScreen::Mode::Fonts);
         QCoreApplication::processEvents();
-        auto *counter = picker.findChild<QLabel *>("rrFontPagerPage");
+        auto *counter = picker.findChild<QLabel *>("fontPagerPage");
         auto *cell = picker.findChild<QPushButton *>("font0");
-        auto *previous = picker.findChild<QPushButton *>("rrFontPagerPrevious");
+        auto *previous = picker.findChild<QPushButton *>("fontPagerPrevious");
         QVERIFY(counter && counter->isVisible() && cell && cell->isVisible() && previous);
         const auto first = counter->text();
         const auto center = cell->rect().center();
@@ -717,7 +717,7 @@ private slots:
         int taps = 0, holds = 0;
         page.tapped = [&](QPoint) { ++taps; };
         page.held = [&](QPoint) { ++holds; };
-        auto *timer = page.findChild<QTimer *>("rrHoldTimer");
+        auto *timer = page.findChild<QTimer *>("readingPageHoldTimer");
         QVERIFY(timer);
         QSignalSpy fired(timer, &QTimer::timeout);
         timer->setInterval(20);
@@ -1944,7 +1944,7 @@ private slots:
             }
             AboutPage reference;
             reference.ensurePolished();
-            for (const auto *name : { "rrAboutVersion", "rrAboutCommit" }) {
+            for (const auto *name : { "aboutVersion", "aboutCommit" }) {
                 auto *shown = about->findChild<QLabel *>(name);
                 auto *expected = reference.findChild<QLabel *>(name);
                 QVERIFY(shown && expected);
@@ -1984,7 +1984,7 @@ private slots:
                 QVERIFY2(centerDifference <= ui::px(2),
                          qPrintable(QString("Title/arrow ink centers differ by %1 pixels")
                                             .arg(centerDifference)));
-                auto *body = about->findChild<QWidget *>("rrAbout");
+                auto *body = about->findChild<QWidget *>("about");
                 QVERIFY(body);
                 auto *clip = body->parentWidget();
                 const auto exposed = [clip](QWidget *widget) {
@@ -1997,11 +1997,11 @@ private slots:
                     previous->click();
                 bool versionSeen = false, commitSeen = false, actionSeen = false, buildSeen = false;
                 for (int turns = 0; turns < 20; ++turns) {
-                    versionSeen |= exposed(about->findChild<QWidget *>("rrAboutVersion"));
-                    commitSeen |= exposed(about->findChild<QWidget *>("rrAboutCommit"));
-                    actionSeen |= exposed(about->findChild<QWidget *>("rrOpenAcknowledgments"));
-                    buildSeen |= exposed(about->findChild<QWidget *>("rrAboutVersion"))
-                            && exposed(about->findChild<QWidget *>("rrAboutCommit"));
+                    versionSeen |= exposed(about->findChild<QWidget *>("aboutVersion"));
+                    commitSeen |= exposed(about->findChild<QWidget *>("aboutCommit"));
+                    actionSeen |= exposed(about->findChild<QWidget *>("openAcknowledgments"));
+                    buildSeen |= exposed(about->findChild<QWidget *>("aboutVersion"))
+                            && exposed(about->findChild<QWidget *>("aboutCommit"));
                     if (!next->isVisible() || !next->isEnabled())
                         break;
                     view.pageButton(1);
@@ -2021,13 +2021,13 @@ private slots:
                                         .arg(clip->width())
                                         .arg(clip->height())));
             }
-            auto *acknowledgments = dynamic_cast<Acknowledgments *>(
-                    about->findChild<QWidget *>("rrAcknowledgments"));
+            auto *acknowledgments =
+                    dynamic_cast<Acknowledgments *>(about->findChild<QWidget *>("acknowledgments"));
             QVERIFY(acknowledgments);
             view.resize(ui::px(1072), ui::px(1448));
             QCoreApplication::processEvents();
             showAbout();
-            about->findChild<QPushButton *>("rrOpenAcknowledgments")->click();
+            about->findChild<QPushButton *>("openAcknowledgments")->click();
             QVERIFY(acknowledgments->isVisible());
             view.resize(ui::px(1000), ui::px(600));
             QCoreApplication::processEvents();
@@ -2036,8 +2036,8 @@ private slots:
             const auto creditsFrame = about->grab().toImage();
             hint->hide();
             QCOMPARE(about->grab().toImage(), creditsFrame);
-            acknowledgments->findChild<QPushButton *>("rrAcknowledgment0")->click();
-            QVERIFY(acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());
+            acknowledgments->findChild<QPushButton *>("acknowledgment0")->click();
+            QVERIFY(acknowledgments->findChild<QWidget *>("licenseText")->isVisible());
             view.resize(ui::px(1072), ui::px(1448));
             QCoreApplication::processEvents();
             view.resize(ui::px(1000), ui::px(600));
@@ -2048,7 +2048,7 @@ private slots:
             QCOMPARE(about->grab().toImage(), licenseFrame);
             QVERIFY(view.dismiss());
             QVERIFY(acknowledgments->isVisible());
-            QVERIFY(!acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());
+            QVERIFY(!acknowledgments->findChild<QWidget *>("licenseText")->isVisible());
             QVERIFY(view.dismiss());
             QVERIFY(!acknowledgments->isVisible());
             QVERIFY(about->isVisible());
@@ -2365,12 +2365,12 @@ private slots:
             QVERIFY(!frames.last().text);
             QVERIFY(frames.last().textPixels.isEmpty());
             QCOMPARE(opening->content->size(), opening->pixelSize());
-            auto *dialog = opening->content->findChild<QDialog *>("rrOpening");
+            auto *dialog = opening->content->findChild<QDialog *>("opening");
             QVERIFY(dialog);
             QVERIFY(!dialog->isWindow());
             QVERIFY(!dialog->windowHandle());
             QCOMPARE(dialog->geometry(), opening->content->rect());
-            for (const auto *name : { "rrOpeningBrand", "rrOpeningLabel", "rrOpeningProgress" }) {
+            for (const auto *name : { "openingBrand", "openingLabel", "openingProgress" }) {
                 const auto *item = dialog->findChild<QWidget *>(name);
                 QVERIFY(item);
                 QVERIFY(dialog->rect().contains(item->geometry()));
@@ -2655,20 +2655,21 @@ private slots:
         host.resize(ui::px(1072), ui::px(1448));
         host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        const auto sheet = ui::makeChoiceSheet(&host, "rrProbe", "Probe title", "Probe hint",
-                                               "rrProbeTitle", "rrProbeHint");
-        sheet.list->add("rrProbeOne", "One");
-        sheet.list->add("rrProbeTwo", "Two");
+        const auto sheet =
+                ui::makeChoiceSheet(&host, "choiceSheetProbe", "Probe title", "Probe hint",
+                                    "choiceSheetProbeTitle", "choiceSheetProbeHint");
+        sheet.list->add("choiceSheetProbeOne", "One");
+        sheet.list->add("choiceSheetProbeTwo", "Two");
         int dismissed = 0, chosen = -1;
         sheet.overlay->dismissed = [&] { ++dismissed; };
         sheet.list->chosen = [&](int index) { chosen = index; };
         ui::presentChoiceSheet(sheet.overlay, sheet.list);
         QCoreApplication::processEvents();
-        QCOMPARE(sheet.overlay->objectName(), QString("rrProbePopup"));
-        QCOMPARE(sheet.list->objectName(), QString("rrProbeChoices"));
+        QCOMPARE(sheet.overlay->objectName(), QString("choiceSheetProbePopup"));
+        QCOMPARE(sheet.list->objectName(), QString("choiceSheetProbeChoices"));
         auto *card = sheet.overlay->card();
-        auto *title = card->findChild<QLabel *>("rrProbeTitle");
-        QVERIFY(title && title->isVisible() && card->findChild<QLabel *>("rrProbeHint"));
+        auto *title = card->findChild<QLabel *>("choiceSheetProbeTitle");
+        QVERIFY(title && title->isVisible() && card->findChild<QLabel *>("choiceSheetProbeHint"));
         QTest::mouseClick(title, Qt::LeftButton);
         QCOMPARE(dismissed, 0);
         // The heading's padding beside the title, then the card's border.
@@ -2703,11 +2704,11 @@ private slots:
         host.resize(ui::px(1072), ui::px(1448));
         host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        const auto sheet = ui::makeChoiceSheet(&host, "rrProbe", "Probe title");
-        sheet.list->add("rrProbeOne", "One",
+        const auto sheet = ui::makeChoiceSheet(&host, "choiceSheetProbe", "Probe title");
+        sheet.list->add("choiceSheetProbeOne", "One",
                         "A description that is long enough to wrap onto a second line at the "
                         "width of the card, so that the row height depends on the width.");
-        sheet.list->add("rrProbeTwo", "Two", "Short.");
+        sheet.list->add("choiceSheetProbeTwo", "Two", "Short.");
         ui::presentChoiceSheet(sheet.overlay, sheet.list);
         QCoreApplication::processEvents();
         auto *card = sheet.overlay->card();
@@ -2736,7 +2737,7 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&host));
         ui::ChoiceModal modal(&host, { "Choose a folder.", "Resource folders", {} },
                               { "Cancel", "probeCancel" }, { "OK", "probeClose" });
-        modal.setObjectName("rrModalListProbe");
+        modal.setObjectName("modalListProbe");
         QVector<ui::ListRow *> rows;
         for (int i = 0; i < 5; ++i) {
             auto *row = new ui::ListRow(modal.card());
@@ -2768,7 +2769,7 @@ private slots:
         host.resize(ui::px(1072), ui::px(600));
         modal.setGeometry(host.rect());
         modal.fitCard();
-        auto *next = modal.findChild<QPushButton *>("rrModalListProbeNext");
+        auto *next = modal.findChild<QPushButton *>("modalListProbeNext");
         QVERIFY(next && next->isVisible());
         auto *pager = next->parentWidget();
         QCOMPARE(next->y(), 0);
@@ -2791,7 +2792,7 @@ private slots:
         QVERIFY(pages > 1 && pages < 10);
         modal.hide();
         host.resize(ui::px(1072), ui::px(1448));
-        const auto sheet = ui::makeChoiceSheet(&host, "rrBoundaryProbe", "Pick one");
+        const auto sheet = ui::makeChoiceSheet(&host, "boundaryProbe", "Pick one");
         sheet.list->add("probeOne", "One");
         sheet.list->add("probeTwo", "Two");
         ui::presentChoiceSheet(sheet.overlay, sheet.list);
@@ -2825,7 +2826,7 @@ private slots:
         auto *choices = new ui::RadioList(padded.card());
         choices->add("paddedOne", "One");
         choices->setFixedHeight(choices->heightForWidth(ui::px(700)) + ui::px(50));
-        auto *paddedPager = new ui::PagerBar(padded.card(), "rrPaddedProbe");
+        auto *paddedPager = new ui::PagerBar(padded.card(), "paddedProbe");
         paddedPager->setFixedHeight(ui::metrics::chrome::actionHeight);
         paddedPager->setPage(0, 2);
         padded.card()->rows()->insertWidget(1, choices);
@@ -2971,7 +2972,7 @@ private slots:
         auto *card = choice.card();
         auto *cancel = choice.secondaryButton();
         auto *remove = choice.primaryButton();
-        auto *heading = card->findChild<QLabel *>("rrModalTitle");
+        auto *heading = card->findChild<QLabel *>("modalTitle");
         auto *header = heading->parentWidget();
         QCOMPARE(header, choice.descriptionLabel()->parentWidget());
         QCOMPARE(header->layout()->contentsMargins().top(),
@@ -3232,8 +3233,8 @@ private slots:
                                 QStringLiteral("yellow"), font },
                               QString());
             QCoreApplication::processEvents();
-            auto *quote = host.findChild<QLabel *>("rrNoteQuote");
-            auto *box = host.findChild<QWidget *>("rrNoteText");
+            auto *quote = host.findChild<QLabel *>("noteQuote");
+            auto *box = host.findChild<QWidget *>("noteText");
             if (!quote || !box)
                 return -1;
             const int pitch = qMax(int(ui::px(44)), QFontMetrics(quote->font()).lineSpacing());
@@ -3302,7 +3303,7 @@ private slots:
         b.color = "green";
         BookmarkRow c{ "third", "Chapter Two", "Later in the book", late.addSecs(60), 8 };
         // The strip names the sort order, as the Library's strip does.
-        auto *sortCaption = list.findChild<QPushButton *>("rrMarksSort");
+        auto *sortCaption = list.findChild<QPushButton *>("marksSort");
         QVERIFY(sortCaption);
         list.showAnnotations({ a, b });
         QCOMPARE(sortCaption->text(), strings::get("marks.sort_position"));
@@ -3316,7 +3317,7 @@ private slots:
         list.showAnnotations({ c, b, a });
         QCoreApplication::processEvents();
         const auto row = [&]() {
-            return static_cast<ui::ListRow *>(list.findChild<QWidget *>("rrAnnotation0"));
+            return static_cast<ui::ListRow *>(list.findChild<QWidget *>("annotation0"));
         };
         QVERIFY(row());
         row()->click();
@@ -3339,8 +3340,7 @@ private slots:
             }
             QVERIFY(names[0] != names[1]);
         };
-        checkNames("rrAnnotation", "rrAnnotationRemove", a.chapter,
-                   strings::get("annotations.remove"));
+        checkNames("annotation", "annotationRemove", a.chapter, strings::get("annotations.remove"));
         QCOMPARE(row()->detailLabel()->text(), a.excerpt);
         QVERIFY(row()->titleLabel()->font().pixelSize() < row()->detailLabel()->font().pixelSize());
         // A small gap separates the chapter from the excerpt.
@@ -3357,15 +3357,14 @@ private slots:
         pinned.pinName = "Reference";
         pinned.pinIcon = "map";
         list.showBookmarks({ pinned, b });
-        checkNames("rrBookmark", "rrBookmarkMore", pinned.pinName,
-                   strings::get("bookmarks.actions"));
+        checkNames("bookmark", "bookmarkMore", pinned.pinName, strings::get("bookmarks.actions"));
         list.showAnnotations({ c, b, a });
         QCoreApplication::processEvents();
         QCOMPARE(row()->grab().toImage(), annotationImage);
         // Sort is the strip's caption below the tabs, at its left edge, as in
         // the Library. Its name is drawn in ink.
-        auto *sortControl = list.findChild<QPushButton *>("rrMarksSort");
-        auto *tab = list.findChild<QPushButton *>("rrAnnotationsTab");
+        auto *sortControl = list.findChild<QPushButton *>("marksSort");
+        auto *tab = list.findChild<QPushButton *>("annotationsTab");
         QCOMPARE(sortControl->x(), 0);
         QVERIFY(sortControl->y() > tab->geometry().bottom());
         QVERIFY(sortControl->width() > list.width() / 2);
@@ -3388,7 +3387,7 @@ private slots:
         QVERIFY(appearances[1] != appearances[2]);
         QVERIFY(appearances[0] != appearances[2]);
         list.showAnnotations({ c, b, a });
-        auto *shortRow = list.findChild<QWidget *>("rrAnnotation1");
+        auto *shortRow = list.findChild<QWidget *>("annotation1");
         QVERIFY(shortRow && shortRow->height() < annotationHeight);
         const auto shortSample =
                 static_cast<ui::ListRow *>(shortRow)->detailLabel()->grab().toImage();
@@ -3405,27 +3404,27 @@ private slots:
                     captureRoot
                     + QString("/annotations-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
         }
-        list.findChild<QPushButton *>("rrMarksSort")->click();
+        list.findChild<QPushButton *>("marksSort")->click();
         QCoreApplication::processEvents();
         if (!captureRoot.isEmpty())
             QVERIFY(owner.grab().save(
                     captureRoot
                     + QString("/sort-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
-        QCOMPARE(list.findChild<QWidget *>("rrModalCard")->palette().color(QPalette::Window),
+        QCOMPARE(list.findChild<QWidget *>("modalCard")->palette().color(QPalette::Window),
                  colors.color(QPalette::Window));
-        auto *newestOption = list.findChild<QAbstractButton *>("rrMarksSort_newest");
+        auto *newestOption = list.findChild<QAbstractButton *>("marksSort_newest");
         QCOMPARE(newestOption->palette().color(QPalette::Window), colors.color(QPalette::Window));
         QCOMPARE(newestOption->palette().color(QPalette::WindowText),
                  colors.color(QPalette::WindowText));
         QVERIFY(!newestOption->accessibleDescription().isEmpty());
-        list.findChild<QAbstractButton *>("rrMarksSort_newest")->click();
+        list.findChild<QAbstractButton *>("marksSort_newest")->click();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QCOMPARE(changed, QString("newest"));
         row()->click();
         QCOMPARE(selected, QString("third"));
-        list.findChild<QPushButton *>("rrMarksSort")->click();
+        list.findChild<QPushButton *>("marksSort")->click();
         QCoreApplication::processEvents();
-        list.findChild<QAbstractButton *>("rrMarksSort_oldest")->click();
+        list.findChild<QAbstractButton *>("marksSort_oldest")->click();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         row()->click();
         QCOMPARE(selected, QString("second"));
@@ -3435,7 +3434,7 @@ private slots:
         QCOMPARE(selected, QString("second"));
         list.setSortOrder("position");
         list.showBookmarks({ c, b, a });
-        auto *bookmark = static_cast<ui::ListRow *>(list.findChild<QWidget *>("rrBookmark0"));
+        auto *bookmark = static_cast<ui::ListRow *>(list.findChild<QWidget *>("bookmark0"));
         QVERIFY(bookmark);
         bookmark->click();
         QCOMPARE(selected, QString("first"));
@@ -3464,9 +3463,8 @@ private slots:
             for (auto *button : list.findChildren<QPushButton *>()) {
                 const auto name = button->objectName();
                 bool numberedRow = false;
-                const int index =
-                        name.mid(QStringLiteral("rrAnnotation").size()).toInt(&numberedRow);
-                if (!button->isVisible() || !name.startsWith("rrAnnotation") || !numberedRow
+                const int index = name.mid(QStringLiteral("annotation").size()).toInt(&numberedRow);
+                if (!button->isVisible() || !name.startsWith("annotation") || !numberedRow
                     || index < 0)
                     continue;
                 button->click();
@@ -3474,7 +3472,7 @@ private slots:
                 visited.insert(selected);
             }
             if (visited.size() < many.size())
-                list.findChild<QPushButton *>("rrBookmarkListNext")->click();
+                list.findChild<QPushButton *>("bookmarkListNext")->click();
         }
         QCOMPARE(visited.size(), many.size());
         // Sorting moves this short middle row without changing its contents
@@ -3498,7 +3496,7 @@ private slots:
             else
                 list.showBookmarks({ a, b, c, d });
             QCoreApplication::processEvents();
-            const QString prefix = annotations ? "rrAnnotation" : "rrBookmark";
+            const QString prefix = annotations ? "annotation" : "bookmark";
             auto *middle = list.findChild<QWidget *>(prefix + "1");
             const QString actionPrefix = prefix + (annotations ? "Remove" : "More");
             auto *removeMiddle = list.findChild<QPushButton *>(actionPrefix + "1");
@@ -3522,7 +3520,7 @@ private slots:
                     removed.clear();
                     removeMiddle->click();
                     if (!annotations) {
-                        auto *remove = owner.findChild<QPushButton *>("rrBookmarkDelete");
+                        auto *remove = owner.findChild<QPushButton *>("bookmarkDelete");
                         QVERIFY(remove && remove->isVisible());
                         remove->click();
                     }
@@ -3542,7 +3540,7 @@ private slots:
             for (int turn = 0; turn < entries.size() && seen.size() < entries.size(); ++turn) {
                 for (int index = 0; index < entries.size(); ++index) {
                     auto *button = static_cast<ui::ListRow *>(
-                            panel.findChild<QWidget *>("rrAnnotation" + QString::number(index)));
+                            panel.findChild<QWidget *>("annotation" + QString::number(index)));
                     if (!button || !button->isVisible())
                         continue;
                     button->click();
@@ -3560,7 +3558,7 @@ private slots:
                                           .arg(button->detailLabel()->height()));
                 }
                 if (seen.size() < entries.size())
-                    panel.findChild<QPushButton *>("rrBookmarkListNext")->click();
+                    panel.findChild<QPushButton *>("bookmarkListNext")->click();
             }
             panel.selected = {};
             return result;
@@ -3648,9 +3646,8 @@ private slots:
             for (auto *button : list.findChildren<QPushButton *>()) {
                 const auto name = button->objectName();
                 bool numberedRow = false;
-                const int index =
-                        name.mid(QStringLiteral("rrAnnotation").size()).toInt(&numberedRow);
-                if (!button->isVisible() || !name.startsWith("rrAnnotation") || !numberedRow
+                const int index = name.mid(QStringLiteral("annotation").size()).toInt(&numberedRow);
+                if (!button->isVisible() || !name.startsWith("annotation") || !numberedRow
                     || index < 0)
                     continue;
                 button->click();
@@ -3663,7 +3660,7 @@ private slots:
         QCOMPARE(displayed(), first);
         for (int i = 0; i < first.size(); ++i)
             QCOMPARE(first[i], QString::number(i));
-        auto *firstRow = static_cast<ui::ListRow *>(list.findChild<QWidget *>("rrAnnotation0"));
+        auto *firstRow = static_cast<ui::ListRow *>(list.findChild<QWidget *>("annotation0"));
         QVERIFY(firstRow);
         QCOMPARE(firstRow->detailLabel()->text(), excerpt("0"));
         // Hydration must preserve the compact row's appearance, not the default
@@ -3675,13 +3672,13 @@ private slots:
         complete.excerpt = excerpt("0");
         full.showAnnotations({ complete });
         QCoreApplication::processEvents();
-        auto *fullRow = static_cast<ui::ListRow *>(full.findChild<QWidget *>("rrAnnotation0"));
+        auto *fullRow = static_cast<ui::ListRow *>(full.findChild<QWidget *>("annotation0"));
         QVERIFY(fullRow);
         QCOMPARE(firstRow->detailLabel()->grab().toImage(),
                  fullRow->detailLabel()->grab().toImage());
         full.hide();
         requests.clear();
-        list.findChild<QPushButton *>("rrBookmarkListNext")->click();
+        list.findChild<QPushButton *>("bookmarkListNext")->click();
         QCOMPARE(requests.size(), 1);
         QCOMPARE(displayed(), requests.last());
         QVERIFY(!requests.last().contains(first.first()));
@@ -3721,8 +3718,8 @@ private slots:
             requests.clear();
             list.showAnnotations(compact);
             QCOMPARE(requests.size(), 1);
-            auto *row = static_cast<ui::ListRow *>(list.findChild<QWidget *>("rrAnnotation0"));
-            auto *remove = list.findChild<QPushButton *>("rrAnnotationRemove0");
+            auto *row = static_cast<ui::ListRow *>(list.findChild<QWidget *>("annotation0"));
+            auto *remove = list.findChild<QPushButton *>("annotationRemove0");
             QVERIFY(row && remove && !row->isEnabled() && !remove->isEnabled());
             QVERIFY(row->accessibleName().contains("Page 1"));
             QVERIFY(row->accessibleName().contains(strings::get("annotations.load_failed")));
@@ -3782,8 +3779,8 @@ private slots:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
         PaintRegions paints;
         bar.installEventFilter(&paints);
-        for (const char *name : { "rrNavChapters", "rrNavSeek", "rrNavText", "rrNavLayout",
-                                  "rrNavLight", "rrNavStats" }) {
+        for (const char *name : { "navigationChapters", "navigationSeek", "navigationText",
+                                  "navigationLayout", "navigationLight", "navigationStats" }) {
             auto *tab = bar.findChild<QPushButton *>(name);
             QVERIFY(tab && tab->isVisible());
             tab->setChecked(selected);
@@ -3953,7 +3950,7 @@ private slots:
         QVERIFY(feedback.testAttribute(Qt::WA_TransparentForMouseEvents));
         QVERIFY(feedback.card()->geometry().bottom() > button.y());
         QVERIFY(feedback.card()->geometry().bottom() < button.geometry().center().y());
-        auto *pointer = feedback.findChild<QWidget *>("rrAnchorPointer");
+        auto *pointer = feedback.findChild<QWidget *>("anchorPointer");
         QVERIFY(pointer && pointer->isVisible());
         QVERIFY(pointer->geometry().bottom() > button.y());
         QVERIFY(button.geometry().contains(pointer->geometry().center().x(),
@@ -4082,13 +4079,13 @@ private slots:
         owner.show();
         ui::ModalOverlay loading(&owner);
         loading.setDimmed(true);
-        loading.card()->message("Applying appearance changes", "rrUpdatingText");
+        loading.card()->message("Applying appearance changes", "updatingText");
         loading.fitCard();
         QVERIFY(loading.progressUpdateRect(35, "Applying appearance changes").isEmpty());
         loading.setDelayedProgress(true, 1100, 20, "Applying appearance changes");
         QCoreApplication::processEvents();
         auto *bar =
-                dynamic_cast<ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"));
+                dynamic_cast<ui::ProgressBar *>(loading.findChild<QWidget *>("applyingProgress"));
         QVERIFY(bar);
         QVERIFY(bar->isVisible());
         const auto captures = qEnvironmentVariable("KOBALT_CAPTURE_MODALS");
@@ -4241,7 +4238,7 @@ private slots:
         owner.show();
         opening->window()->show();
         QCoreApplication::processEvents();
-        auto *bar = opening->window()->findChild<QProgressBar *>("rrOpeningProgress");
+        auto *bar = opening->window()->findChild<QProgressBar *>("openingProgress");
         QVERIFY(bar);
         QVERIFY(bar->isVisible());
         PaintRegions paints;
@@ -4281,21 +4278,21 @@ private slots:
                 view->show();
                 QTRY_COMPARE(view->property("kobalt_first_cover_key").toString(),
                              QString::number(seed.cacheKey()));
-                QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+                QVERIFY(!view->findChild<QLabel *>("openingBrand")->isVisible());
             }
             auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
             auto *view = opening->window();
             view->setGeometry(owner.rect());
             owner.show();
             view->show();
-            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(view->findChild<QLabel *>("openingBrand")->isVisible());
             {
                 // Without a cover, the group runs from the logo's top to the hint.
                 namespace opening = ui::metrics::opening;
                 const qreal scale = qMin(screen.width() / opening::referenceWidth,
                                          screen.height() / opening::referenceHeight);
-                auto *brand = view->findChild<QLabel *>("rrOpeningBrand");
-                auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+                auto *brand = view->findChild<QLabel *>("openingBrand");
+                auto *hint = view->findChild<QLabel *>("openingHint");
                 const qreal logoTop =
                         brand->y() - (opening::brand.top() - opening::icon.top()) * scale;
                 const QFontMetricsF metrics(hint->font());
@@ -4318,10 +4315,10 @@ private slots:
                 opening->setCover(cover);
                 opening->setProgress(45);
                 QCoreApplication::processEvents();
-                QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
-                auto *progress = view->findChild<QProgressBar *>("rrOpeningProgress");
-                auto *label = view->findChild<QLabel *>("rrOpeningLabel");
-                auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+                QVERIFY(!view->findChild<QLabel *>("openingBrand")->isVisible());
+                auto *progress = view->findChild<QProgressBar *>("openingProgress");
+                auto *label = view->findChild<QLabel *>("openingLabel");
+                auto *hint = view->findChild<QLabel *>("openingHint");
                 QVERIFY(progress->isVisible());
                 QCOMPARE(progress->value(), 45);
                 QVERIFY(label->isVisible());
@@ -4331,7 +4328,7 @@ private slots:
                                          screen.height() / ui::metrics::opening::referenceHeight);
                 const auto area = ui::metrics::opening::cover;
                 const auto fit = QSizeF(size).scaled(area.size(), Qt::KeepAspectRatio) * scale;
-                const auto surface = view->findChild<QWidget *>("rrOpeningCover")->geometry();
+                const auto surface = view->findChild<QWidget *>("openingCover")->geometry();
                 QVERIFY(qAbs(surface.height() - fit.height()) <= 1);
                 const QRectF bounds(surface.center().x() + 0.5 - fit.width() / 2, surface.y(),
                                     fit.width(), fit.height());
@@ -4363,14 +4360,14 @@ private slots:
                          view->palette().color(QPalette::Window));
             }
             opening->setCover({});
-            QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!view->findChild<QLabel *>("openingBrand")->isVisible());
             opening->showFallback(OpeningFallback::Protected);
             QImage late(200, 300, QImage::Format_RGB32);
             late.fill(Qt::red);
             opening->setCover(late);
-            QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
-            QVERIFY(view->findChild<QProgressBar *>("rrOpeningProgress")->isVisible());
-            QCOMPARE(view->findChild<QProgressBar *>("rrOpeningProgress")->value(), 100);
+            QVERIFY(!view->findChild<QLabel *>("openingBrand")->isVisible());
+            QVERIFY(view->findChild<QProgressBar *>("openingProgress")->isVisible());
+            QCOMPARE(view->findChild<QProgressBar *>("openingProgress")->value(), 100);
 
             // A cached cover can arrive after the routing decision, without a session.
             QTemporaryDir directory;
@@ -4389,17 +4386,17 @@ private slots:
                     qRound((screen.height() - ui::metrics::opening::referenceHeight * scale) / 2
                            + ui::metrics::opening::cover.center().y() * scale));
             QTRY_COMPARE(cached->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
-            QVERIFY(!cached->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!cached->window()->findChild<QLabel *>("openingBrand")->isVisible());
 
             auto unavailable = createEmbeddedOpening(&owner, test::makeHostPresentation);
             unavailable->window()->setGeometry(owner.rect());
             unavailable->window()->show();
             unavailable->setCover({});
-            QVERIFY(unavailable->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(unavailable->window()->findChild<QLabel *>("openingBrand")->isVisible());
             unavailable->showFallback(OpeningFallback::Protected);
             unavailable->setCover(late);
             QCOMPARE(unavailable->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
-            QVERIFY(!unavailable->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!unavailable->window()->findChild<QLabel *>("openingBrand")->isVisible());
         }
     }
 
@@ -4440,11 +4437,11 @@ private slots:
             opening->setProgress(45);
             view->show();
             QCoreApplication::processEvents();
-            auto *cover = view->findChild<QWidget *>("rrOpeningCover");
-            auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
-            auto *label = view->findChild<QLabel *>("rrOpeningLabel");
-            auto *hint = view->findChild<QLabel *>("rrOpeningHint");
-            auto *redirect = view->findChild<QWidget *>("rrOpeningRedirect");
+            auto *cover = view->findChild<QWidget *>("openingCover");
+            auto *bar = view->findChild<QProgressBar *>("openingProgress");
+            auto *label = view->findChild<QLabel *>("openingLabel");
+            auto *hint = view->findChild<QLabel *>("openingHint");
+            auto *redirect = view->findChild<QWidget *>("openingRedirect");
             QVERIFY(redirect && !redirect->isVisible());
             const auto coverRect = cover->geometry(), barRect = bar->geometry(),
                        hintRect = hint->geometry();
@@ -4453,7 +4450,7 @@ private slots:
             QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateLater);
             QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
             QCoreApplication::processEvents();
-            auto *cancel = view->findChild<QWidget *>("rrCancelOpening");
+            auto *cancel = view->findChild<QWidget *>("openingCancel");
             const QRegion exposedCover = cancel->isVisible()
                     ? QRegion(cancel->geometry().intersected(coverRect).translated(
                               -coverRect.topLeft()))
@@ -4487,10 +4484,10 @@ private slots:
             QVERIFY(label->geometry().bottom() < bar->geometry().top());
             const auto row = redirect->geometry().united(label->geometry());
             QVERIFY(qAbs(row.center().x() - view->rect().center().x()) <= 1);
-            QCOMPARE(view->findChild<QLabel *>("rrOpeningBrand")->isVisible(), !hasCover);
+            QCOMPARE(view->findChild<QLabel *>("openingBrand")->isVisible(), !hasCover);
             opening->showFallback(OpeningFallback::Failure);
             QVERIFY(!redirect->isVisible() && !bar->isVisible() && !hint->isVisible());
-            QVERIFY(view->findChild<QWidget *>("rrOpeningFailure")->isVisible());
+            QVERIFY(view->findChild<QWidget *>("openingFailure")->isVisible());
         }
     }
 
@@ -4517,10 +4514,10 @@ private slots:
             owner.show();
             view->show();
             QCoreApplication::processEvents();
-            auto *brand = view->findChild<QLabel *>("rrOpeningBrand");
-            auto *surface = view->findChild<QWidget *>("rrOpeningCover");
-            auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
-            auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+            auto *brand = view->findChild<QLabel *>("openingBrand");
+            auto *surface = view->findChild<QWidget *>("openingCover");
+            auto *bar = view->findChild<QProgressBar *>("openingProgress");
+            auto *hint = view->findChild<QLabel *>("openingHint");
             QVERIFY(brand->isVisible());
             QVERIFY(surface->isHidden());
             const auto before = view->grab().toImage();
@@ -4601,7 +4598,7 @@ private slots:
         auto opening = createOpening(&owner, { { "dark_mode", dark } }, test::makeHostPresentation);
         auto *view = opening->window();
         view->resize(600, 800);
-        auto *surface = view->findChild<QWidget *>("rrOpeningCover");
+        auto *surface = view->findChild<QWidget *>("openingCover");
         QVERIFY(surface);
         QImage thumbnail(100, 200, QImage::Format_RGB32);
         thumbnail.fill(Qt::blue);
@@ -4670,8 +4667,8 @@ private slots:
         opening->setCover(image);
         owner.show();
         view->show();
-        auto *hint = view->findChild<QLabel *>("rrOpeningHint");
-        auto *surface = view->findChild<QWidget *>("rrOpeningCover");
+        auto *hint = view->findChild<QLabel *>("openingHint");
+        auto *surface = view->findChild<QWidget *>("openingCover");
         const auto coverPixels = surface->grab().toImage();
         QCoreApplication::processEvents();
         PaintRegions coverPaints;
@@ -4733,7 +4730,7 @@ private slots:
                 view->show();
                 QTRY_VERIFY(first);
                 QTRY_VERIFY(controls);
-                auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
+                auto *bar = view->findChild<QProgressBar *>("openingProgress");
                 QVERIFY(bar && bar->isVisible());
                 opening->setProgress(20);
                 QCOMPARE(bar->value(), 20);
@@ -4758,9 +4755,9 @@ private slots:
         QImage cover(120, 180, QImage::Format_RGB32);
         cover.fill(Qt::gray);
         logoOnly->setCover(cover);
-        QVERIFY(!logoOnly->window()->findChild<QProgressBar *>("rrOpeningProgress"));
+        QVERIFY(!logoOnly->window()->findChild<QProgressBar *>("openingProgress"));
         logoOnly->showFallback(OpeningFallback::Protected);
-        QVERIFY(logoOnly->window()->findChild<QProgressBar *>("rrOpeningProgress"));
+        QVERIFY(logoOnly->window()->findChild<QProgressBar *>("openingProgress"));
     }
 
     void openingFirstPaintCallback()

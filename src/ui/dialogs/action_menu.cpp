@@ -80,7 +80,7 @@ class MenuHeader final : public QWidget
 public:
     MenuHeader(const ActionMenuHeader &content, QWidget *parent) : QWidget(parent), content(content)
     {
-        setObjectName("rrActionMenuHeader");
+        setObjectName("actionMenuHeader");
         setAccessibleName(QStringList({ content.title, content.detail, content.caption })
                                   .join(' ')
                                   .simplified());

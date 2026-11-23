@@ -187,7 +187,7 @@ int itemIndex(QLayout *layout, const QWidget *widget)
 void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
                                 std::function<bool(bool)> save)
 {
-    if (view->findChild<QWidget *>("rrAlternativeReader"))
+    if (view->findChild<QWidget *>("alternativeReader"))
         return;
     // Firmware 4 builds each Reading Settings row from a label and a
     // TouchCheckBox. It has no SettingItemWithCheckBox, and its label classes
@@ -218,7 +218,7 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
         nh_log("reader: native settings controls unavailable");
         return;
     }
-    check->setObjectName("rrAlternativeReaderEnabled");
+    check->setObjectName("alternativeReaderEnabled");
     check->setText(referenceCheck->text());
     check->setFont(referenceCheck->font());
     check->setSizePolicy(referenceCheck->sizePolicy());
@@ -226,24 +226,24 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
     check->setMaximumSize(referenceCheck->maximumSize());
     check->setChecked(enabled());
     auto *heading = new MetaDataHeaderLabel(section);
-    heading->setObjectName("rrAlternativeReaderHeading");
+    heading->setObjectName("alternativeReaderHeading");
     heading->setText(strings::get("app.name").toUpper());
     heading->setSizePolicy(referenceTitle->sizePolicy());
     heading->setAlignment(referenceTitle->alignment());
     auto *label = new RegularLabelVPadded(section);
-    label->setObjectName("rrAlternativeReaderLabel");
+    label->setObjectName("alternativeReaderLabel");
     label->setText(strings::get("native_ui.open_books_in_kobalt"));
     label->setSizePolicy(referenceLabel->sizePolicy());
     label->setAlignment(referenceLabel->alignment());
     auto *row = new QWidget(section);
-    row->setObjectName("rrAlternativeReader");
+    row->setObjectName("alternativeReader");
     auto *rowLayout = new QHBoxLayout(row);
     rowLayout->setContentsMargins(0, 0, 0, 0);
     rowLayout->setSpacing(0);
     rowLayout->addWidget(label, 1);
     rowLayout->addWidget(check, 0, Qt::AlignVCenter);
     auto *error = new QLabel(strings::get("native_ui.could_not_save_reader_preference"), section);
-    error->setObjectName("rrAlternativeReaderError");
+    error->setObjectName("alternativeReaderError");
     error->setFont(referenceLabel->font());
     error->setWordWrap(true);
     error->hide();

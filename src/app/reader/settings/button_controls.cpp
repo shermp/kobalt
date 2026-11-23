@@ -66,7 +66,7 @@ public:
         setFixedSize((bounds.size() * scale).toSize());
         for (int i = 0; i < buttons.size(); ++i) {
             auto *button = new DiagramButton(this);
-            button->setObjectName("rrButtonDiagram_" + buttons[i].id);
+            button->setObjectName("buttonDiagram_" + buttons[i].id);
             button->setAccessibleName(strings::get(buttons[i].labelKey.toUtf8().constData()));
             const int position = volume ? int(buttons[i].key == Qt::Key_VolumeDown)
                                         : int(buttons[i].key == Qt::Key_F24);
@@ -153,7 +153,7 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     const int cardWidth = qMin<int>(
             ui::px(1064), parentWidget()->width() - 2 * ui::metrics::notice::sideClearance);
     sheet = new ui::ModalOverlay(parentWidget());
-    sheet->setObjectName("rrButtonControlsPopup");
+    sheet->setObjectName("settingsButtonControlsPopup");
     sheet->setDimmed(true);
     sheet->setGeometry(parentWidget()->rect());
     sheet->dismissed = [this] { dismissSheet(); };
@@ -202,7 +202,7 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         name->setWordWrap(true);
         ui::readerStyle(name, ui::styles::font(chrome::descriptionText));
         auto *value = new ui::InterfaceLabel(callout);
-        value->setObjectName("rrButtonPreview_" + button.id);
+        value->setObjectName("buttonPreview_" + button.id);
         value->setWordWrap(true);
         ui::readerStyle(value, ui::styles::font(chrome::labelText));
         QJsonObject prefs;
@@ -231,7 +231,7 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     for (int i = 0; i < buttons.size(); ++i) {
         const auto &button = buttons[i];
         auto *row = ui::makeCaptionButton(
-                mapping, nullptr, ("rrButtonAction_" + button.id).toUtf8().constData(),
+                mapping, nullptr, ("buttonAction_" + button.id).toUtf8().constData(),
                 strings::get(button.labelKey.toUtf8().constData()), [] { });
         ui::readerStyle(
                 row,
@@ -254,7 +254,7 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
                 qMin<int>(ui::metrics::notice::cardWidth,
                           parentWidget()->width() - 2 * ui::metrics::notice::sideClearance);
         auto *overlay = new ui::ModalOverlay(sheet);
-        overlay->setObjectName("rrButtonActionPopup");
+        overlay->setObjectName("buttonActionPopup");
         overlay->setDimmed(true);
         overlay->setGeometry(sheet->rect());
         overlay->dismissed = [this, overlay] {
@@ -271,14 +271,14 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         picker->heading(strings::get(buttons[index].labelKey.toUtf8().constData()),
                         strings::get("buttons.while_reading"));
         auto *choices = new ui::RadioList(picker);
-        choices->setObjectName("rrButtonActionChoices");
+        choices->setObjectName("buttonActionChoices");
         choices->setMinimumRowHeight(ui::metrics::list::oneLine);
         choices->setUniformRows(false);
         const QVector<int> directions{ -1, 1, 0 };
         QJsonObject prefs;
         prefs[pageButtons::preferenceKey] = *draft;
         for (int direction : directions) {
-            choices->add("rrButtonChoose_" + pageButtons::action(direction), actionLabel(direction),
+            choices->add("buttonChoose_" + pageButtons::action(direction), actionLabel(direction),
                          direction == 0 ? strings::get("buttons.none_description") : QString{});
             if (pageButtons::direction(prefs, buttons[index].id, buttons[index].defaultDirection)
                 == direction)
@@ -333,7 +333,7 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         mappingRows->addWidget(note);
     } else {
         ui::readerStyle(note, ui::styles::font(chrome::descriptionText) + "font-style:italic;");
-        auto *invert = checklistOption(card, "rrInvertLandscapeButtons",
+        auto *invert = checklistOption(card, "invertLandscapeButtons",
                                        strings::get("buttons.invert_landscape"),
                                        strings::get("buttons.invert_landscape_hint"), false);
         invert->setChecked(draft->value(pageButtons::invertLandscapeKey).toBool());
@@ -351,9 +351,9 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         rows->addWidget(invert);
     }
     auto *cancel = ui::makeModalButton(
-            card, { strings::get("common.cancel"), "rrButtonControlsCancel" }, false);
-    auto *done = ui::makeModalButton(card, { strings::get("common.done"), "rrButtonControlsDone" },
-                                     true);
+            card, { strings::get("common.cancel"), "settingsButtonControlsCancel" }, false);
+    auto *done = ui::makeModalButton(
+            card, { strings::get("common.done"), "settingsButtonControlsDone" }, true);
     card->adaptiveActions({ cancel, done });
     connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft, chosen] {

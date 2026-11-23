@@ -45,9 +45,9 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
     : QObject(parent)
 {
     dialog = new ui::ChoiceModal(parent, { {}, title, {} },
-                                 { strings::get("common.cancel"), "rrNoteCancel" },
-                                 { strings::get("common.save"), "rrNoteSave" });
-    dialog->setObjectName("rrNoteEditor");
+                                 { strings::get("common.cancel"), "noteCancel" },
+                                 { strings::get("common.save"), "noteSave" });
+    dialog->setObjectName("noteEditor");
     dialog->setDimmed(true);
     dialog->installEventFilter(this);
     parent->window()->installEventFilter(this);
@@ -55,7 +55,7 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
     auto *card = dialog->card();
 
     auto *passageRow = new QWidget(card);
-    passageRow->setObjectName("rrNotePassage");
+    passageRow->setObjectName("notePassage");
     auto *passageLayout = new QVBoxLayout(passageRow);
     // The heading above keeps its own gap.
     passageLayout->setContentsMargins(notice::cardMargins.left(), 0, notice::cardMargins.right(),
@@ -63,14 +63,14 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
     passageLayout->setSpacing(ui::px(8));
     if (!passage.chapter.isEmpty()) {
         auto *chapter = new ui::InterfaceLabel(passage.chapter, passageRow);
-        chapter->setObjectName("rrNoteChapter");
+        chapter->setObjectName("noteChapter");
         chapter->setFont(ui::interfaceFont(chrome::captionText));
         ui::readerStyle(chapter, ui::styles::font(chrome::captionText));
         passageLayout->addWidget(chapter);
     }
     auto *quoteLabel = new ui::PrivateTextLabel(passageRow);
     quote = quoteLabel;
-    quoteLabel->setObjectName("rrNoteQuote");
+    quoteLabel->setObjectName("noteQuote");
     quoteLabel->setTextFormat(Qt::PlainText);
     quoteLabel->setFont(passage.font);
     // The card's style sheet sets the interface font; name the reading font
@@ -98,7 +98,7 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
                                    notice::cardMargins.right(), notice::cardGap);
     textLayout->setSpacing(ui::px(8));
     editor = new QTextEdit(textRow);
-    editor->setObjectName("rrNoteText");
+    editor->setObjectName("noteText");
     editor->setAcceptRichText(false);
     editor->setTabChangesFocus(true);
     editor->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -119,7 +119,7 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
     textLayout->addWidget(editor);
     auto *errorLabel = new ui::InterfaceLabel(textRow);
     error = errorLabel;
-    errorLabel->setObjectName("rrNoteError");
+    errorLabel->setObjectName("noteError");
     errorLabel->setWordWrap(true);
     errorLabel->setFont(ui::interfaceFont(chrome::captionText));
     ui::readerStyle(errorLabel, ui::styles::font(chrome::captionText));
@@ -227,7 +227,7 @@ void NoteEditor::place()
             qMin<int>(notice::cardWidth, host->width() - 2 * int(notice::sideClearance));
     const int room = bottom - 2 * int(notice::sideClearance);
     auto *card = dialog->card();
-    auto *passage = card->findChild<QWidget *>("rrNotePassage");
+    auto *passage = card->findChild<QWidget *>("notePassage");
     // A short screen with the keyboard open drops the title, then the
     // passage, then text box lines. They return when the keyboard closes.
     if (heading)

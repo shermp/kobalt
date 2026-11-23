@@ -363,7 +363,7 @@ private slots:
         QCOMPARE(wasVerified, shown);
         QVERIFY(prepared);
         QVERIFY(owner.waitingForFonts());
-        const auto frame = [&] { return power.findChild<QWidget *>("rrSleepFrame"); };
+        const auto frame = [&] { return power.findChild<QWidget *>("sleepFrame"); };
         QImage initial;
         QPointer<QWidget> original;
         if (shown) {
@@ -519,7 +519,7 @@ private slots:
             power.setGeometry(window.rect());
             if (shown == reading)
                 QVERIFY(presentation->presentSleepScreen(shot.image, shot.orientation));
-            auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+            auto *frame = power.findChild<QWidget *>("sleepFrame");
             QVERIFY(frame);
             const auto expectedOrientation = followReading       ? Qt::ScreenOrientation(reading)
                     : reading == Qt::InvertedPortraitOrientation ? Qt::InvertedPortraitOrientation
@@ -601,7 +601,7 @@ private slots:
                 for (bool off : { false, true }) {
                     owner.prepare(true, off);
                     owner.present();
-                    auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                    auto *frame = power.findChild<QWidget *>("sleepFrame");
                     QVERIFY(frame);
                     const auto neutral = sleep::privateSnapshot(window.size(), preferences);
                     const auto expected = reader::sleepDesignImage(
@@ -627,7 +627,7 @@ private slots:
                 nickel::HomeSleepScreen restored(paths, nullptr);
                 QVERIFY(restored.preparePrivateScreen());
                 restored.present();
-                auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                auto *frame = power.findChild<QWidget *>("sleepFrame");
                 QVERIFY(frame);
                 QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                          reader::sleepDesignImage(privateShot.image, privateShot, 67,
@@ -652,7 +652,7 @@ private slots:
                 nickel::HomeSleepScreen restored(paths, nullptr);
                 QVERIFY(restored.preparePrivateScreen(off));
                 restored.present();
-                auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                auto *frame = power.findChild<QWidget *>("sleepFrame");
                 QVERIFY(frame);
                 QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                          reader::sleepDesignImage(completed.image, completed, 67,
@@ -664,16 +664,16 @@ private slots:
             nickel::HomeSleepScreen restarted(paths, nullptr);
             QVERIFY(restarted.preparePrivateScreen());
             restarted.present();
-            QVERIFY(power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(power.findChild<QWidget *>("sleepFrame"));
             restarted.clear();
             QVERIFY(query.exec("INSERT INTO content VALUES ('public', 6, '2026-10-24T09:00:01Z')"));
             QVERIFY(!restarted.preparePrivateScreen());
             restarted.present();
-            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
             // During opening, Nickel may not have committed this book's last-read stamp yet.
             QVERIFY(restarted.preparePrivateScreen(false, "private"));
             restarted.present();
-            QVERIFY(power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(power.findChild<QWidget *>("sleepFrame"));
             restarted.clear();
             QVERIFY(query.exec(
                     "UPDATE content SET DateLastRead = '2026-10-24T09:00:02Z' WHERE ContentID = 'private'"));
@@ -736,7 +736,7 @@ private slots:
         choose(sleep::Design::Seal);
         QVERIFY(owner.prepareHomeScreen());
         owner.present();
-        auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+        auto *frame = power.findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         QSize size = window.size();
         size = QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height()));
@@ -761,7 +761,7 @@ private slots:
         choose(sleep::Design::Page);
         QVERIFY(owner.prepareHomeScreen(true));
         owner.present();
-        frame = power.findChild<QWidget *>("rrSleepFrame");
+        frame = power.findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         QVERIFY(frame->grab().toImage()
                 != reader::sleepDesignImage(expected.image, expected, 67,
@@ -784,11 +784,11 @@ private slots:
                 QVERIFY(owner.prepareHomeScreen());
                 power.show();
                 owner.present();
-                auto *cover = power.findChild<QWidget *>("rrSleepFrame");
+                auto *cover = power.findChild<QWidget *>("sleepFrame");
                 QVERIFY(cover && !cover->grab().isNull());
                 QVERIFY(platform::SleepRefresh::take(window.windowHandle()));
                 owner.present();
-                QCOMPARE(power.findChild<QWidget *>("rrSleepFrame"), cover);
+                QCOMPARE(power.findChild<QWidget *>("sleepFrame"), cover);
                 QVERIFY(!cover->grab().isNull());
                 QVERIFY(!platform::SleepRefresh::take(window.windowHandle()));
                 owner.clear();
@@ -845,7 +845,7 @@ private slots:
         window.show();
         nickel::HomeSleepScreen owner(paths, nullptr);
         const auto pixels = [&] {
-            auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+            auto *frame = power.findChild<QWidget *>("sleepFrame");
             if (!frame)
                 return QByteArray();
             const auto image = frame->grab().toImage().convertToFormat(QImage::Format_RGB32);
@@ -1054,7 +1054,7 @@ private slots:
             kobalt::nickel::HomeSleepScreen screen(paths, nullptr);
             screen.prepare(true);
             screen.present();
-            auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+            auto *frame = power.findChild<QWidget *>("sleepFrame");
             QVERIFY(frame);
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                      expected(kobalt::reader::SleepStatus::Charging, 67));
@@ -1096,24 +1096,24 @@ private slots:
             QVERIFY(query.exec("INSERT INTO content VALUES ('other', 6, '2026-10-24T09:00:01Z')"));
             screen.prepare(true);
             screen.present();
-            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
             QVERIFY(query.exec("DELETE FROM content WHERE ContentID = 'other'"));
             screen.prepare(false);
             screen.present();
-            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
             screen.forget();
             screen.finishSave();
             QVERIFY(!QFile::exists(paths.sleepScreen()));
             screen.prepare(true);
             screen.present();
-            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
             screen.remember(snapshot, "book");
             // Preparing waits for the background write before it reads the file.
             screen.prepare(true, true);
             QVERIFY(QFile::exists(paths.sleepScreen()));
             power.hide();
             power.show();
-            frame = power.findChild<QWidget *>("rrSleepFrame");
+            frame = power.findChild<QWidget *>("sleepFrame");
             QVERIFY(frame);
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                      expected(kobalt::reader::SleepStatus::PoweredOff, 100));
@@ -1121,12 +1121,12 @@ private slots:
             QVERIFY(QFile::remove(paths.sleepScreen()));
             screen.prepare(true);
             screen.present();
-            QVERIFY(power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(power.findChild<QWidget *>("sleepFrame"));
             QVERIFY(query.exec("INSERT INTO content VALUES ('later', 6, '2026-10-24T10:00:00Z')"));
             screen.clear();
             screen.prepare(true);
             screen.present();
-            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
             QVERIFY(query.exec("DELETE FROM content WHERE ContentID = 'later'"));
             // Random changes the status over the cached backdrop. A cached page
             // cannot supply a Custom layer that asks for a different background.
@@ -1143,7 +1143,7 @@ private slots:
                 nickel::HomeSleepScreen restored(paths, nullptr);
                 restored.prepare(true, true);
                 restored.present();
-                auto *image = power.findChild<QWidget *>("rrSleepFrame");
+                auto *image = power.findChild<QWidget *>("sleepFrame");
                 if (mode == sleep::Mode::Plain) {
                     QVERIFY(!image);
                     continue;
@@ -1210,7 +1210,7 @@ private slots:
         QVERIFY(directory.remove());
         power.hide();
         power.show();
-        auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+        auto *frame = power.findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         const auto expected = kobalt::reader::sleepScreenImage(
                 snapshot.image, snapshot.progress, snapshot.remaining, dark, 67,
@@ -1233,10 +1233,10 @@ private slots:
         QCOMPARE(kobalt::reader::sleepStatusText(kobalt::reader::SleepStatus::PoweredOff),
                  QString("Powered off"));
         screen.clear();
-        QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+        QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
         power.hide();
         power.show();
-        QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+        QVERIFY(!power.findChild<QWidget *>("sleepFrame"));
     }
 
     void powerOffKeepsPresentedPixels()
@@ -1262,7 +1262,7 @@ private slots:
         QVERIFY(screen.keepPresentedForPowerOff(visible));
         sleeping.hide();
         poweredOff.show();
-        auto *frame = poweredOff.findChild<QWidget *>("rrSleepFrame");
+        auto *frame = poweredOff.findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32), visible.image);
     }
@@ -1298,7 +1298,7 @@ private slots:
         screen.preparePowerOff(snapshot);
         power.hide();
         power.show();
-        auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+        auto *frame = power.findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                  kobalt::reader::sleepDesignImage(snapshot.image, snapshot, 67,
@@ -1317,7 +1317,7 @@ private slots:
         QImage image(window.size(), QImage::Format_RGB32);
         image.fill(Qt::white);
         QVERIFY(presentation->presentSleepScreen(image, Qt::PortraitOrientation));
-        auto *frame = power->findChild<QWidget *>("rrSleepFrame");
+        auto *frame = power->findChild<QWidget *>("sleepFrame");
         QVERIFY(frame);
         QVERIFY(frame->testAttribute(Qt::WA_TransparentForMouseEvents));
         QCOMPARE(frame->focusPolicy(), Qt::NoFocus);

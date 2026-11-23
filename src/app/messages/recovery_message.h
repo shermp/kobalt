@@ -19,6 +19,6 @@ inline ReaderNotice profileRecoveryNotice(const storage::ProfileRecovery &recove
         parts.append(strings::get("recovery.database"));
     parts.append(strings::get("recovery.backups").arg(folder));
     return { strings::get("recovery.title"), parts.join(QStringLiteral("\n\n")),
-             QStringLiteral("rrRecoveryNotice") };
+             QStringLiteral("recoveryNotice") };
 }
 } // namespace kobalt

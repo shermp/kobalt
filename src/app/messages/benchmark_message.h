@@ -39,6 +39,6 @@ inline ReaderNotice benchmarkNotice(const QVector<QJsonObject> &results, bool sa
     parts.append(strings::get("benchmark.connect").arg(folder));
     const bool succeeded = saved && !results.isEmpty() && !failed;
     return { succeeded ? strings::get("benchmark.finished") : strings::get("benchmark.failed"),
-             parts.join(QStringLiteral("\n\n")), QStringLiteral("rrBenchmarkNotice") };
+             parts.join(QStringLiteral("\n\n")), QStringLiteral("benchmarkNotice") };
 }
 } // namespace kobalt

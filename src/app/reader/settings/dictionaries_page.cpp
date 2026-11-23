@@ -115,17 +115,17 @@ struct Item
 
 DictionariesPage::DictionariesPage(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrDictionaries");
+    setObjectName("dictionaries");
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     list = new QWidget(this);
     layout->addWidget(list, 1);
-    pager = new ui::PagerBar(this, "rrDictionaries");
-    pager->setObjectName("rrDictionariesPager");
+    pager = new ui::PagerBar(this, "dictionaries");
+    pager->setObjectName("dictionariesPager");
     layout->addWidget(pager);
     storage = new StorageLabel(this);
-    storage->setObjectName("rrDictionariesStorage");
+    storage->setObjectName("dictionariesStorage");
     ui::captionLabel(storage);
     storage->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     storage->setFixedHeight(metrics::list::headerHeight);
@@ -250,7 +250,7 @@ void DictionariesPage::askConfirmation(const DownloadDictionary &entry, bool rem
         return;
     QWidget *owner = this;
     for (auto *parent = parentWidget(); parent; parent = parent->parentWidget())
-        if (parent->objectName() == "rrGeneralSettings") {
+        if (parent->objectName() == "settingsPanel") {
             owner = parent->parentWidget();
             break;
         }
@@ -259,7 +259,7 @@ void DictionariesPage::askConfirmation(const DownloadDictionary &entry, bool rem
         license = "CC BY-SA " + license.mid(9);
     else if (license.startsWith("CC-BY-"))
         license = "CC BY " + license.mid(6);
-    const auto prefix = QString(removing ? "rrDictionaryRemove" : "rrDictionaryDownload");
+    const auto prefix = QString(removing ? "dictionaryRemove" : "dictionaryDownload");
     const auto description = removing
             ? strings::get("dictionaries.remove_description")
                       .arg(bytes(installedSizes.value(entry.id)))
@@ -401,7 +401,7 @@ void DictionariesPage::redraw()
     for (const auto &item : pages[page]) {
         if (!item.caption.isEmpty()) {
             const auto name =
-                    QString(item.language ? "rrDictionaryLanguage%1" : "rrDictionarySection%1")
+                    QString(item.language ? "dictionaryLanguage%1" : "dictionarySection%1")
                             .arg(item.language ? languageIndex++ : sectionIndex++);
             auto *header = dynamic_cast<ui::ListHeader *>(
                     list->findChild<QWidget *>(name, Qt::FindDirectChildrenOnly));
@@ -429,7 +429,7 @@ void DictionariesPage::redraw()
         if (created)
             line = new DictionaryLine(list);
         retained.insert(line);
-        line->setObjectName(QString("rrDictionaryRow%1").arg(index));
+        line->setObjectName(QString("dictionaryRow%1").arg(index));
         line->setProperty("dictionary_id", entry.id);
         line->setGeometry(0, y, list->width(), item.height);
         auto *layout = static_cast<QHBoxLayout *>(line->layout());
@@ -459,8 +459,8 @@ void DictionariesPage::redraw()
                            : bytes(installed ? installedSizes.value(entry.id) : entry.size),
                     ui::px(180) });
         line->name->setText(entry.name);
-        line->name->setObjectName(QString("rrDictionaryName%1").arg(index));
-        line->metadata->setObjectName(QString("rrDictionaryMetadata%1").arg(index));
+        line->name->setObjectName(QString("dictionaryName%1").arg(index));
+        line->metadata->setObjectName(QString("dictionaryMetadata%1").arg(index));
         line->metadata->setText(
                 entry.id == failedId ? strings::get("dictionaries.download_failed")
                         : active     ? strings::localizedPercent(percent)
@@ -483,14 +483,14 @@ void DictionariesPage::redraw()
         }
         line->name->setVisible(compact);
         line->metadata->setVisible(compact);
-        row->trailingLabel()->setObjectName(QString("rrDictionarySize%1").arg(index));
+        row->trailingLabel()->setObjectName(QString("dictionarySize%1").arg(index));
         auto *action = created ? nullptr : static_cast<ui::Button *>(layout->itemAt(1)->widget());
         if (created)
             action = new ui::Button(line);
         action->setText(active              ? strings::get("dictionaries.stop")
                                 : installed ? strings::get("dictionaries.remove")
                                             : strings::get("dictionaries.get"));
-        action->setObjectName(QString("rrDictionaryAction%1").arg(index));
+        action->setObjectName(QString("dictionaryAction%1").arg(index));
         if (created) {
             layout->addWidget(action, 0, Qt::AlignVCenter);
             connect(action, &QPushButton::clicked, this, [this, id = entry.id] {

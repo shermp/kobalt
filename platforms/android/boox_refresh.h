@@ -40,7 +40,7 @@ public:
                 } else {
                     capture(page, next);
                 }
-                auto *controls = reader->findChild<QWidget *>("rrControlsTop");
+                auto *controls = reader->findChild<QWidget *>("readingMenuControlsTop");
                 const bool reading = reader->property("reader_page_turn").toBool()
                         && (!controls || !controls->isVisible());
                 if (reading && compatible && next.valid && previous.image != next.image) {

@@ -280,10 +280,10 @@ A check scenario has `"kind": "check"` and `"opt_in": true`. It runs once and ta
 | --- | --- |
 | `{"remember": "start"}` | Keeps the reader's state under a name. The state has the fields of the state report, such as `font_pixels`, `bookmark_count`, `highlight_count`, `dark_mode` and `viewport_width`. With `widget` and `property`, it keeps one property of a control instead. |
 | `{"expect": "font_pixels", "above": "start"}` | Compares a state value, found by a dotted path such as `display_settings.dark_mode`. `is` and `is_not` compare with a value. `same_as`, `not_as`, `above` and `below` compare with a remembered one, at the same path or at `field`. `by` asks for an exact difference. The step waits until the comparison holds, at most `timeout` milliseconds (5000 by default), and records it under its `check` name. |
-| `{"widget": "rrDarkMode", "property": "checked", "is": true}` | Compares a property of a control in the same way. `property` is `checked` by default. |
-| `{"reveal": "rrDarkMode"}` | Pages the Settings options until the control can be pressed. `next` and `previous` name the buttons of another pager. |
-| `{"type": "word", "into": "rrSearchQuery"}` | Puts text into a field. |
-| `{"choose": "Kalam", "in": "rrSettingsFontChoices"}` | Presses the option with this label in a list, paging with `next` and `previous`. With `keep`, it first keeps the label of the checked option, and a later `"choose": "@name"` returns to it. |
+| `{"widget": "settingsDarkMode", "property": "checked", "is": true}` | Compares a property of a control in the same way. `property` is `checked` by default. |
+| `{"reveal": "settingsDarkMode"}` | Pages the Settings options until the control can be pressed. `next` and `previous` name the buttons of another pager. |
+| `{"type": "word", "into": "searchQuery"}` | Puts text into a field. |
+| `{"choose": "Kalam", "in": "settingsFontChoices"}` | Presses the option with this label in a list, paging with `next` and `previous`. With `keep`, it first keeps the label of the checked option, and a later `"choose": "@name"` returns to it. |
 
 Any step runs only `if` a control shows, or `unless` it shows. `needs` can also list `light` and `rotation`; a host without them skips the scenario.
 

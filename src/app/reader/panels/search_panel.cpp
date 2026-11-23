@@ -61,13 +61,13 @@ private:
 SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     : ui::Panel(parent), keyboardFactory(std::move(makeKeyboard))
 {
-    setObjectName("rrSearch");
+    setObjectName("search");
     back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
-    back->setObjectName("rrSearchBack");
+    back->setObjectName("searchBack");
     back->setRule(Qt::RightEdge);
     back->setAccessibleName(strings::get("common.back"));
     query = new ui::QueryEdit(this);
-    query->setObjectName("rrSearchQuery");
+    query->setObjectName("searchQuery");
     query->setMaxLength(256);
     ui::readerStyle(query,
                     "QLineEdit{border:none;padding:0;background:palette(window);"
@@ -76,7 +76,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
                           metrics::search::clearWidth + metrics::search::clearRight, 0);
     query->setPlaceholderText(strings::get("search_panel.find_a_word_or_phrase"));
     query->setClearButtonEnabled(false);
-    clear = ui::makeButton(query, nullptr, "rrSearchClear", {}, [this] {
+    clear = ui::makeButton(query, nullptr, "searchClear", {}, [this] {
         query->clear();
         query->setFocus();
         keyboard->show();
@@ -93,22 +93,22 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     query->setAccessibleName(strings::get("reader.search_book"));
     query->setInputMethodHints(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
     submit = new ui::CellButton(ui::ControlIcon::Search, this, chrome::backIcon);
-    submit->setObjectName("rrSearchSubmit");
+    submit->setObjectName("searchSubmit");
     submit->setRule(Qt::LeftEdge);
     submit->setAccessibleName(strings::get("search_panel.search"));
     connect(submit, &QPushButton::clicked, this, [this] { run(); });
     original =
-            ui::makeCaptionButton(this, nullptr, "rrSearchOriginal",
+            ui::makeCaptionButton(this, nullptr, "searchOriginal",
                                   strings::get("search_panel.return_to_original_position"), [this] {
                                       if (returnToStart)
                                           returnToStart();
                                   });
     status = new ui::InterfaceLabel(strings::get("search_panel.search_this_book"), this);
-    status->setObjectName("rrSearchStatus");
+    status->setObjectName("searchStatus");
     ui::captionLabel(status);
     status->hide();
     scopeStatus = new ui::InterfaceLabel(this);
-    scopeStatus->setObjectName("rrSearchScopeStatus");
+    scopeStatus->setObjectName("searchScopeStatus");
     ui::captionLabel(scopeStatus);
     static_cast<ui::InterfaceLabel *>(scopeStatus)->setOpticalCentering(true);
     connect(query, &QLineEdit::returnPressed, this, [this] { run(); });
@@ -116,7 +116,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
         if (dismissed)
             dismissed();
     });
-    pager = new ui::PagerBar(this, "rrSearch");
+    pager = new ui::PagerBar(this, "search");
     connect(pager->previous, &QPushButton::clicked, this, [this] {
         resultPage = pager->turnTarget(-1);
         redraw();
@@ -126,12 +126,12 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
         redraw();
     });
     empty = new ui::InterfaceLabel(this);
-    empty->setObjectName("rrSearchEmpty");
+    empty->setObjectName("searchEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setWordWrap(true);
     ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
     hint = new ui::InterfaceLabel(this);
-    hint->setObjectName("rrSearchHint");
+    hint->setObjectName("searchHint");
     hint->setTextFormat(Qt::PlainText);
     hint->setWordWrap(true);
     ui::readerStyle(hint,
@@ -140,11 +140,11 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     original->setRule(Qt::BottomEdge);
     ui::readerStyle(original, ui::styles::font(chrome::labelText));
     scopeButton = new ui::CellButton(scopeIcon(searchScope), this, chrome::backIcon);
-    scopeButton->setObjectName("rrSearchScope");
+    scopeButton->setObjectName("searchScope");
     scopeButton->setAccessibleName(strings::get("search_panel.scope"));
     scopeButton->setRule(Qt::LeftEdge);
     connect(scopeButton, &QPushButton::clicked, this, [this] { chooseScope(); });
-    pageJump = ui::makeButton(pager, nullptr, "rrSearchPageJump", {}, [this] { choosePage(); });
+    pageJump = ui::makeButton(pager, nullptr, "searchPageJump", {}, [this] { choosePage(); });
     ui::readerStyle(pageJump,
                     "QPushButton{border:none;padding:0;background:palette(window);"
                             + ui::styles::font(chrome::countText)
@@ -188,7 +188,7 @@ void SearchPanel::chooseScope()
     keyboard->hide();
     ui::clearQueryFocus(query);
     popup = new ui::ModalOverlay(this);
-    popup->setObjectName("rrSearchScopes");
+    popup->setObjectName("searchScopes");
     popup->setGeometry(rect());
     popup->setDimmed(true);
     popup->dismissed = [this] { closePopup(); };
@@ -206,10 +206,10 @@ void SearchPanel::chooseScope()
     int current = 0;
     for (int i = 0; i < scopes.size(); ++i) {
         auto *option = options->add(
-                QString("rrSearchScope%1").arg(ids[i]), strings::get(keys[i]),
+                QString("searchScope%1").arg(ids[i]), strings::get(keys[i]),
                 strings::get(qPrintable(QString::fromLatin1(keys[i]) + "_description")));
         auto *icon = new ScopeIcon(scopes[i], option);
-        icon->setObjectName(QString("rrSearchScopeIcon%1").arg(ids[i]));
+        icon->setObjectName(QString("searchScopeIcon%1").arg(ids[i]));
         option->setPreview(icon, QSize(chrome::backIcon, chrome::backIcon));
         if (searchScope == scopes[i]) {
             options->setCurrent(i);
@@ -244,7 +244,7 @@ void SearchPanel::chooseScope()
     card->fitToWidth(cardWidth);
     const int available = height() - 2 * metrics::notice::sideClearance;
     if (card->height() > available) {
-        auto *pages = new ui::PagerBar(card, "rrSearchScopes");
+        auto *pages = new ui::PagerBar(card, "searchScopes");
         card->rows()->addWidget(pages);
         const int room = qMax(
                 1, available - (card->height() - options->height()) - int(chrome::actionHeight));
@@ -299,14 +299,14 @@ void SearchPanel::choosePage()
                                 { strings::get("search_panel.page_range").arg(resultPageCount),
                                   strings::get("search_panel.go_to_page"),
                                   {} },
-                                { strings::get("common.cancel"), "rrSearchPageCancel" },
-                                { strings::get("search_panel.go"), "rrSearchPageGo" });
+                                { strings::get("common.cancel"), "searchPageCancel" },
+                                { strings::get("search_panel.go"), "searchPageGo" });
     popup = dialog;
-    dialog->setObjectName("rrSearchPageDialog");
+    dialog->setObjectName("searchPageDialog");
     dialog->setGeometry(rect());
     dialog->setDimmed(true);
     dialog->dismissed = [this] { closePopup(); };
-    auto *number = dialog->addPageKeypad("rrSearchPage", QString::number(resultPage + 1));
+    auto *number = dialog->addPageKeypad("searchPage", QString::number(resultPage + 1));
     number->setValidator(new QIntValidator(1, resultPageCount, number));
     const auto go = [this, number] {
         if (!number->hasAcceptableInput())
@@ -670,7 +670,7 @@ void SearchPanel::redraw()
             buttons[row]->hide();
             continue;
         }
-        buttons[row]->setObjectName(QString("rrSearchResult%1").arg(index));
+        buttons[row]->setObjectName(QString("searchResult%1").arg(index));
         buttons[row]->setGeometry(0, listTop + row * rowHeight, width(), rowHeight);
         buttons[row]->show();
         // An estimated page label can arrive before the excerpt, and a

@@ -23,7 +23,7 @@ namespace chrome = ui::metrics::chrome;
 class ChapterBars : public QWidget
 {
 public:
-    explicit ChapterBars(QWidget *parent) : QWidget(parent) { setObjectName("rrChapterBars"); }
+    explicit ChapterBars(QWidget *parent) : QWidget(parent) { setObjectName("chapterBars"); }
 
     QVector<ChapterLink> chapters;
     ChapterSelection selection;
@@ -131,7 +131,7 @@ class ActivityRow final : public ui::Button
 public:
     explicit ActivityRow(QWidget *parent) : ui::Button(QString(), parent)
     {
-        setObjectName("rrGraphActivity");
+        setObjectName("graphActivity");
         setAccessibleName(strings::get("activity.title"));
     }
 
@@ -191,7 +191,7 @@ class ActivityCell final : public ui::Button
 public:
     explicit ActivityCell(QWidget *parent) : ui::Button(QString(), parent)
     {
-        setObjectName("rrGraphActivityCell");
+        setObjectName("graphActivityCell");
         setAccessibleName(strings::get("activity.title"));
     }
 
@@ -233,34 +233,34 @@ static int activityColumn()
 ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
     : Panel(parent, Qt::BottomEdge), phoneLayout(phoneLayout)
 {
-    setObjectName("rrChapterGraph");
+    setObjectName("chapterGraph");
     message = new ui::InterfaceLabel(this);
-    message->setObjectName("rrGraphMessage");
+    message->setObjectName("graphMessage");
     message->setTextFormat(Qt::PlainText);
     message->setAlignment(Qt::AlignCenter);
     ui::readerStyle(message, ui::styles::font(chrome::labelText) + "background:transparent;");
     chapterCaption = new ui::InterfaceLabel(this);
-    chapterCaption->setObjectName("rrGraphChapterNumber");
+    chapterCaption->setObjectName("graphChapterNumber");
     ui::captionLabel(chapterCaption);
     if (phoneLayout)
         chapterCaption->hide();
     // The page in the chapter follows the contents position on the caption line.
     positionSeparator = new ui::InterfaceLabel(QStringLiteral("·"), this);
-    positionSeparator->setObjectName("rrGraphPositionSeparator");
+    positionSeparator->setObjectName("graphPositionSeparator");
     ui::captionLabel(positionSeparator);
     positionSeparator->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     chapterPage = new ui::InterfaceLabel(this);
-    chapterPage->setObjectName("rrGraphChapterPosition");
+    chapterPage->setObjectName("graphChapterPosition");
     ui::captionLabel(chapterPage);
     chapterPage->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     chapterCaption->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     chapterTitle = new ui::PrivateTextLabel(this);
-    chapterTitle->setObjectName("rrGraphChapterTitle");
+    chapterTitle->setObjectName("graphChapterTitle");
     chapterTitle->setTextFormat(Qt::PlainText);
     ui::readerStyle(chapterTitle, ui::styles::font(chrome::labelText) + "background:transparent;");
     bars = new ChapterBars(this);
     mode = new ui::CellButton(ui::ControlIcon::ZoomOut, this);
-    mode->setObjectName("rrGraphMode");
+    mode->setObjectName("graphMode");
     mode->setRule(ui::Edges(Qt::LeftEdge) | Qt::BottomEdge);
     connect(mode, &QPushButton::clicked, this, [this] {
         setDense(!dense);
@@ -269,7 +269,7 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
     });
     wordScope = new ui::CellButton(ui::ControlIcon::Books, this);
     wordScope->hide();
-    wordScope->setObjectName("rrGraphWordScope");
+    wordScope->setObjectName("graphWordScope");
     wordScope->setAccessibleName(strings::get("stats.count_words_in"));
     wordScope->setToolTip(strings::get("stats.count_words_in"));
     wordScope->setRule(ui::Edges(Qt::LeftEdge) | Qt::BottomEdge);
@@ -277,7 +277,7 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
         if (wordScopeRequested)
             wordScopeRequested();
     });
-    pager = new ui::PagerBar(this, "rrGraph");
+    pager = new ui::PagerBar(this, "graph");
     pager->previous->setAccessibleName(strings::get("chapter_contents.previous_chapters"));
     pager->next->setAccessibleName(strings::get("chapter_contents.next_chapters"));
     connect(pager->previous, &QPushButton::clicked, this, [this] {
@@ -294,9 +294,9 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
     });
     // The word totals label the chart: the chapter's on the left, the book's on the right.
     chapterWords = new ui::InterfaceLabel(this);
-    chapterWords->setObjectName("rrGraphChapterWords");
+    chapterWords->setObjectName("graphChapterWords");
     bookWords = new ui::InterfaceLabel(this);
-    bookWords->setObjectName("rrGraphBookWords");
+    bookWords->setObjectName("graphBookWords");
     for (auto *label : { chapterWords, bookWords }) {
         label->setTextFormat(Qt::PlainText);
         ui::readerStyle(label,
@@ -305,10 +305,10 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
     }
     chapterWords->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     bookWords->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    chapterCell = new StatsCell(this, "rrGraphChapter", strings::get("stats.chapter"));
-    chapterCell->detail->setObjectName("rrGraphNextChapter");
-    bookCell = new StatsCell(this, "rrGraphBook", strings::get("stats.book"));
-    sessionCell = new StatsCell(this, "rrGraphSession", strings::get("stats.session"));
+    chapterCell = new StatsCell(this, "graphChapter", strings::get("stats.chapter"));
+    chapterCell->detail->setObjectName("graphNextChapter");
+    bookCell = new StatsCell(this, "graphBook", strings::get("stats.book"));
+    sessionCell = new StatsCell(this, "graphSession", strings::get("stats.session"));
     activityRow = new ActivityRow(this);
     activityRow->hide();
     activityCell = new ActivityCell(this);

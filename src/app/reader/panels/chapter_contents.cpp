@@ -216,9 +216,9 @@ private:
 ChapterContents::ChapterContents(QWidget *parent, QWidget *overlayHost)
     : Panel(parent), modalHost(overlayHost ? overlayHost : this)
 {
-    setObjectName("rrContents");
+    setObjectName("contents");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
-    close->setObjectName("rrContentsClose");
+    close->setObjectName("contentsClose");
     close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("chapter_contents.close"));
     connect(close, &QPushButton::clicked, this, [this] {
@@ -226,31 +226,31 @@ ChapterContents::ChapterContents(QWidget *parent, QWidget *overlayHost)
             back();
     });
     title = new ContentsTitle(strings::get("chapter_contents.chapters"), this);
-    title->setObjectName("rrContentsTitle");
+    title->setObjectName("contentsTitle");
     title->setTextFormat(Qt::PlainText);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     moreButton = new ui::CellButton(ui::ControlIcon::More, this);
-    moreButton->setObjectName("rrContentsMore");
+    moreButton->setObjectName("contentsMore");
     moreButton->setRule(Qt::LeftEdge);
     moreButton->setAccessibleName(strings::get("chapter_contents.more"));
     moreButton->hide();
     connect(moreButton, &QPushButton::clicked, this, &ChapterContents::openListMenu);
     position = new ui::InterfaceLabel(this);
-    position->setObjectName("rrContentsPosition");
+    position->setObjectName("contentsPosition");
     position->setTextFormat(Qt::PlainText);
     position->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     ui::readerStyle(position, ui::styles::font(chrome::countText) + "background:transparent;");
     listHeader = new ui::ListHeader(this);
     summary = listHeader->leftLabel();
-    summary->setObjectName("rrContentsSummary");
+    summary->setObjectName("contentsSummary");
     pageHeading = listHeader->rightLabel();
-    pageHeading->setObjectName("rrContentsPageHeading");
+    pageHeading->setObjectName("contentsPageHeading");
     empty = new ui::InterfaceLabel(strings::get("chapter_contents.no_chapters_available"), this);
-    empty->setObjectName("rrContentsEmpty");
+    empty->setObjectName("contentsEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
-    pager = new ui::PagerBar(this, "rrContents");
+    pager = new ui::PagerBar(this, "contents");
     pager->previous->setAccessibleName(strings::get("chapter_contents.previous_chapters"));
     pager->next->setAccessibleName(strings::get("chapter_contents.next_chapters"));
     connect(pager->previous, &QPushButton::clicked, this, [this] {
@@ -296,24 +296,24 @@ void ChapterContents::openListMenu()
                     switchList(mode);
             }));
     };
-    add(ContentsList::Chapters, "chapter_contents.chapters", "rrContentsShowChapters",
+    add(ContentsList::Chapters, "chapter_contents.chapters", "contentsShowChapters",
         ui::ControlIcon::Chapters);
-    add(ContentsList::PrintedPages, "chapter_contents.go_to_printed_page", "rrContentsShowPrinted",
+    add(ContentsList::PrintedPages, "chapter_contents.go_to_printed_page", "contentsShowPrinted",
         ui::ControlIcon::Scroll);
     if (!availableLists.contains(ContentsList::PrintedPages)) {
         auto unavailable = ui::actionItem(strings::get("chapter_contents.go_to_printed_page"),
-                                          "rrContentsShowPrinted", ui::ControlIcon::Scroll, {});
+                                          "contentsShowPrinted", ui::ControlIcon::Scroll, {});
         unavailable.disabledReason = strings::get("chapter_contents.no_printed_pages");
         actions.append(unavailable);
     }
-    add(ContentsList::Landmarks, "chapter_contents.view_landmarks", "rrContentsShowLandmarks",
+    add(ContentsList::Landmarks, "chapter_contents.view_landmarks", "contentsShowLandmarks",
         ui::ControlIcon::Flag);
     if (actions.isEmpty())
         return;
     listMenu = new ui::ActionMenu(
             modalHost, { {}, strings::get("chapter_contents.additional_actions"), {}, {} },
             actions);
-    listMenu->setObjectName("rrContentsMenu");
+    listMenu->setObjectName("contentsMenu");
     listMenu->setDimmed(true);
     listMenu->dismissed = [this] { closeListMenu(); };
     listMenu->fitCard();
@@ -331,15 +331,15 @@ void ChapterContents::showPrintedPageInput(const QHash<QString, QString> &pages,
                                        { strings::get("chapter_contents.enter_printed_page"),
                                          strings::get("chapter_contents.go_to_printed_page"),
                                          {} },
-                                       { strings::get("common.cancel"), "rrPrintedPageCancel" },
-                                       { strings::get("search_panel.go"), "rrPrintedPageGo" });
+                                       { strings::get("common.cancel"), "printedPageCancel" },
+                                       { strings::get("search_panel.go"), "printedPageGo" });
     listMenu = dialog;
     dialog->dismissed = [this] { closeListMenu(); };
-    auto *number = dialog->addPageKeypad("rrPrintedPage");
+    auto *number = dialog->addPageKeypad("printedPage");
     if (hasOtherLabels) {
         auto *button = ui::makeModalButton(
                 dialog->card(),
-                { strings::get("chapter_contents.other_labels"), "rrPrintedOtherLabels" }, false);
+                { strings::get("chapter_contents.other_labels"), "printedOtherLabels" }, false);
         dialog->card()->rows()->insertWidget(2, button);
         connect(button, &QPushButton::clicked, dialog, [this, other] {
             closeListMenu();

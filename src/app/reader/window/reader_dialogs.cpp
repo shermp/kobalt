@@ -53,12 +53,12 @@ void Reader::confirmCustomReplace(const std::function<void()> &proceed,
                       .arg(kobalt::headerfooter::presetLabel(chromePreset)),
               strings::get("header_footer.replace_custom_prompt"),
               {} },
-            { strings::get("common.cancel"), "rrKeepCustomLayout" },
-            { strings::get("header_footer.replace_custom"), "rrReplaceCustomLayout" });
+            { strings::get("common.cancel"), "keepCustomLayout" },
+            { strings::get("header_footer.replace_custom"), "replaceCustomLayout" });
     customReplaceDialog = choice;
-    customReplaceDialog->setObjectName("rrReplaceCustom");
+    customReplaceDialog->setObjectName("replaceCustom");
     auto *text = choice->descriptionLabel();
-    text->setObjectName("rrReplaceCustomDetail");
+    text->setObjectName("replaceCustomDetail");
     readerStyle(text,
                 styles::font(metrics::chrome::descriptionText)
                         + "color:palette(placeholder-text);");
@@ -105,12 +105,12 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions)
         instructions || alreadyDefault ? strings::get("reader.your_default_font")
                                        : strings::get("reader.make_default_font").arg(label),
         {},
-        "rrFontDefaultTitle"
+        "fontDefaultTitle"
     };
     const ui::ModalAction primary{ instructions || alreadyDefault
                                            ? strings::get("common.ok")
                                            : strings::get("reader.make_default"),
-                                   "rrFontDefaultConfirm" };
+                                   "fontDefaultConfirm" };
     ui::ModalOverlay *dialog;
     QLabel *message;
     QPushButton *confirm;
@@ -122,16 +122,16 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions)
         confirm = notice->primaryButton();
     } else {
         auto *choice = new ui::ChoiceModal(
-                this, content, { strings::get("common.cancel"), "rrFontDefaultCancel" }, primary);
+                this, content, { strings::get("common.cancel"), "fontDefaultCancel" }, primary);
         dialog = choice;
         message = choice->descriptionLabel();
         confirm = choice->primaryButton();
         cancel = choice->secondaryButton();
     }
     fontDefaultDialog = dialog;
-    dialog->setObjectName("rrFontDefaultDialog");
+    dialog->setObjectName("fontDefaultDialog");
     auto *card = dialog->card();
-    message->setObjectName("rrFontDefaultMessage");
+    message->setObjectName("fontDefaultMessage");
     const auto dismiss = [this, dialog] {
         dialog->hide();
         dialog->deleteLater();
@@ -193,14 +193,14 @@ void Reader::showFormattingWarning()
         return;
     }
     session->cancelPendingTurn();
-    auto *notice = new kobalt::ui::NoticeModal(
-            this,
-            { strings::get("reader.formatting_warning_description"),
-              strings::get("reader.formatting_warning"),
-              {} },
-            { strings::get("common.ok"), "rrFormattingWarningConfirm" });
+    auto *notice =
+            new kobalt::ui::NoticeModal(this,
+                                        { strings::get("reader.formatting_warning_description"),
+                                          strings::get("reader.formatting_warning"),
+                                          {} },
+                                        { strings::get("common.ok"), "formattingWarningConfirm" });
     formattingWarningDialog = notice;
-    notice->setObjectName("rrFormattingWarningDialog");
+    notice->setObjectName("formattingWarningDialog");
     const auto dismiss = [this, notice] {
         notice->hide();
         notice->deleteLater();
@@ -247,8 +247,8 @@ void Reader::showExitSyncWait()
     exitProgress = ExitProgress::WaitingForSync;
     auto *choice = new ui::ChoiceModal(
             this, { strings::get("closing.sync_detail"), strings::get("closing.sync_title"), {} },
-            { strings::get("closing.local_only"), "rrExitLocalOnly" },
-            { strings::get("closing.wait_for_sync"), "rrExitWaitForSync" });
+            { strings::get("closing.local_only"), "exitLocalOnly" },
+            { strings::get("closing.wait_for_sync"), "exitWaitForSync" });
     syncDialog = choice;
     choice->setGeometry(rect());
     choice->dismissed = [this] { cancelExit(); };
@@ -335,13 +335,13 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
         prompt = strings::get("sync.same");
     auto *choice = new ui::ChoiceModal(
             this, { prompt, strings::get("sync.title"), {} },
-            { strings::get("reader.keep_reading_here"), "rrKeepPosition" },
-            { strings::get("reader.go_to_synced_position"), "rrGoToSyncedPosition" });
+            { strings::get("reader.keep_reading_here"), "keepPosition" },
+            { strings::get("reader.go_to_synced_position"), "goToSyncedPosition" });
     syncDialog = choice;
     auto *card = choice->card();
-    card->setObjectName("rrSyncedPosition");
+    card->setObjectName("syncedPosition");
     auto *message = choice->descriptionLabel();
-    message->setObjectName("rrSyncedPositionMessage");
+    message->setObjectName("syncedPositionMessage");
     auto *keep = choice->secondaryButton(), *go = choice->primaryButton();
     if (orientation)
         orientation->setBlocked(true);
@@ -408,7 +408,7 @@ void Reader::showProgressDebug()
     auto *dialog = new kobalt::ui::ModalOverlay(this);
     debugDialog = dialog;
     auto *card = dialog->card();
-    card->setObjectName("rrProgressDebug");
+    card->setObjectName("progressDebug");
     auto *rows = card->rows();
     auto *message = card->message(services.development.progressDescription);
     auto dismiss = [this, dialog] {
@@ -440,18 +440,18 @@ void Reader::showProgressDebug()
             book->invalidateProgress();
         });
     };
-    action("rrDebugNewPosition", strings::get("reader.new_synced_position"),
+    action("debugNewPosition", strings::get("reader.new_synced_position"),
            ProgressSimulation::NewPosition);
-    action("rrDebugDuplicate", strings::get("reader.duplicate_current_update"),
+    action("debugDuplicate", strings::get("reader.duplicate_current_update"),
            ProgressSimulation::Duplicate);
-    action("rrDebugStale", strings::get("reader.older_synced_position"),
+    action("debugStale", strings::get("reader.older_synced_position"),
            ProgressSimulation::OlderPosition);
-    action("rrDebugFinished", strings::get("reader.book_marked_finished"),
+    action("debugFinished", strings::get("reader.book_marked_finished"),
            ProgressSimulation::Finished);
-    action("rrDebugSaveFailure", strings::get("reader.fail_next_native_save"),
+    action("debugSaveFailure", strings::get("reader.fail_next_native_save"),
            ProgressSimulation::SaveFailure);
     auto *done = new kobalt::ui::Button(strings::get("common.back"), card);
-    done->setObjectName("rrDebugBack");
+    done->setObjectName("debugBack");
     rows->addWidget(done);
     connect(done, &QPushButton::clicked, dialog, dismiss);
     card->fitToWidth(
@@ -470,17 +470,17 @@ void Reader::showFinishChoice()
     if (finishDialog || !book->offerFinish())
         return;
     session->cancelPendingTurn();
-    auto *choice = new ui::ChoiceModal(
-            this, { {}, strings::get("finish.prompt"), {}, "rrFinishBookPrompt" },
-            { strings::get("finish.still_reading"), "rrStillReading" },
-            { strings::get("finish.mark_finished"), "rrMarkFinished" });
+    auto *choice =
+            new ui::ChoiceModal(this, { {}, strings::get("finish.prompt"), {}, "finishBookPrompt" },
+                                { strings::get("finish.still_reading"), "stillReading" },
+                                { strings::get("finish.mark_finished"), "markFinished" });
     finishDialog = choice;
     finishChoiceForExit = exitPending;
-    finishDialog->setObjectName("rrFinishBook");
+    finishDialog->setObjectName("finishBook");
     finishDialog->setGeometry(rect());
     auto *card = finishDialog->card();
     auto *suppress = new ui::DescribedOption(strings::get("finish.dont_ask_again"), {}, card);
-    suppress->setObjectName("rrSuppressFinishPrompt");
+    suppress->setObjectName("suppressFinishPrompt");
     auto look = suppress->presentation();
     look.indicator = ui::DescribedOption::Indicator::Square;
     look.indicatorSize = QSize(metrics::chrome::checkSize, metrics::chrome::checkSize);
@@ -585,13 +585,13 @@ void Reader::askRemoveBookmark(const QString &position)
             { description,
               strings::get(pinned ? "bookmarks.remove_pinned_prompt" : "bookmarks.remove_prompt"),
               {},
-              "rrRemoveBookmarkPrompt" },
-            { strings::get("common.cancel"), "rrKeepBookmark" },
-            { strings::get("bookmarks.remove"), "rrConfirmRemoveBookmark" });
+              "removeBookmarkPrompt" },
+            { strings::get("common.cancel"), "keepBookmark" },
+            { strings::get("bookmarks.remove"), "confirmRemoveBookmark" });
     removeDialog = choice;
-    removeDialog->setObjectName("rrRemoveBookmark");
+    removeDialog->setObjectName("removeBookmark");
     auto *text = choice->descriptionLabel();
-    text->setObjectName("rrRemoveBookmarkDetail");
+    text->setObjectName("removeBookmarkDetail");
     auto finish = [this, position](bool remove) {
         if (!removeDialog)
             return;
@@ -674,14 +674,13 @@ void Reader::showSettingsWriteError()
         return;
     }
     session->cancelPendingTurn();
-    auto *notice =
-            new ui::NoticeModal(this,
-                                { strings::get("reader.settings_write_error_description"),
-                                  strings::get("reader.settings_write_error"),
-                                  {} },
-                                { strings::get("common.ok"), "rrSettingsWriteErrorConfirm" });
+    auto *notice = new ui::NoticeModal(this,
+                                       { strings::get("reader.settings_write_error_description"),
+                                         strings::get("reader.settings_write_error"),
+                                         {} },
+                                       { strings::get("common.ok"), "settingsWriteErrorConfirm" });
     settingsWriteErrorDialog = notice;
-    notice->setObjectName("rrSettingsWriteError");
+    notice->setObjectName("settingsWriteError");
     const auto dismiss = [this, notice] {
         notice->hide();
         notice->deleteLater();
@@ -702,13 +701,13 @@ void Reader::showSettingsWriteError()
 void Reader::showBookmarkError()
 {
     if (!bookmarks->error().isEmpty())
-        showAnnotationError(bookmarks->error(), strings::get("bookmarks.title"), "rrBookmarkError");
+        showAnnotationError(bookmarks->error(), strings::get("bookmarks.title"), "bookmarkError");
 }
 
 void Reader::showHighlightError()
 {
     showAnnotationError(strings::get("annotations.change_not_saved"),
-                        strings::get("annotations.title"), "rrHighlightError");
+                        strings::get("annotations.title"), "highlightError");
 }
 
 bool Reader::showNotice(const ReaderNotice &notice)
@@ -994,11 +993,11 @@ void Reader::openChoicePopup(QPointer<ui::ModalOverlay> &slot, const QString &na
 
 void Reader::openStatsWordScope()
 {
-    openChoicePopup(wordScopePopup, "rrStatsWordScope", strings::get("stats.count_words_in_title"),
+    openChoicePopup(wordScopePopup, "statsWordScope", strings::get("stats.count_words_in_title"),
                     strings::get("stats.scope_hint"),
-                    { { "rrStatsWordMain", strings::get("stats.scope_main"),
+                    { { "statsWordMain", strings::get("stats.scope_main"),
                         strings::get("stats.scope_main_hint") },
-                      { "rrStatsWordVolume", strings::get("stats.scope_volume"),
+                      { "statsWordVolume", strings::get("stats.scope_volume"),
                         strings::get("stats.scope_volume_hint") } },
                     statsUseWholeVolume() ? 1 : 0, [this](int index) {
                         auto next = preferences;
@@ -1020,14 +1019,14 @@ void Reader::openScreenRefresh()
     for (const auto mode : kobalt::screenRefreshModes) {
         if (mode == screenRefreshMode)
             current = options.size();
-        options.append({ QString("rrRefresh_" + kobalt::screenRefreshValue(mode)),
-                         refreshLabel(mode), refreshExplanation(mode) });
+        options.append({ QString("refresh_" + kobalt::screenRefreshValue(mode)), refreshLabel(mode),
+                         refreshExplanation(mode) });
     }
     // The mode is saved when Settings closes. The pop-up has never taken the
     // focus.
     openChoicePopup(
-            refreshPopup, "rrScreenRefresh", strings::get("reader.refresh_the_screen"), {}, options,
-            current,
+            refreshPopup, "settingsScreenRefresh", strings::get("reader.refresh_the_screen"), {},
+            options, current,
             [this](int index) {
                 screenRefreshMode = kobalt::screenRefreshModes[index];
                 showScreenRefresh();
@@ -1366,16 +1365,16 @@ void Reader::editSleepGreeting()
         return;
     auto *dialog = new ui::ChoiceModal(
             this, { strings::get("sleep.greeting_hint"), strings::get("sleep.greeting_title"), {} },
-            { strings::get("common.cancel"), "rrSleepGreetingCancel" },
-            { strings::get("common.ok"), "rrSleepGreetingSave" });
+            { strings::get("common.cancel"), "sleepGreetingCancel" },
+            { strings::get("common.ok"), "sleepGreetingSave" });
     greetingEditor = dialog;
-    dialog->setObjectName("rrSleepGreeting");
+    dialog->setObjectName("sleepGreeting");
     dialog->setDimmed(true);
     dialog->setGeometry(rect());
     auto *card = dialog->card();
     auto *editor = new QLineEdit(card);
     ui::prepareNativeEditor(editor);
-    editor->setObjectName("rrSleepGreetingInput");
+    editor->setObjectName("sleepGreetingInput");
     dialog->setFocusProxy(editor);
     editor->setMaxLength(sleep::greetingLength);
     editor->setText(preferences.value(sleep::greetingKey).toString());
@@ -1472,11 +1471,11 @@ void Reader::showSleepOverlayHelp()
                                        { strings::get("settings.sleep_overlay_description"),
                                          SleepGallery::label(sleep::Design::Overlay),
                                          {},
-                                         "rrSleepOverlayHelpTitle" },
-                                       { strings::get("common.ok"), "rrSleepOverlayHelpClose" });
+                                         "sleepOverlayHelpTitle" },
+                                       { strings::get("common.ok"), "sleepOverlayHelpClose" });
     sleepPopup = notice;
-    notice->setObjectName("rrSleepOverlayHelpPopup");
-    notice->descriptionLabel()->setObjectName("rrSleepOverlayHelpHint");
+    notice->setObjectName("sleepOverlayHelpPopup");
+    notice->descriptionLabel()->setObjectName("sleepOverlayHelpHint");
     notice->setGeometry(rect());
     notice->dismissed = [this] { closePopup(sleepPopup); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,
@@ -1498,10 +1497,10 @@ void Reader::showSleepWallpaperHelp()
                                        { strings::get("sleep.wallpaper_help"),
                                          strings::get("sleep.wallpaper_help_title"),
                                          {},
-                                         "rrSleepWallpaperHelpTitle" },
-                                       { strings::get("common.ok"), "rrSleepWallpaperHelpClose" });
+                                         "sleepWallpaperHelpTitle" },
+                                       { strings::get("common.ok"), "sleepWallpaperHelpClose" });
     sleepPopup = notice;
-    notice->setObjectName("rrSleepWallpaperHelpPopup");
+    notice->setObjectName("sleepWallpaperHelpPopup");
     notice->setGeometry(rect());
     notice->dismissed = [this] { closePopup(sleepPopup); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,
@@ -1535,8 +1534,8 @@ void Reader::openSessionTimeout()
                                       : QString() });
     }
     openSleepChoice(
-            "rrSessionTimeout", "rrSessionTimeout_", strings::get("settings.session_timeout"),
-            options, current,
+            "settingsSessionTimeout", "settingsSessionTimeout_",
+            strings::get("settings.session_timeout"), options, current,
             [this](int index) {
                 auto next = preferences;
                 next[sessionTimeout::preferenceKey] = sessionTimeout::choices[index];
@@ -1643,13 +1642,13 @@ void Reader::openTapZones()
         return;
     namespace chrome = metrics::chrome;
     tapZonesPopup = new ui::ModalOverlay(this);
-    tapZonesPopup->setObjectName("rrTapZonesPopup");
+    tapZonesPopup->setObjectName("settingsTapZonesPopup");
     tapZonesPopup->setDimmed(true);
     tapZonesPopup->setGeometry(rect());
     tapZonesPopup->dismissed = [this] { closePopup(tapZonesPopup); };
     auto *card = tapZonesPopup->card();
     card->heading(strings::get("settings.tap_zones"), strings::get("settings.tap_zones_hint"),
-                  "rrTapZonesTitle", "rrTapZonesHint");
+                  "settingsTapZonesTitle", "settingsTapZonesHint");
     auto *grid = new QGridLayout;
     grid->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     grid->setSpacing(metrics::control::itemGap);
@@ -1660,7 +1659,7 @@ void Reader::openTapZones()
     for (const auto layout : tapZones::layouts) {
         auto *button =
                 new ui::TapZoneButton(layout, rtl && layout != tapZones::Layout::Reversed, card);
-        button->setObjectName("rrTapZones_" + pageNavigation::tapValue(layout));
+        button->setObjectName("settingsTapZones_" + pageNavigation::tapValue(layout));
         button->setText(tapZoneLabel(layout));
         button->setAccessibleName(button->text());
         button->setChecked(layout == pageNavigation::tapLayout(preferences));
@@ -1683,8 +1682,8 @@ void Reader::openTapZones()
             });
         });
     }
-    auto *note =
-            card->message(strings::get("settings.tap_one_handed_hint"), "rrTapZonesOneHandedHint");
+    auto *note = card->message(strings::get("settings.tap_one_handed_hint"),
+                               "settingsTapZonesOneHandedHint");
     note->setContentsMargins(chrome::inset, metrics::notice::cardGap, chrome::inset,
                              metrics::notice::cardMargins.bottom());
     card->fitToWidth(
@@ -1720,17 +1719,17 @@ void Reader::openPageNavigation()
         if (mode == pageNavigation::mode(preferences, services.pageButtons()))
             current = options.size();
         modes.append(mode);
-        options.append({ "rrNavigation_" + pageNavigation::value(mode), navigationLabel(mode),
+        options.append({ "navigation_" + pageNavigation::value(mode), navigationLabel(mode),
                          needsSwipes ? strings::get("settings.navigation_needs_swipes")
                                      : navigationExplanation(mode),
                          !needsSwipes });
     }
     if (pageNavigationPopup)
         return;
-    const auto sheet =
-            ui::makeChoiceSheet(this, "rrPageNavigation", strings::get("settings.page_navigation"),
-                                strings::get("settings.navigation_menu_hint"),
-                                "rrPageNavigationTitle", "rrPageNavigationHint");
+    const auto sheet = ui::makeChoiceSheet(
+            this, "settingsPageNavigation", strings::get("settings.page_navigation"),
+            strings::get("settings.navigation_menu_hint"), "settingsPageNavigationTitle",
+            "settingsPageNavigationHint");
     // Leave room for the section strips on short landscape screens. Text still
     // determines each row's height when it needs more than this compact minimum.
     if (width() > height())
@@ -1767,11 +1766,12 @@ void Reader::openPageNavigation()
         rows->addWidget(control);
         card->rows()->addWidget(group);
     };
-    section(strings::get("settings.navigation_choice"), "rrNavigationChoiceSection", sheet.list);
+    section(strings::get("settings.navigation_choice"), "navigationChoiceSection",
+            sheet.list);
     auto *reverse =
             new ui::DescribedOption(strings::get("settings.reverse_swipe_direction"),
                                     strings::get("settings.reverse_swipe_direction_hint"), card);
-    reverse->setObjectName("rrReverseSwipeDirection");
+    reverse->setObjectName("reverseSwipeDirection");
     auto look = sheet.list->options().first()->presentation();
     look.indicator = ui::DescribedOption::Indicator::Square;
     look.dividers = {};
@@ -1786,7 +1786,7 @@ void Reader::openPageNavigation()
                 guard->setChecked(!checked);
         });
     });
-    section(strings::get("settings.swipe_direction"), "rrSwipeDirectionSection", reverse);
+    section(strings::get("settings.swipe_direction"), "swipeDirectionSection", reverse);
     const int width = qMin<int>(metrics::notice::cardWidth,
                                 this->width() - 2 * metrics::notice::sideClearance);
     card->fitToWidth(width);
@@ -1817,7 +1817,7 @@ void Reader::openChapterGroups()
     const QStringList modes{ "current", "all", "off" };
     QVector<ChoiceOption> options;
     for (const auto &mode : modes)
-        options.append({ "rrChapterGroups_" + mode,
+        options.append({ "settingsChapterGroups_" + mode,
                          strings::get(mode == "off"           ? "settings.chapter_groups_off"
                                               : mode == "all" ? "settings.chapter_groups_all"
                                                               : "settings.chapter_groups_current"),
@@ -1825,7 +1825,8 @@ void Reader::openChapterGroups()
                                               : mode == "all"
                                               ? "settings.chapter_groups_all_description"
                                               : "settings.chapter_groups_current_description") });
-    openChoicePopup(chapterGroupsPopup, "rrChapterGroups", strings::get("settings.chapter_groups"),
+    openChoicePopup(chapterGroupsPopup, "settingsChapterGroups",
+                    strings::get("settings.chapter_groups"),
                     strings::get("settings.chapter_groups_hint"), options,
                     modes.indexOf(preferences.value("chapter_groups").toString("current")),
                     [this, modes](int index) {
@@ -1856,14 +1857,15 @@ void Reader::openNavigationBarButtons()
         if (mode == pageNavigation::barButtons(preferences))
             current = options.size();
         options.append(
-                { "rrNavigationBar_" + pageNavigation::value(mode), barButtonsLabel(mode),
+                { "navigationBar_" + pageNavigation::value(mode), barButtonsLabel(mode),
                   strings::get(
                           mode == pageNavigation::BarButtons::Chapters
                                   ? strings::key("settings.navigation_bar_chapters_description")
                                   : strings::key("settings.navigation_bar_pages_description")) });
     }
     openChoicePopup(
-            navigationBarPopup, "rrNavigationBar", strings::get("settings.navigation_bar_buttons"),
+            navigationBarPopup, "navigationBar",
+            strings::get("settings.navigation_bar_buttons"),
             strings::get("settings.navigation_bar_hint"), options, current, [this](int index) {
                 auto next = preferences;
                 next[pageNavigation::barButtonsKey] =
@@ -1919,9 +1921,10 @@ void Reader::openTappableLinks()
     const QStringList modes{ "footnotes", "all", "off" };
     QVector<ChoiceOption> options;
     for (const auto &mode : modes)
-        options.append({ "rrTappableLinks_" + mode, tappableLinksLabel(mode),
+        options.append({ "settingsTappableLinks_" + mode, tappableLinksLabel(mode),
                          tappableLinksDescription(mode) });
-    openChoicePopup(tappableLinksPopup, "rrTappableLinks", strings::get("settings.tappable_links"),
+    openChoicePopup(tappableLinksPopup, "settingsTappableLinks",
+                    strings::get("settings.tappable_links"),
                     strings::get("settings.tappable_links_description"), options,
                     modes.indexOf(preferences.value("tappable_links").toString("footnotes")),
                     [this, modes](int index) {
@@ -1959,11 +1962,11 @@ void Reader::openAnnotationInteraction()
     QVector<ChoiceOption> options;
     for (const auto &mode : modes)
         options.append(
-                { "rrAnnotationInteraction_" + mode, annotationInteractionLabel(mode),
+                { "settingsAnnotationInteraction_" + mode, annotationInteractionLabel(mode),
                   strings::get(mode == "quick"
                                        ? "settings.annotation_interaction_quick_description"
                                        : "settings.annotation_interaction_toggle_description") });
-    openChoicePopup(annotationInteractionPopup, "rrAnnotationInteraction",
+    openChoicePopup(annotationInteractionPopup, "settingsAnnotationInteraction",
                     strings::get("settings.annotation_interaction"),
                     strings::get("settings.annotation_interaction_description"), options,
                     modes.indexOf(preferences.value("annotation_interaction").toString("toggle")),
@@ -2011,10 +2014,10 @@ void Reader::openMenuView()
         if (mode == pageNavigation::menuView(preferences))
             current = options.size();
         modes.append(mode);
-        options.append({ "rrMenuView_" + pageNavigation::value(mode), menuViewLabel(mode),
+        options.append({ "menuView_" + pageNavigation::value(mode), menuViewLabel(mode),
                          strings::get(description) });
     }
-    openChoicePopup(menuViewPopup, "rrMenuView", strings::get("settings.default_menu_view"),
+    openChoicePopup(menuViewPopup, "menuView", strings::get("settings.default_menu_view"),
                     strings::get("settings.default_menu_view_description"), options, current,
                     [this, modes](int index) {
                         auto next = preferences;

@@ -886,10 +886,10 @@ void Window::turnPage(int direction, bool hardware)
     // Only turn from the reading surface. The same keys must remain available
     // to search fields, sliders, lists and dialogs while controls are open.
     for (auto *child : reader->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
-        if (child->isVisible() && child->objectName() != "rrPage"
-            && child->objectName() != "rrHeader")
+        if (child->isVisible() && child->objectName() != "readingPage"
+            && child->objectName() != "header")
             return;
-    auto *page = static_cast<ReadingPage *>(reader->findChild<QWidget *>("rrPage"));
+    auto *page = static_cast<ReadingPage *>(reader->findChild<QWidget *>("readingPage"));
     if (page && page->swiped)
         page->swiped(direction);
 }

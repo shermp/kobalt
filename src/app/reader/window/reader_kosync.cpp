@@ -116,7 +116,7 @@ void Reader::buildKosync()
             ? strings::get("kosync.native_sync")
             : strings::get(kosyncClient->signedIn() ? "kosync.signed_in" : "kosync.signed_out");
     kosyncStatus(kosyncClient->storageError().isEmpty() ? status : kosyncClient->storageError());
-    kosyncOpeningGrace.setObjectName("rrKosyncOpeningGrace");
+    kosyncOpeningGrace.setObjectName("kosyncOpeningGrace");
     kosyncOpeningGrace.setSingleShot(true);
     connect(&kosyncOpeningGrace, &QTimer::timeout, this, [this] {
         if (kosyncOpening)
@@ -345,14 +345,13 @@ void Reader::requestManualKosync()
         synchronizeKosync(true);
         return;
     }
-    auto *dialog =
-            new ui::ChoiceModal(this,
-                                { strings::get("kosync.manual_prompt_description"),
-                                  strings::get("kosync.manual_prompt"),
-                                  {} },
-                                { strings::get("common.cancel"), "rrKosyncManualCancel" },
-                                { strings::get("kosync.sync_now"), "rrKosyncManualConfirm" });
-    dialog->setObjectName("rrKosyncManualPrompt");
+    auto *dialog = new ui::ChoiceModal(this,
+                                       { strings::get("kosync.manual_prompt_description"),
+                                         strings::get("kosync.manual_prompt"),
+                                         {} },
+                                       { strings::get("common.cancel"), "kosyncManualCancel" },
+                                       { strings::get("kosync.sync_now"), "kosyncManualConfirm" });
+    dialog->setObjectName("kosyncManualPrompt");
     kosyncDialog = dialog;
     const auto dismiss = [this, dialog] {
         dialog->hide();
@@ -549,7 +548,7 @@ void Reader::showKosyncOpening()
     auto *dialog = new KosyncNotice(this);
     kosyncOpening = true;
     kosyncDialog = dialog;
-    dialog->setObjectName("rrKosyncOpening");
+    dialog->setObjectName("kosyncOpening");
     const auto skip = [this] {
         cancelKosync();
         kosyncStatus(strings::get("kosync.skipped"));
@@ -640,10 +639,10 @@ void Reader::showKosyncChoice()
     auto *dialog = new ui::ChoiceModal(
             this,
             { strings::get("kosync.comparing_positions"), strings::get("kosync.resume_title"), {} },
-            { strings::get("kosync.stay_here"), "rrKosyncKeep" },
-            { strings::get("kosync.use_remote"), "rrKosyncResume" });
+            { strings::get("kosync.stay_here"), "kosyncKeep" },
+            { strings::get("kosync.use_remote"), "kosyncResume" });
     kosyncDialog = dialog;
-    dialog->setObjectName("rrKosyncChoice");
+    dialog->setObjectName("kosyncChoice");
     dialog->setDimmed(true);
     const auto dismiss = [this, dialog] {
         dialog->hide();
@@ -751,7 +750,7 @@ void Reader::showKosyncChoice()
                 // The view sits between the heading and the actions, with the
                 // heading's side inset and room above the actions.
                 auto *details = new QWidget(guard->card());
-                details->setObjectName("rrKosyncChoiceDetails");
+                details->setObjectName("kosyncChoiceDetails");
                 auto *layout = new QVBoxLayout(details);
                 layout->setContentsMargins(ui::metrics::chrome::inset, 0,
                                            ui::metrics::chrome::inset,

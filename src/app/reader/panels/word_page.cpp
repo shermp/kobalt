@@ -20,9 +20,9 @@ namespace chrome = ui::metrics::chrome;
 
 WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
 {
-    setObjectName("rrWordPage");
+    setObjectName("wordPage");
     backButton = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
-    backButton->setObjectName("rrWordPageBack");
+    backButton->setObjectName("wordPageBack");
     backButton->setRule(Qt::RightEdge);
     backButton->setAccessibleName(strings::get("library.back"));
     connect(backButton, &QPushButton::clicked, this, [this] {
@@ -30,7 +30,7 @@ WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
             back();
     });
     remove = new ui::CellButton(ui::ControlIcon::Trash, this);
-    remove->setObjectName("rrWordPageRemove");
+    remove->setObjectName("wordPageRemove");
     remove->setRule(Qt::LeftEdge);
     remove->setAccessibleName(strings::get("words.remove"));
     connect(remove, &QPushButton::clicked, this, [this] {
@@ -43,14 +43,14 @@ WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
         });
     });
     passageCell = new ui::CellButton(ui::ControlIcon::Dictionary, this);
-    passageCell->setObjectName("rrWordPagePassageCell");
+    passageCell->setObjectName("wordPagePassageCell");
     passageCell->setRule(Qt::LeftEdge);
     connect(passageCell, &QPushButton::clicked, this, [this] {
         if (passageRequested)
             passageRequested(current);
     });
     headword = new ui::PrivateTextLabel(this);
-    headword->setObjectName("rrWordPageWord");
+    headword->setObjectName("wordPageWord");
     headword->setTextFormat(Qt::PlainText);
     headword->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     definitionHeading = new ui::ListHeader(this);
@@ -58,16 +58,16 @@ WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
     contextHeading = new ui::ListHeader(this);
     contextHeading->setShaded(true);
     definition = new ui::PagedText(this);
-    definition->setObjectName("rrWordPageDefinition");
+    definition->setObjectName("wordPageDefinition");
     definition->setMargins(
             QMargins(chrome::inset, chrome::blockTop, chrome::inset, chrome::blockTop));
     context = new ui::InterfaceLabel({}, this);
-    context->setObjectName("rrWordPageContext");
+    context->setObjectName("wordPageContext");
     context->setTextFormat(Qt::RichText);
     context->setWordWrap(true);
     context->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     passage = new ui::Button(QString(), this);
-    passage->setObjectName("rrWordPagePassage");
+    passage->setObjectName("wordPagePassage");
     ui::readerStyle(passage,
                     ui::styles::outlined() + "QPushButton{" + ui::styles::font(chrome::labelText)
                             + "}");
@@ -77,7 +77,7 @@ WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
             passageRequested(current);
     });
     missing = new ui::InterfaceLabel(strings::get("words.book_missing"), this);
-    missing->setObjectName("rrWordPageMissing");
+    missing->setObjectName("wordPageMissing");
     missing->setTextFormat(Qt::PlainText);
     missing->setAlignment(Qt::AlignCenter);
     missing->setWordWrap(true);
@@ -87,13 +87,13 @@ WordPage::WordPage(QWidget *parent) : ui::Panel(parent)
                     + QString("color:palette(placeholder-text);background:transparent;border:%1px dashed palette(mid);")
                               .arg(int(ui::metrics::control::border)));
     facts = new ui::InterfaceLabel({}, this);
-    facts->setObjectName("rrWordPageFacts");
+    facts->setObjectName("wordPageFacts");
     facts->setTextFormat(Qt::PlainText);
     facts->setWordWrap(true);
     ui::readerStyle(facts,
                     ui::styles::font(chrome::descriptionText)
                             + "color:palette(placeholder-text);background:transparent;");
-    pager = new ui::PagerBar(this, "rrWordPage");
+    pager = new ui::PagerBar(this, "wordPage");
     connect(pager->previous, &QPushButton::clicked, this, [this] {
         definition->setPage(definition->page() - 1);
         arrange();

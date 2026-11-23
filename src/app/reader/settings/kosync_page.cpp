@@ -26,12 +26,12 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
       overlayParent_(overlayParent),
       makeKeyboard_(std::move(keyboard))
 {
-    setObjectName("rrKosyncPage");
+    setObjectName("kosyncPage");
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(0);
     description_ = new ui::InterfaceLabel(strings::get("kosync.description"), this);
-    description_->setObjectName("rrKosyncDescription");
+    description_->setObjectName("kosyncDescription");
     description_->setTextFormat(Qt::PlainText);
     description_->setWordWrap(true);
     ui::readerStyle(
@@ -42,7 +42,7 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
                     + ui::styles::font(metrics::chrome::descriptionText) + "}");
     rows->addWidget(description_);
     sideloadGuidance_ = new ui::InterfaceLabel(strings::get("kosync.sideload_copy"), this);
-    sideloadGuidance_->setObjectName("rrKosyncSideloadGuidance");
+    sideloadGuidance_->setObjectName("kosyncSideloadGuidance");
     sideloadGuidance_->setTextFormat(Qt::PlainText);
     sideloadGuidance_->setWordWrap(true);
     ui::readerStyle(sideloadGuidance_,
@@ -50,26 +50,26 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
                             + ui::styles::font(metrics::chrome::descriptionText) + "}");
     sideloadGuidance_->setMargin(metrics::chrome::inset);
     rows->addWidget(sideloadGuidance_);
-    learnMore_ = ui::makeButton(this, rows, "rrKosyncLearnMore", strings::get("kosync.learn_more"),
+    learnMore_ = ui::makeButton(this, rows, "kosyncLearnMore", strings::get("kosync.learn_more"),
                                 [this] { showSyncHelp(); });
-    serverButton_ = ui::makeCaptionButton(this, rows, "rrKosyncServer",
-                                          strings::get("kosync.server"), [this] { edit(0); });
-    usernameButton_ = ui::makeCaptionButton(this, rows, "rrKosyncUsername",
+    serverButton_ = ui::makeCaptionButton(this, rows, "kosyncServer", strings::get("kosync.server"),
+                                          [this] { edit(0); });
+    usernameButton_ = ui::makeCaptionButton(this, rows, "kosyncUsername",
                                             strings::get("kosync.username"), [this] { edit(1); });
-    passwordButton_ = ui::makeCaptionButton(this, rows, "rrKosyncPassword",
+    passwordButton_ = ui::makeCaptionButton(this, rows, "kosyncPassword",
                                             strings::get("kosync.password"), [this] { edit(2); });
     deviceNameButton_ =
-            ui::makeCaptionButton(this, rows, "rrKosyncDeviceName",
+            ui::makeCaptionButton(this, rows, "kosyncDeviceName",
                                   strings::get("kosync.device_name"), [this] { edit(3); });
     matchingButton_ =
-            ui::makeCaptionButton(this, rows, "rrKosyncMatching", strings::get("kosync.matching"),
+            ui::makeCaptionButton(this, rows, "kosyncMatching", strings::get("kosync.matching"),
                                   [this] { showMatchingChoices(); });
     // KOReader's opt-in "Send document metadata", as a checkbox like the
     // General settings options. It is off until the user turns it on.
     metadataOption_ =
             new ui::DescribedOption(strings::get("kosync.send_metadata"),
                                     strings::get("kosync.send_metadata_description"), this);
-    metadataOption_->setObjectName("rrKosyncMetadata");
+    metadataOption_->setObjectName("kosyncMetadata");
     auto presentation = metadataOption_->presentation();
     presentation.indicator = ui::DescribedOption::Indicator::Square;
     presentation.pressedFill = true;
@@ -85,16 +85,16 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
         if (sendMetadataChanged)
             sendMetadataChanged(checked);
     });
-    login_ = ui::makeButton(this, rows, "rrKosyncLogin", strings::get("kosync.login"), [this] {
+    login_ = ui::makeButton(this, rows, "kosyncLogin", strings::get("kosync.login"), [this] {
         if (loginRequested)
             loginRequested();
     });
     automaticButton_ =
-            ui::makeCaptionButton(this, rows, "rrKosyncAutomatic", strings::get("kosync.automatic"),
+            ui::makeCaptionButton(this, rows, "kosyncAutomatic", strings::get("kosync.automatic"),
                                   [this] { showSchedule(); });
-    sync_ = ui::makeButton(this, rows, "rrKosyncNow", strings::get("kosync.sync_now"),
+    sync_ = ui::makeButton(this, rows, "kosyncNow", strings::get("kosync.sync_now"),
                            [this] { syncNow(); });
-    logout_ = ui::makeButton(this, rows, "rrKosyncLogout", strings::get("kosync.logout"), [this] {
+    logout_ = ui::makeButton(this, rows, "kosyncLogout", strings::get("kosync.logout"), [this] {
         if (logoutRequested)
             logoutRequested();
     });
@@ -130,7 +130,7 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
                                         metrics::chrome::inset, metrics::spacing::row);
     informationRows->setSpacing(ui::px(12));
     status_ = new ui::InterfaceLabel(syncInformation_);
-    status_->setObjectName("rrKosyncStatus");
+    status_->setObjectName("kosyncStatus");
     status_->setTextFormat(Qt::PlainText);
     status_->setWordWrap(true);
     ui::readerStyle(status_,
@@ -138,7 +138,7 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
                             + ui::styles::font(metrics::chrome::descriptionText));
     informationRows->addWidget(status_);
     lastSync_ = new ui::InterfaceLabel(syncInformation_);
-    lastSync_->setObjectName("rrKosyncLastSync");
+    lastSync_->setObjectName("kosyncLastSync");
     lastSync_->setTextFormat(Qt::PlainText);
     lastSync_->setWordWrap(true);
     ui::readerStyle(lastSync_,
@@ -366,16 +366,16 @@ void KosyncPage::edit(int field)
                                                 : field == 2 ? "kosync.password"
                                                              : "kosync.device_name_title");
     auto *dialog = new ui::ChoiceModal(overlayParent_, { {}, titleText, {} },
-                                       { strings::get("common.cancel"), "rrKosyncEditCancel" },
-                                       { strings::get("common.ok"), "rrKosyncEditSave" });
+                                       { strings::get("common.cancel"), "kosyncEditCancel" },
+                                       { strings::get("common.ok"), "kosyncEditSave" });
     editorDialog = dialog;
-    editorDialog->setObjectName("rrKosyncEditor");
+    editorDialog->setObjectName("kosyncEditor");
     editorDialog->setDimmed(true);
     editorDialog->setGeometry(overlayParent_->rect());
     auto *card = editorDialog->card();
     auto *editor = new QLineEdit(card);
     kobalt::ui::prepareNativeEditor(editor);
-    editor->setObjectName("rrKosyncInput");
+    editor->setObjectName("kosyncInput");
     // Native keys have no click focus. Keep their focus fallback on the input
     // instead of repainting the modal backdrop on every press and release.
     editorDialog->setFocusProxy(editor);
@@ -405,7 +405,7 @@ void KosyncPage::edit(int field)
     // Every field uses the same bordered input in the same inset row. Only the
     // password row adds its reveal button.
     auto *row = new QWidget(card);
-    row->setObjectName("rrKosyncInputRow");
+    row->setObjectName("kosyncInputRow");
     auto *layout = new QHBoxLayout(row);
     layout->setContentsMargins(metrics::notice::cardMargins.left(),
                                metrics::notice::cardMargins.top(),
@@ -413,7 +413,7 @@ void KosyncPage::edit(int field)
     layout->setSpacing(metrics::notice::cardGap);
     layout->addWidget(editor, 1);
     if (field == 2) {
-        auto *reveal = ui::makeButton(row, layout, "rrKosyncPasswordReveal",
+        auto *reveal = ui::makeButton(row, layout, "kosyncPasswordReveal",
                                       strings::get("kosync.show_password"), [] { });
         reveal->setCheckable(true);
         ui::readerStyle(reveal,
@@ -510,7 +510,7 @@ void KosyncPage::dismissEditor()
 void KosyncPage::maskPassword()
 {
     if (editorDialog)
-        if (auto *reveal = editorDialog->findChild<QPushButton *>("rrKosyncPasswordReveal"))
+        if (auto *reveal = editorDialog->findChild<QPushButton *>("kosyncPasswordReveal"))
             reveal->setChecked(false);
 }
 
@@ -520,17 +520,17 @@ void KosyncPage::showMatchingChoices()
         return;
     auto *dialog =
             new ui::NoticeModal(overlayParent_, { {}, strings::get("kosync.matching_title"), {} },
-                                { strings::get("common.cancel"), "rrKosyncMatchingCancel" });
+                                { strings::get("common.cancel"), "kosyncMatchingCancel" });
     matchingDialog_ = dialog;
-    dialog->setObjectName("rrKosyncMatchingDialog");
+    dialog->setObjectName("kosyncMatchingDialog");
     dialog->setDimmed(true);
     dialog->setGeometry(overlayParent_->rect());
     auto *choices = new ui::RadioList(dialog->card());
     choices->setUniformRows(false);
     choices->setMinimumRowHeight(metrics::chrome::listActionHeight);
-    choices->add("rrKosyncBinary", strings::get("kosync.match_binary"),
+    choices->add("kosyncBinary", strings::get("kosync.match_binary"),
                  strings::get("kosync.match_binary_description"));
-    choices->add("rrKosyncFilename", strings::get("kosync.match_filename"),
+    choices->add("kosyncFilename", strings::get("kosync.match_filename"),
                  strings::get("kosync.match_filename_description"));
     choices->setCurrent(filenameMatching_ ? 1 : 0);
     choices->chosen = [this](int index) {
@@ -566,9 +566,9 @@ void KosyncPage::showSyncHelp()
                                        { strings::get("kosync.learn_more_description"),
                                          strings::get("kosync.learn_more_title"),
                                          {} },
-                                       { strings::get("common.ok"), "rrKosyncHelpOK" });
+                                       { strings::get("common.ok"), "kosyncHelpOK" });
     syncHelp_ = dialog;
-    dialog->setObjectName("rrKosyncHelp");
+    dialog->setObjectName("kosyncHelp");
     dialog->setDimmed(true);
     dialog->setGeometry(overlayParent_->rect());
     connect(dialog->primaryButton(), &QPushButton::clicked, this, [this] { dismissSyncHelp(); });
@@ -603,7 +603,7 @@ void KosyncPage::placeEditor()
         bottom = editorDialog->mapFrom(overlayParent_->window(), bounds.topLeft()).y();
     auto *card = editorDialog->card();
     if (card->height() > bottom && editorDialog->width() > editorDialog->height()) {
-        if (auto *row = editorDialog->findChild<QWidget *>("rrKosyncInputRow"))
+        if (auto *row = editorDialog->findChild<QWidget *>("kosyncInputRow"))
             row->layout()->setContentsMargins(metrics::notice::cardMargins.left(), 0,
                                               metrics::notice::cardMargins.right(), 0);
         card->fitToWidth(editorDialog->width() - 2 * int(metrics::notice::sideClearance));

@@ -97,7 +97,7 @@ void checkExactLock(Factory &factory)
     f.rotation.start(Qt::PortraitOrientation);
     require(f.turns.last() == Qt::InvertedLandscapeOrientation, "Start in inverted landscape");
     f.backend->sample(QOrientationReading::LeftUp);
-    auto *debounce = f.rotation.findChild<QTimer *>("rrOrientationDebounce");
+    auto *debounce = f.rotation.findChild<QTimer *>("orientationDebounce");
     require(debounce && debounce->isActive(), "An opposite angle queues a turn in Both");
     f.rotation.toggleLock();
     require(f.rotation.locked() && f.rotation.automatic() && !debounce->isActive(),

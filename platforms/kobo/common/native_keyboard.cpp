@@ -96,7 +96,7 @@ extern "C" __attribute__((visibility("default"))) void kobalt_keyboard_repaint(Q
                                                                                bool fast)
 {
     for (auto *parent = widget; parent; parent = parent->parentWidget()) {
-        if (parent->objectName() == "rrSearchKeyboard") {
+        if (parent->objectName() == "searchKeyboard") {
             // Nickel's immediate key repaint bypasses widget effects. Let Qt
             // repaint the keyboard through its theme effect instead.
             widget->update();

@@ -88,7 +88,7 @@ bool NativeKeyboard::create()
             return false;
         }
         frame = static_cast<QWidget *>(storage);
-        frame->setObjectName("rrSearchKeyboard");
+        frame->setObjectName("searchKeyboard");
         frame->installEventFilter(this);
         frame->setPalette(QApplication::palette());
         frame->setStyleSheet("QWidget{background:white;color:black;}");

@@ -155,7 +155,7 @@ bool HoldTimer::eventFilter(QObject *, QEvent *event)
 
 TextPresetToggle::TextPresetToggle(QWidget *parent) : ui::Button(parent)
 {
-    setObjectName("rrTextPresetToggle");
+    setObjectName("textPresetToggle");
     setFocusPolicy(Qt::NoFocus);
     // The shared button style sets a minimum height taller than the band.
     ui::readerStyle(this, "QPushButton{border:none;padding:0;min-height:0;}");
@@ -258,7 +258,7 @@ void TextPresetCard::setPreset(const TextPresetView &view, bool isSelected, bool
     axisWeight = view.axisWeight;
     selected = isSelected;
     modified = isModified;
-    setObjectName("rrTextPreset_" + view.id);
+    setObjectName("textPreset_" + view.id);
     setAccessibleName(modified ? strings::get("text_presets.modified_name").arg(name) : name);
     setAccessibleDescription(view.detail);
     update();
@@ -339,9 +339,9 @@ void TextPresetCard::paintEvent(QPaintEvent *)
 
 TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrTextPresets");
+    setObjectName("textPresets");
     header = new ui::ListHeader(this);
-    header->setObjectName("rrTextPresetsHeader");
+    header->setObjectName("textPresetsHeader");
     header->setShaded(true);
     header->setCaptions(strings::get("text_presets.title").toUpper());
     toggle = new TextPresetToggle(header);
@@ -350,7 +350,7 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
             toggled();
     });
     row = new QWidget(this);
-    row->setObjectName("rrTextPresetCards");
+    row->setObjectName("textPresetCards");
     auto *cardsLayout = new QHBoxLayout(row);
     cardsLayout->setContentsMargins(0, 0, 0, 0);
     cardsLayout->setSpacing(0);
@@ -368,7 +368,7 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
         });
     }
     allCard = new TextPresetCard(row);
-    allCard->setObjectName("rrTextPresetAll");
+    allCard->setObjectName("textPresetAll");
     allCard->setAction(ui::ControlIcon::Grid, strings::get("text_presets.all"));
     allCard->setDivider(false);
     // A narrow cell, as wide as a toolbar cell, so four presets fit beside it.
@@ -384,7 +384,7 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
     // The section draws the divider above the bar, as it does under the
     // cards. A panel edge here would add a second, heavy rule.
     actions = new ui::Panel(this);
-    actions->setObjectName("rrTextPresetChangeBar");
+    actions->setObjectName("textPresetChangeBar");
     auto *actionsLayout = new QHBoxLayout(actions);
     actionsLayout->setContentsMargins(0, 0, 0, 0);
     actionsLayout->setSpacing(0);
@@ -393,11 +393,11 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
         button->setObjectName(name);
         return button;
     };
-    updateButton = actionButton("rrTextPresetUpdate", ui::ControlIcon::Check);
-    saveAsButton = actionButton("rrTextPresetSaveAs", ui::ControlIcon::Plus);
+    updateButton = actionButton("textPresetUpdate", ui::ControlIcon::Check);
+    saveAsButton = actionButton("textPresetSaveAs", ui::ControlIcon::Plus);
     actionsLayout->addWidget(updateButton, 1);
     auto *divider = new ui::Panel(actions);
-    divider->setObjectName("rrTextPresetChangeDivider");
+    divider->setObjectName("textPresetChangeDivider");
     divider->setFixedWidth(metrics::control::border);
     divider->setDividers(Qt::LeftEdge);
     actionsLayout->addWidget(divider);
@@ -436,7 +436,7 @@ void TextPresetSection::setState(const QVector<TextPresetView> &views, const QSt
     // preset, and Save as new alone when the text matches no preset.
     const bool none = selectedName.isEmpty();
     updateButton->setVisible(!none);
-    if (auto *divider = actions->findChild<QWidget *>("rrTextPresetChangeDivider"))
+    if (auto *divider = actions->findChild<QWidget *>("textPresetChangeDivider"))
         divider->setVisible(!none);
     const bool showActions = open && (modified || none);
     const bool rearranged = resized || row->isHidden() == open || actions->isHidden() == showActions
@@ -514,7 +514,7 @@ class TextPresetGrid final : public QWidget
 public:
     explicit TextPresetGrid(TextPresetGallery *gallery) : QWidget(gallery), gallery(gallery)
     {
-        setObjectName("rrTextPresetGrid");
+        setObjectName("textPresetGrid");
         setAttribute(Qt::WA_OpaquePaintEvent);
         hold.setSingleShot(true);
         hold.setInterval(holdMilliseconds);
@@ -712,26 +712,26 @@ private:
 
 TextPresetGallery::TextPresetGallery(QWidget *parent) : ui::Panel(parent)
 {
-    setObjectName("rrTextPresetGallery");
+    setObjectName("textPresetGallery");
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(0);
     // The header matches the sleep screen gallery: a title in the brand face,
     // a heavy rule under it and a close cell on the right.
     auto *heading = new ui::Panel(this, Qt::BottomEdge);
-    heading->setObjectName("rrTextPresetGalleryHeader");
+    heading->setObjectName("textPresetGalleryHeader");
     heading->setEdgeWidth(chrome::heavyRule);
     heading->setFixedHeight(chrome::actionHeight);
     auto *headingRows = new QHBoxLayout(heading);
     headingRows->setContentsMargins(0, 0, 0, chrome::heavyRule);
     headingRows->setSpacing(0);
     title = new SettingsTitle(strings::get("text_presets.gallery_title"), heading);
-    title->setObjectName("rrTextPresetGalleryTitle");
+    title->setObjectName("textPresetGalleryTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(title, 1);
     auto *close = new ui::CellButton(ui::ControlIcon::Close, heading);
-    close->setObjectName("rrTextPresetGalleryClose");
+    close->setObjectName("textPresetGalleryClose");
     close->setAccessibleName(strings::get("settings.close"));
     close->setRule(Qt::LeftEdge);
     close->setFixedWidth(chrome::cellWidth);
@@ -742,14 +742,14 @@ TextPresetGallery::TextPresetGallery(QWidget *parent) : ui::Panel(parent)
     });
     rows->addWidget(heading);
     hint = new ui::ListHeader(this);
-    hint->setObjectName("rrTextPresetGalleryHint");
+    hint->setObjectName("textPresetGalleryHint");
     hint->setShaded(true);
     hint->setCaptions(strings::get("text_presets.gallery_hint").toUpper());
     hint->setFixedHeight(metrics::list::headerHeight);
     rows->addWidget(hint);
     grid = new TextPresetGrid(this);
     rows->addWidget(grid, 1);
-    pager = new ui::PagerBar(this, "rrTextPresetGallery");
+    pager = new ui::PagerBar(this, "textPresetGallery");
     rows->addWidget(pager);
     connect(pager->previous, &QPushButton::clicked, this,
             [this] { showPage(pager->turnTarget(-1)); });

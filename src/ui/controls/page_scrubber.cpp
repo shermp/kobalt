@@ -138,19 +138,19 @@ protected:
 PageScrubber::PageScrubber(QWidget *parent)
     : QWidget(parent), position(new SettingSlider(this, 0, 0))
 {
-    setObjectName("rrPageScrubber");
+    setObjectName("pageScrubber");
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_AcceptTouchEvents);
     indicator = new SettingSlider(this, 0, 100);
     indicator->setReadOnlyIndicator(true);
     indicator->setDotMarkers(true);
-    indicator->setObjectName("rrBookPositionIndicator");
+    indicator->setObjectName("bookPositionIndicator");
     indicator->setAccessibleName(strings::get("reader.book_position"));
     indicator->hide();
     preceding = new NavigationButton<PageThumbnail>(this);
     following = new NavigationButton<PageThumbnail>(this);
-    preceding->setObjectName("rrPreviewPreviousPage");
-    following->setObjectName("rrPreviewNextPage");
+    preceding->setObjectName("previewPreviousPage");
+    following->setObjectName("previewNextPage");
     preceding->setAccessibleName(strings::get("common.previous_page"));
     following->setAccessibleName(strings::get("common.next_page"));
     for (auto *thumbnail : { preceding, following }) {
@@ -188,29 +188,30 @@ PageScrubber::PageScrubber(QWidget *parent)
         readerStyle(result, "QPushButton{border:none;padding:0;min-height:0;}");
         return result;
     };
-    auto *back = button("rrNavigationPrevious", ControlIcon::Previous,
+    auto *back = button("navigationPrevious", ControlIcon::Previous,
                         strings::get("common.previous_page"));
-    auto *forward = button("rrNavigationNext", ControlIcon::Next, strings::get("common.next_page"));
+    auto *forward =
+            button("navigationNext", ControlIcon::Next, strings::get("common.next_page"));
     previous = back;
     next = forward;
-    zoomOut = button("rrScrubberZoomOut", ControlIcon::Minus, strings::get("reader.zoom_out"));
-    zoomIn = button("rrScrubberZoomIn", ControlIcon::Plus, strings::get("reader.zoom_in"));
+    zoomOut = button("scrubberZoomOut", ControlIcon::Minus, strings::get("reader.zoom_out"));
+    zoomIn = button("scrubberZoomIn", ControlIcon::Plus, strings::get("reader.zoom_in"));
     connect(previous, &QPushButton::clicked, this, [this] { step(-1); });
     connect(next, &QPushButton::clicked, this, [this] { step(1); });
     connect(zoomOut, &QPushButton::clicked, this, [this] { zoom(-1); });
     connect(zoomIn, &QPushButton::clicked, this, [this] { zoom(1); });
     overview = new RangeOverview(this);
-    overview->setObjectName("rrScrubberOverview");
+    overview->setObjectName("scrubberOverview");
     overview->setAccessibleName(strings::get("reader.zoom_overview"));
     overview->moved = [this](int first) { pan(first); };
     rangeLabel = new PrivateTextLabel(this);
-    rangeLabel->setObjectName("rrScrubberRange");
+    rangeLabel->setObjectName("scrubberRange");
     overviewLabel = new PrivateTextLabel(this);
-    overviewLabel->setObjectName("rrScrubberOverviewLabel");
+    overviewLabel->setObjectName("scrubberOverviewLabel");
     rangeStart = new PrivateTextLabel(this);
-    rangeStart->setObjectName("rrScrubberRangeStart");
+    rangeStart->setObjectName("scrubberRangeStart");
     rangeEnd = new PrivateTextLabel(this);
-    rangeEnd->setObjectName("rrScrubberRangeEnd");
+    rangeEnd->setObjectName("scrubberRangeEnd");
     overviewStart = new PrivateTextLabel(this);
     overviewStart->setText(QStringLiteral("1"));
     overviewEnd = new PrivateTextLabel(this);
@@ -227,7 +228,7 @@ PageScrubber::PageScrubber(QWidget *parent)
     for (auto *label : { rangeEnd, overviewEnd }) {
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     }
-    position->setObjectName("rrBookPosition");
+    position->setObjectName("bookPosition");
     position->setAccessibleName(strings::get("reader.book_position"));
     position->setDotMarkers(true);
     connect(position, &QSlider::valueChanged, this, [this](int page) {
@@ -243,14 +244,14 @@ PageScrubber::PageScrubber(QWidget *parent)
     renderTimer.setInterval(100);
     connect(&renderTimer, &QTimer::timeout, this, [this] { requestPreview(); });
     captionBackground = new Panel(this, Qt::TopEdge);
-    captionBackground->setObjectName("rrScrubberCaptionBackground");
+    captionBackground->setObjectName("scrubberCaptionBackground");
     captionBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
     captionBackground->setEdgeWidth(metrics::chrome::heavyRule);
     captionBackground->setFill(QPalette::Base);
     captionBackground->setDividers(Qt::BottomEdge);
     captionBackground->hide();
     chapterLabel = new PrivateTextLabel(this);
-    chapterLabel->setObjectName("rrPreviewChapterCaption");
+    chapterLabel->setObjectName("previewChapterCaption");
     chapterLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
     chapterLabel->setAlignment(Qt::AlignCenter);
     captionLabel(chapterLabel, scrubber::text);
@@ -262,7 +263,7 @@ PageScrubber::PageScrubber(QWidget *parent)
     overviewRule->setSoftEdges(true);
     overviewRule->setAttribute(Qt::WA_TransparentForMouseEvents);
     overviewRule->setFill(QPalette::Base);
-    auto *disclosure = button("rrScrubberOverviewToggle", ControlIcon::Up,
+    auto *disclosure = button("scrubberOverviewToggle", ControlIcon::Up,
                               strings::get("reader.expand_book_map"));
     disclosure->setFill(QPalette::Base);
     overviewToggle = disclosure;
@@ -281,7 +282,7 @@ PageScrubber::PageScrubber(QWidget *parent)
     barRule->setFill(QPalette::Base);
     actions = new QWidget(this);
     actions->setAttribute(Qt::WA_NoSystemBackground);
-    actions->setObjectName("rrScrubberActions");
+    actions->setObjectName("scrubberActions");
     linksRule = new Panel(actions);
     returnRule = new Panel(actions);
     imageRule = new Panel(actions);
@@ -297,18 +298,18 @@ PageScrubber::PageScrubber(QWidget *parent)
         result->hide();
         return result;
     };
-    linksAction = action("rrScrubberLinks", ControlIcon::Link);
-    returnAction = action("rrScrubberReturn", ControlIcon::Undo);
-    imageAction = action("rrScrubberImage", ControlIcon::FitImage);
+    linksAction = action("scrubberLinks", ControlIcon::Link);
+    returnAction = action("scrubberReturn", ControlIcon::Undo);
+    imageAction = action("scrubberImage", ControlIcon::FitImage);
     stay = new NavigationButton<DismissButton>(actions);
-    stay->setObjectName("rrScrubberStay");
+    stay->setObjectName("scrubberStay");
     stay->setAccessibleName(strings::get("reader.stay_here"));
     stay->setContentsMargins(0, int(scrubber::actionTop) + int(metrics::control::border), 0,
                              metrics::control::border);
     readerStyle(stay, "QPushButton{border:none;padding:0;min-height:0;}");
     stay->hide();
     dismissImage = new NavigationButton<DismissButton>(actions);
-    dismissImage->setObjectName("rrScrubberImageDismiss");
+    dismissImage->setObjectName("scrubberImageDismiss");
     dismissImage->setAccessibleName(strings::get("image.dismiss_suggestion"));
     dismissImage->setContentsMargins(stay->contentsMargins());
     readerStyle(dismissImage, "QPushButton{border:none;padding:0;min-height:0;}");

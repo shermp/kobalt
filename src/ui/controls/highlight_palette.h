@@ -24,7 +24,7 @@ public:
     HighlightSwatch(QString key, QString label, QWidget *parent)
         : QAbstractButton(parent), key(std::move(key))
     {
-        setObjectName("rrAnnotationColor_" + this->key);
+        setObjectName("annotationColor_" + this->key);
         setText(label);
         setAccessibleName(label);
         setCheckable(true);
@@ -70,7 +70,7 @@ public:
     HighlightPalette(const QString &selected, std::function<void(QString)> changed, QWidget *parent)
         : QWidget(parent), selectedColor(selected)
     {
-        setObjectName("rrAnnotationPalette");
+        setObjectName("annotationPalette");
         parent->installEventFilter(this);
         setFixedHeight(compactHeight());
         auto *layout = new QVBoxLayout(this);
@@ -96,7 +96,7 @@ public:
             });
         }
         error = new kobalt::ui::InterfaceLabel(this);
-        error->setObjectName("rrAnnotationPaletteError");
+        error->setObjectName("annotationPaletteError");
         error->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         error->setWordWrap(true);
         error->setFont(chromeFont(px(23)));
@@ -122,7 +122,7 @@ public:
     {
         selectedColor = selected;
         for (auto *button : findChildren<QAbstractButton *>()) {
-            button->setChecked(button->objectName() == "rrAnnotationColor_" + selected);
+            button->setChecked(button->objectName() == "annotationColor_" + selected);
         }
     }
 
@@ -209,7 +209,7 @@ public:
     HighlightStyleSample(const QString &style, const QString &label, bool last, QWidget *parent)
         : Button(parent), style(style), last(last)
     {
-        setObjectName("rrAnnotationStyle_" + style);
+        setObjectName("annotationStyle_" + style);
         setAccessibleName(label);
         setCheckable(true);
         setPaintMode(ButtonPaintMode::ToolbarCell);
@@ -269,7 +269,7 @@ public:
                          QWidget *parent)
         : QWidget(parent)
     {
-        setObjectName("rrAnnotationStyles");
+        setObjectName("annotationStyles");
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(0);
@@ -290,7 +290,7 @@ public:
             });
         }
         error = new kobalt::ui::InterfaceLabel(this);
-        error->setObjectName("rrAnnotationStyleError");
+        error->setObjectName("annotationStyleError");
         error->setFont(interfaceFont(px(23)));
         error->setWordWrap(true);
         error->setContentsMargins(px(20), px(4), px(20), px(12));
@@ -302,7 +302,7 @@ public:
     void setSelectedStyle(const QString &selected)
     {
         for (auto *button : findChildren<QAbstractButton *>())
-            button->setChecked(button->objectName() == "rrAnnotationStyle_" + selected);
+            button->setChecked(button->objectName() == "annotationStyle_" + selected);
     }
 
     void setColor(const QString &color)

@@ -117,7 +117,7 @@ int main(int argc, char **argv)
     kobalt::NativeKeyboard keyboard(&host, &editor);
     keyboard.setSubmitText(QStringLiteral("Find"));
     require(keyboard.show(), "native keyboard did not open");
-    auto *frame = host.findChild<KeyboardFrame *>("rrSearchKeyboard");
+    auto *frame = host.findChild<KeyboardFrame *>("searchKeyboard");
     require(frame && frame->isVisible(), "native frame is missing");
     require(frame->geometry() == QRect(0, 560, 600, 240), "keyboard placement");
     require(host.property("reader_keyboard_bounds").toRect() == frame->geometry(),
@@ -176,7 +176,7 @@ int main(int argc, char **argv)
         require(textKeyboard.show(), "text box keyboard did not open");
         // The first keyboard's frame is still a child of the host.
         SearchKeyboardController *textController = nullptr;
-        for (auto *frame : host.findChildren<KeyboardFrame *>("rrSearchKeyboard"))
+        for (auto *frame : host.findChildren<KeyboardFrame *>("searchKeyboard"))
             for (auto *controller : frame->findChildren<SearchKeyboardController *>())
                 if (controller->receiver && controller->receiver->parent() == &text)
                     textController = controller;

@@ -144,7 +144,7 @@ struct ModalContent
     QString description;
     QString title;
     QImage image;
-    // The object name of the title label. Empty means "rrModalTitle".
+    // The object name of the title label. Empty means "modalTitle".
     QString titleName = {};
 };
 

@@ -230,7 +230,7 @@ void dismissedContent()
     result.html = html;
     dictionary.open("word", result, QRect(100, 100, 30, 30));
     auto *definition =
-            static_cast<ui::PagedText *>(dictionary.findChild<QWidget *>("rrDefinition"));
+            static_cast<ui::PagedText *>(dictionary.findChild<QWidget *>("dictionaryDefinition"));
     require(definition && definition->pages() > 1, "Dictionary fixture is not paginated");
     const int definitionPages = definition->pages();
     definition->setPage(1);
@@ -253,7 +253,7 @@ void dismissedContent()
     details.kind = LinkKind::Footnote;
     details.html = html;
     link.open(details, QRect(100, 100, 30, 30));
-    auto *note = static_cast<ui::PagedText *>(link.findChild<QWidget *>("rrLinkText"));
+    auto *note = static_cast<ui::PagedText *>(link.findChild<QWidget *>("linkText"));
     require(note && note->pages() > 1, "Footnote fixture is not paginated");
     const int notePages = note->pages();
     host.hide();
@@ -951,7 +951,7 @@ int main(int argc, char **argv)
         QWidget host;
         Button button("Theme", &host);
         LightSwipeNotice notice(&host);
-        auto *caption = notice.findChild<QLabel *>("rrLightSwipeCaption");
+        auto *caption = notice.findChild<QLabel *>("lightSwipeCaption");
         require(caption, "Swipe notice has no caption");
         // Replay the same widgets in both directions. Platform gray roles must
         // not leak into either QSS or custom painting after a theme change.
@@ -1028,8 +1028,8 @@ int main(int argc, char **argv)
         notice.show();
         require(notice.testAttribute(Qt::WA_TransparentForMouseEvents),
                 "Light indicator intercepts swipe input");
-        auto *value = notice.findChild<QLabel *>("rrLightSwipeValue");
-        auto *caption = notice.findChild<QLabel *>("rrLightSwipeCaption");
+        auto *value = notice.findChild<QLabel *>("lightSwipeValue");
+        auto *caption = notice.findChild<QLabel *>("lightSwipeCaption");
         for (bool warm : { false, true })
             for (int percent : { 0, 30, 50, 80, 100 }) {
                 notice.setLevel(warm, percent);
@@ -1343,19 +1343,19 @@ int main(int argc, char **argv)
         kobalt::ui::readerStyle(&host, kobalt::ui::styles::reader());
         host.show();
         kobalt::ui::ModalOverlay loading(&host);
-        loading.card()->message("Applying appearance changes", "rrUpdatingText");
+        loading.card()->message("Applying appearance changes", "updatingText");
         loading.fitCard();
         for (qint64 elapsed : { qint64(0), qint64(999), qint64(1000) }) {
             loading.setDelayedProgress(true, elapsed, 37, "Applying appearance changes...");
             auto *bar = dynamic_cast<kobalt::ui::ProgressBar *>(
-                    loading.findChild<QWidget *>("rrApplyingProgress"));
+                    loading.findChild<QWidget *>("applyingProgress"));
             require(bar && bar->value() == 37, "Loading bar does not use reported progress");
             require(loading.isVisible() == (elapsed >= 1000),
                     "Appearance notice appears before one second or fails to appear afterwards");
             require(!bar->isHidden() == (elapsed >= 1000),
                     "Appearance bar does not follow the one-second threshold");
             require(loading.card()->findChildren<QLabel *>().size() == 1
-                            && loading.findChild<QLabel *>("rrUpdatingText")->text()
+                            && loading.findChild<QLabel *>("updatingText")->text()
                                     == "Applying appearance changes...",
                     "Relayout notice must contain only its reason label");
             if (elapsed >= 1000)
@@ -1365,10 +1365,10 @@ int main(int argc, char **argv)
         for (const auto &message : { "Enabling Bold Reading...", "Disabling Bold Reading...",
                                      "Updating page layout..." }) {
             loading.setDelayedProgress(true, 1100, 0, message);
-            require(loading.findChild<QLabel *>("rrUpdatingText")->text() == message
+            require(loading.findChild<QLabel *>("updatingText")->text() == message
                             && loading.card()->findChildren<QLabel *>().size() == 1
                             && dynamic_cast<kobalt::ui::ProgressBar *>(
-                                       loading.findChild<QWidget *>("rrApplyingProgress"))
+                                       loading.findChild<QWidget *>("applyingProgress"))
                                             ->value()
                                     == 0,
                     "Replacing a relayout reason adds a second label or retains old progress");
@@ -1376,13 +1376,13 @@ int main(int argc, char **argv)
         loading.setDelayedProgress(false, 2500, 100);
         require(!loading.isVisible()
                         && dynamic_cast<kobalt::ui::ProgressBar *>(
-                                   loading.findChild<QWidget *>("rrApplyingProgress"))
+                                   loading.findChild<QWidget *>("applyingProgress"))
                                    ->isHidden(),
                 "Completed loading notice remains visible");
         loading.setDelayedProgress(true, 0, 0);
         require(!loading.isVisible()
                         && dynamic_cast<kobalt::ui::ProgressBar *>(
-                                   loading.findChild<QWidget *>("rrApplyingProgress"))
+                                   loading.findChild<QWidget *>("applyingProgress"))
                                    ->isHidden(),
                 "A new render inherits the previous loading notice");
         kobalt::ui::ListRow row(&host);
@@ -1517,31 +1517,31 @@ int main(int argc, char **argv)
             window->resize(screen.width, screen.height);
             window->show();
             app.processEvents();
-            auto *progress = window->findChild<QProgressBar *>("rrOpeningProgress");
-            auto *label = window->findChild<QLabel *>("rrOpeningLabel");
-            auto *hint = window->findChild<QLabel *>("rrOpeningHint");
+            auto *progress = window->findChild<QProgressBar *>("openingProgress");
+            auto *label = window->findChild<QLabel *>("openingLabel");
+            auto *hint = window->findChild<QLabel *>("openingHint");
             require(progress && progress->isVisible() && label, "normal opening has progress");
-            require(!window->findChild<QWidget *>("rrOpeningFailure"),
+            require(!window->findChild<QWidget *>("openingFailure"),
                     "normal opening builds no failure card");
             view->showFallback(kobalt::OpeningFallback::Protected);
             app.processEvents();
             require(progress->isVisible() && progress->value() == 100
-                            && !window->findChild<QWidget *>("rrOpeningFailure"),
+                            && !window->findChild<QWidget *>("openingFailure"),
                     "handoff keeps a completed progress bar without confirmation");
             require(label->text() == kobalt::strings::get("opening.native"), "handoff caption");
             view->showFallback(kobalt::OpeningFallback::Remembered);
             app.processEvents();
             require(hint->text() == kobalt::strings::get("opening.remembered").toUpper()
-                            && !window->findChild<QWidget *>("rrOpeningFailure"),
+                            && !window->findChild<QWidget *>("openingFailure"),
                     "remembered failure uses neutral automatic handoff");
             view->showFallback(kobalt::OpeningFallback::Failure);
             app.processEvents();
-            auto *failure = window->findChild<QWidget *>("rrOpeningFailure");
-            auto *retry = window->findChild<QPushButton *>("rrOpeningNative");
-            auto *back = window->findChild<QPushButton *>("rrOpeningBack");
+            auto *failure = window->findChild<QWidget *>("openingFailure");
+            auto *retry = window->findChild<QPushButton *>("openingNative");
+            auto *back = window->findChild<QPushButton *>("openingBack");
             require(failure && retry && back, "failure builds its card");
-            auto *failureTitle = failure->findChild<QLabel *>("rrModalTitle");
-            auto *failureBody = failure->findChild<QLabel *>("rrModalDescription");
+            auto *failureTitle = failure->findChild<QLabel *>("modalTitle");
+            auto *failureBody = failure->findChild<QLabel *>("modalDescription");
             require(retry->isVisible() && back->isVisible() && failureBody->isVisible(),
                     "failure has two actions and explanation");
             require(failureTitle->text() == kobalt::strings::get("opening.failed"),
@@ -1557,7 +1557,7 @@ int main(int argc, char **argv)
                             && failureBody->geometry().bottom() < retry->geometry().top(),
                     "failure content does not overlap");
             require(failure->rect().contains(
-                            failure->findChild<QWidget *>("rrModalCard")->geometry()),
+                            failure->findChild<QWidget *>("modalCard")->geometry()),
                     "failure card fits");
             int accepted = 0, rejected = 0;
             QObject::connect(window, &QDialog::accepted, [&] {
@@ -1579,11 +1579,11 @@ int main(int argc, char **argv)
         host.setFont(interfaceFont());
         readerStyle(&host, styles::reader());
         BackButton back("Exit Kobalt", &host);
-        back.setObjectName("rrReturn");
+        back.setObjectName("readingMenuReturn");
         back.setContentsMargins(0, 0, metrics::panel::exitLabelExtraRight, 0);
         // A late font change must not retain the width measured at construction.
         for (int pixels : { 40, 52 }) {
-            readerStyle(&back, "QPushButton#rrReturn{" + styles::brand(pixels) + "}");
+            readerStyle(&back, "QPushButton#readingMenuReturn{" + styles::brand(pixels) + "}");
             back.ensurePolished();
             back.resize(back.sizeHint().width(), 112);
             host.resize(600, 200);
@@ -1603,11 +1603,11 @@ int main(int argc, char **argv)
         strings::showKeys(true);
         QWidget host;
         ChapterGraph graph(&host);
-        require(graph.findChild<QLabel *>("rrGraphChapterCaption")->text() == "stats.chapter",
+        require(graph.findChild<QLabel *>("graphChapterCaption")->text() == "stats.chapter",
                 "Chapter caption does not expose its catalog key");
         graph.setProgress("Title", 4, 10, 12, 25, 100);
         // Nickel's count: chapter page 4 of 10 is 40%.
-        require(graph.findChild<QLabel *>("rrGraphChapterPercent")->text() == "common.percent [40]",
+        require(graph.findChild<QLabel *>("graphChapterPercent")->text() == "common.percent [40]",
                 "Key mode lost the formatting argument");
         ui::PageNavigation navigation(&host, "keyTest");
         require(navigation.back->text() == "common.back", "Navigation bypasses the string catalog");
@@ -1963,9 +1963,9 @@ int main(int argc, char **argv)
         note.navigate = [&](const QString &target) { destination = target; };
         note.open(details, QRect(80, 100, 150, 40), readingArea);
         QApplication::processEvents();
-        auto *text = dynamic_cast<kobalt::ui::PagedText *>(note.findChild<QWidget *>("rrLinkText"));
-        auto *open = note.findChild<QPushButton *>("rrLinkOpen");
-        auto *next = note.findChild<QPushButton *>("rrLinkNext");
+        auto *text = dynamic_cast<kobalt::ui::PagedText *>(note.findChild<QWidget *>("linkText"));
+        auto *open = note.findChild<QPushButton *>("linkOpen");
+        auto *next = note.findChild<QPushButton *>("linkNext");
         require(readingArea.contains(note.geometry()), "Lower note overlaps the reading footer");
         require(note.y() > 500 && text->pages() == 1 && !next->isEnabled(),
                 "Short note geometry or paging is incorrect");
@@ -1998,7 +1998,7 @@ int main(int argc, char **argv)
                 "Long note did not paginate above its reference");
         next->click();
         require(text->page() == 1, "Note Next did not advance");
-        note.findChild<QPushButton *>("rrLinkPrevious")->click();
+        note.findChild<QPushButton *>("linkPrevious")->click();
         require(text->page() == 0, "Note Previous did not return");
         details.target.clear();
         details.chapter.clear();
@@ -2021,10 +2021,10 @@ int main(int argc, char **argv)
         const QString address = "https://example.org/";
         website.open(address);
         QApplication::processEvents();
-        auto *confirm = website.findChild<QPushButton *>("rrLinkOpen");
+        auto *confirm = website.findChild<QPushButton *>("linkOpen");
         require(confirm && !confirm->isEnabled(),
                 "Unavailable browser did not disable confirmation");
-        auto *decline = website.findChild<QPushButton *>("rrLinkNo");
+        auto *decline = website.findChild<QPushButton *>("linkNo");
         require(decline && decline->isVisible(), "External website has no No action");
         int browserCalls = 0, dismissals = 0;
         website.browserAvailable = [] { return true; };
@@ -2050,8 +2050,8 @@ int main(int argc, char **argv)
             QApplication::processEvents();
             auto *card = large.card();
             auto *cancel = large.secondaryButton();
-            auto *heading = card->findChild<QLabel *>("rrBrowserPrompt");
-            auto *url = card->findChild<QLabel *>("rrBrowserUrl");
+            auto *heading = card->findChild<QLabel *>("browserPrompt");
+            auto *url = card->findChild<QLabel *>("browserUrl");
             require(url->mapTo(card, QPoint()).y() - heading->mapTo(card, QPoint()).y()
                                     - heading->height()
                             == int(kobalt::ui::metrics::notice::headingGap),
@@ -2092,9 +2092,9 @@ int main(int argc, char **argv)
         choices.showChapters("Book <title>", chapters, "chapter34");
         QApplication::processEvents();
         auto *contents = &choices;
-        auto *previous = choices.findChild<QPushButton *>("rrContentsPrevious");
+        auto *previous = choices.findChild<QPushButton *>("contentsPrevious");
         require(choices.currentPage() == 2
-                        && choices.findChild<QPushButton *>("rrContentsNext")->isEnabled(),
+                        && choices.findChild<QPushButton *>("contentsNext")->isEnabled(),
                 "Contents did not open on the current chapter's page");
         auto *current = contents->findChild<QLabel *>("chapter34Title");
         require(current && !current->font().bold(), "Current chapter uses a bold label");
@@ -2169,13 +2169,13 @@ int main(int argc, char **argv)
         require(target == "1", "Contents paging selected a stale destination");
         bool closed = false;
         choices.back = [&] { closed = true; };
-        auto *close = choices.findChild<QPushButton *>("rrContentsClose");
+        auto *close = choices.findChild<QPushButton *>("contentsClose");
         close->click();
         require(closed, "Contents close did not return to the reader");
         require(close->y() == 0 && close->geometry().right() == close->parentWidget()->width() - 1
                         && close->width() == kobalt::ui::metrics::chrome::cellWidth,
                 "The Chapters bar lost its close cell on the right");
-        auto *next = choices.findChild<QPushButton *>("rrContentsNext");
+        auto *next = choices.findChild<QPushButton *>("contentsNext");
         previous->click();
         require(choices.currentPage() == 2, "Previous did not wrap to the final contents page");
         next->click();
@@ -2186,14 +2186,14 @@ int main(int argc, char **argv)
                 "Wrapping changed the selected chapter highlight");
         choices.resize(1448, 1072);
         QApplication::processEvents();
-        const auto count = choices.findChild<QLabel *>("rrContentsPage")->text().split(" of ");
+        const auto count = choices.findChild<QLabel *>("contentsPage")->text().split(" of ");
         require(count.size() == 2 && count[0].toInt() == choices.currentPage() + 1
                         && count[0].toInt() <= count[1].toInt(),
                 "Contents resize left the current page outside its range");
         choices.showChapters("Short book", chapters.mid(0, 3), "chapter0");
         require(!next->isVisibleTo(&choices), "A single page of contents shows a pager");
         choices.showChapters("Empty book", {}, {});
-        require(contents->findChild<QLabel *>("rrContentsEmpty")->isVisible(),
+        require(contents->findChild<QLabel *>("contentsEmpty")->isVisible(),
                 "Empty contents retained stale chapter rows");
         for (auto *button : contents->findChildren<QPushButton *>())
             require(!button->objectName().startsWith("chapter") || !button->isVisible(),
@@ -2278,7 +2278,7 @@ int main(int argc, char **argv)
         require(shown("current") && button("aToggle")->isChecked()
                         && button("headingToggle")->isChecked(),
                 "All chapters left a current-page group collapsed");
-        button("rrContentsNext")->click();
+        button("contentsNext")->click();
         require(shown("last") && button("bToggle")->isChecked(),
                 "All chapters left a later-page group collapsed");
         contents.showChapters("No collapsing", chapters, "current", kobalt::ChapterGroups::Off);
@@ -2300,17 +2300,17 @@ int main(int argc, char **argv)
         contents.showChapters("Paged groups", many, "many79");
         require(shown("many79"), "The current child did not open on its visible page");
         if (!shown("many78Toggle"))
-            button("rrContentsPrevious")->click();
+            button("contentsPrevious")->click();
         require(shown("many78Toggle"), "The preceding page lost the current chapter's parent");
         button("many78Toggle")->click();
         require(shown("many78") && !shown("many79"),
                 "Last-page collapse lost its parent or left its child visible");
         contents.resize(1448, 1072);
-        const auto caption = contents.findChild<QLabel *>("rrContentsPage")->text().split(" of ");
+        const auto caption = contents.findChild<QLabel *>("contentsPage")->text().split(" of ");
         require(caption.size() == 2 && caption[0].toInt() <= caption[1].toInt(),
                 "Filtered contents resize left an invalid page");
         contents.showChapters("One group", many.mid(0, 2), {});
-        require(!shown("rrContentsNext"), "Collapsed contents retained an unnecessary pager");
+        require(!shown("contentsNext"), "Collapsed contents retained an unnecessary pager");
         const int twoRows = kobalt::ui::metrics::chrome::actionHeight
                 + kobalt::ui::metrics::contents::stripHeight
                 + 2 * kobalt::ui::metrics::list::oneLine;
@@ -2319,12 +2319,12 @@ int main(int argc, char **argv)
         group[2].depth = group[3].depth = 1;
         contents.showChapters("Pager threshold", group, {});
         button("many0Toggle")->click();
-        require(shown("rrContentsNext"), "Expanding did not reserve space for the pager");
-        button("rrContentsNext")->click();
+        require(shown("contentsNext"), "Expanding did not reserve space for the pager");
+        button("contentsNext")->click();
         require(contents.currentPage() == 1, "Expanded contents did not page");
-        button("rrContentsPrevious")->click();
+        button("contentsPrevious")->click();
         button("many0Toggle")->click();
-        require(!shown("rrContentsNext") && contents.currentPage() == 0,
+        require(!shown("contentsNext") && contents.currentPage() == 0,
                 "Collapsing did not reclaim the pager space");
         contents.showChapters("Empty", {}, {});
         for (auto *control : contents.findChildren<QPushButton *>())
@@ -2354,9 +2354,9 @@ int main(int argc, char **argv)
         host.show();
         graph.open();
         QApplication::processEvents();
-        auto *message = graph.findChild<QLabel *>("rrGraphMessage");
-        auto *bars = graph.findChild<QWidget *>("rrChapterBars");
-        auto *bookCell = graph.findChild<QWidget *>("rrGraphBookCell");
+        auto *message = graph.findChild<QLabel *>("graphMessage");
+        auto *bars = graph.findChild<QWidget *>("chapterBars");
+        auto *bookCell = graph.findChild<QWidget *>("graphBookCell");
         auto text = [&](const char *name) { return graph.findChild<QLabel *>(name)->text(); };
         graph.setData({}, {}, false, {});
         require(message->isVisible() && message->text() == get("stats.counting")
@@ -2388,7 +2388,7 @@ int main(int argc, char **argv)
                         && qGray(image.pixel(groupLeft, chartHeight - 4)) == 0
                         && qGray(image.pixel(image.width() - groupLeft, chartHeight - 4)) == 255,
                 "Short-book bars exceed their width cap or are not centered");
-        require(!graph.findChild<QPushButton *>("rrGraphNext")->isVisible(),
+        require(!graph.findChild<QPushButton *>("graphNext")->isVisible(),
                 "A short graph exposed paging controls");
         // Long chapters retain their ratios even when all exceed three times
         // the median. The maximum on another graph page still sets the scale.
@@ -2427,7 +2427,7 @@ int main(int argc, char **argv)
         require(barHeight(firstPage, sparseLeft + 19 * (sparseWidth + chapterMetrics::sparseGap))
                         == int(0.95 * chartHeight),
                 "Paging normalized a chapter against only the visible chapters");
-        graph.findChild<QPushButton *>("rrGraphNext")->click();
+        graph.findChild<QPushButton *>("graphNext")->click();
         QApplication::processEvents();
         const auto secondPage = bars->grab().toImage();
         require(barHeight(secondPage, sparseLeft) == chartHeight,
@@ -2440,13 +2440,13 @@ int main(int argc, char **argv)
         require(barHeight(extreme, barLeft(0)) == int(chapterMetrics::minimumBarHeight)
                         && barHeight(extreme, barLeft(20)) == chartHeight,
                 "Short chapters lost their visible minimum or changed the longest chapter");
-        require(!graph.findChild<QLabel *>("rrGraphLengthCaption"),
+        require(!graph.findChild<QLabel *>("graphLengthCaption"),
                 "A length label occupies the chart padding");
         for (int i = 21; i < 80; ++i)
             even.append({ QString::number(i), QString::number(i), i, 0, 1000 });
         graph.setData(even, {}, true, {});
         require(graph.graphPages() == 1
-                        && !graph.findChild<QPushButton *>("rrGraphNext")->isVisible(),
+                        && !graph.findChild<QPushButton *>("graphNext")->isVisible(),
                 "Eighty chapters did not fit on one dense chart");
         for (int i = 2; i < 180; ++i)
             chapters.append({ QString::number(i), QString::number(i), i, 0, i });
@@ -2454,9 +2454,9 @@ int main(int argc, char **argv)
         graph.open();
         require(graph.graphPage() == 1 && graph.graphPages() == 2,
                 "A long dense graph did not page with narrow bars or open at the current chapter");
-        auto *next = graph.findChild<QPushButton *>("rrGraphNext");
+        auto *next = graph.findChild<QPushButton *>("graphNext");
         require(next->isVisible(), "A paged graph hides its pager");
-        graph.findChild<QPushButton *>("rrGraphPrevious")->click();
+        graph.findChild<QPushButton *>("graphPrevious")->click();
         while (next->isEnabled())
             next->click();
         require(graph.graphPage() == graph.graphPages() - 1,
@@ -2549,10 +2549,10 @@ int main(int argc, char **argv)
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         graph.setDense(false);
         graph.open();
-        graph.findChild<QPushButton *>("rrGraphPrevious")->click();
+        graph.findChild<QPushButton *>("graphPrevious")->click();
         int toggles = 0;
         graph.denseChanged = [&](bool) { ++toggles; };
-        auto *mode = graph.findChild<QPushButton *>("rrGraphMode");
+        auto *mode = graph.findChild<QPushButton *>("graphMode");
         require(mode && !mode->isCheckable() && !mode->isChecked()
                         && mode->accessibleName() == get("chapter_graph.show_more_chapters"),
                 "The graph mode control has the wrong state or action name");
@@ -2569,7 +2569,7 @@ int main(int argc, char **argv)
                 "A chapter with a very long name that needs more than one line of the Stats panel to display completely";
         graph.setProgress(longTitle, 4, 10, 12, 25, 100);
         QApplication::processEvents();
-        auto *title = graph.findChild<QLabel *>("rrGraphChapterTitle");
+        auto *title = graph.findChild<QLabel *>("graphChapterTitle");
         require(title->text().endsWith(QChar(0x2026)) && title->text().size() < longTitle.size()
                         && title->height() < 2 * title->fontMetrics().lineSpacing(),
                 "A long chapter title did not elide on one line");
@@ -2592,38 +2592,37 @@ int main(int argc, char **argv)
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         require(title->text() == "The Second Voyage", "The chapter title is missing");
         // Nickel's count: chapter page 4 of 10 is 40%, book page 26 of 100 is 26%.
-        require(text("rrGraphChapterPercent") == kobalt::strings::percentage(40)
-                        && text("rrGraphChapterFigure") == "7"
-                        && text("rrGraphChapterUnit") == get("stats.pages_left"),
+        require(text("graphChapterPercent") == kobalt::strings::percentage(40)
+                        && text("graphChapterFigure") == "7"
+                        && text("graphChapterUnit") == get("stats.pages_left"),
                 "Chapter progress differs from the shared display rule");
-        require(text("rrGraphChapterPosition") == get("stats.page_of").arg(4).arg(10),
+        require(text("graphChapterPosition") == get("stats.page_of").arg(4).arg(10),
                 "Chapter page position is missing");
-        require(text("rrGraphNextChapter")
+        require(text("graphNextChapter")
                         == get("chapter_graph.next_chapter").arg(12).arg(get("common.pages")),
                 "Next chapter length is missing");
-        require(text("rrGraphBookPercent") == kobalt::strings::percentage(26),
+        require(text("graphBookPercent") == kobalt::strings::percentage(26),
                 "Book progress disagrees with the current page");
-        require(text("rrGraphBookFigure") == "75", "Book pages remaining omit the displayed page");
+        require(text("graphBookFigure") == "75", "Book pages remaining omit the displayed page");
         graph.setChapterNumber(13, 24);
         graph.setReading(23, 35706, -1, -1, 17);
-        require(text("rrGraphSessionDetail") == get("stats.page_turns").arg(17),
+        require(text("graphSessionDetail") == get("stats.page_turns").arg(17),
                 "Session page turns are missing");
         graph.setReading(23, 35706, -1, -1, 1);
-        require(text("rrGraphSessionDetail") == get("stats.page_turn").arg(1),
+        require(text("graphSessionDetail") == get("stats.page_turn").arg(1),
                 "A changed turn count did not update without a minute change");
         graph.setReading(23, 35706);
-        require(text("rrGraphSessionDetail") == get("stats.page_turns").arg(0),
+        require(text("graphSessionDetail") == get("stats.page_turns").arg(0),
                 "A new session did not clear its displayed page turns");
-        require(text("rrGraphChapterNumber") == get("stats.contents_position").arg(13).arg(24)
-                        && text("rrGraphSessionFigure") == "23"
-                        && text("rrGraphBookDetail").isEmpty(),
+        require(text("graphChapterNumber") == get("stats.contents_position").arg(13).arg(24)
+                        && text("graphSessionFigure") == "23" && text("graphBookDetail").isEmpty(),
                 "Chapter number or session is missing, or the book cell kept the word count");
         // The word totals label the chart, between the bars and the cells.
         // Counts use the interface's English grouping.
         const auto chapterWords =
                 get("stats.words").arg(kobalt::strings::count(chapters[20].words));
-        require(text("rrGraphChapterWords") == get("stats.chapter_words").arg(13).arg(chapterWords)
-                        && text("rrGraphBookWords")
+        require(text("graphChapterWords") == get("stats.chapter_words").arg(13).arg(chapterWords)
+                        && text("graphBookWords")
                                 == get("stats.main_words")
                                            .arg(get("stats.words").arg(QStringLiteral("35,706"))),
                 "The word totals below the chart are missing");
@@ -2631,26 +2630,26 @@ int main(int argc, char **argv)
         singleWord[20].words = 1;
         graph.setData(singleWord, { 20, -1, 1, 1 }, true, {});
         graph.setReading(23, 1);
-        require(text("rrGraphChapterWords") == get("stats.chapter_words").arg(13).arg("1 word")
-                        && text("rrGraphBookWords") == get("stats.main_words").arg("1 word"),
+        require(text("graphChapterWords") == get("stats.chapter_words").arg(13).arg("1 word")
+                        && text("graphBookWords") == get("stats.main_words").arg("1 word"),
                 "Stats must use the singular for a one-word chapter or book");
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         graph.setReading(23, 35706);
         graph.setChapterNumber(0, 24);
-        require(text("rrGraphChapterWords") == get("stats.this_chapter_words").arg(chapterWords),
+        require(text("graphChapterWords") == get("stats.this_chapter_words").arg(chapterWords),
                 "A position before the contents named a chapter number");
         graph.setChapterNumber(13, 24);
         graph.setData(chapters, { 20, -1, 1, 1 }, false, {});
-        require(text("rrGraphChapterWords").isEmpty(),
+        require(text("graphChapterWords").isEmpty(),
                 "The chapter's word total did not wait for the counts");
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         for (int width : { 758, 1072, 1448 }) {
             graph.resize(width, chapterMetrics::graphHeight);
             QApplication::processEvents();
-            const auto *bars = graph.findChild<QWidget *>("rrChapterBars");
-            const auto *left = graph.findChild<QLabel *>("rrGraphChapterWords");
-            const auto *right = graph.findChild<QLabel *>("rrGraphBookWords");
-            const auto *cell = graph.findChild<QWidget *>("rrGraphChapterCell");
+            const auto *bars = graph.findChild<QWidget *>("chapterBars");
+            const auto *left = graph.findChild<QLabel *>("graphChapterWords");
+            const auto *right = graph.findChild<QLabel *>("graphBookWords");
+            const auto *cell = graph.findChild<QWidget *>("graphChapterCell");
             require(left->y() >= bars->geometry().bottom() && left->y() == right->y()
                             && left->geometry().bottom() < cell->y()
                             && left->geometry().right() < right->x()
@@ -2662,8 +2661,7 @@ int main(int argc, char **argv)
             graph.resize(width, chapterMetrics::graphHeight);
             graph.setProgress("Large book", 1, 3500, 3500, 1, 10000);
             QApplication::processEvents();
-            for (const auto *name :
-                 { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell" }) {
+            for (const auto *name : { "graphChapterCell", "graphBookCell", "graphSessionCell" }) {
                 const auto *cell = graph.findChild<QWidget *>(name);
                 const auto *figure = cell->findChildren<QLabel *>().at(2),
                            *unit = cell->findChildren<QLabel *>().at(3),
@@ -2690,8 +2688,7 @@ int main(int argc, char **argv)
         for (int width : { 758, 1072, 1264 }) {
             graph.resize(width, chapterMetrics::graphHeight);
             QApplication::processEvents();
-            for (const auto *name :
-                 { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell" }) {
+            for (const auto *name : { "graphChapterCell", "graphBookCell", "graphSessionCell" }) {
                 const auto *detail =
                         graph.findChild<QWidget *>(name)->findChildren<QLabel *>().at(4);
                 const auto lines = detail->text().split('\n');
@@ -2704,17 +2701,17 @@ int main(int argc, char **argv)
                             "A Stats detail line is wider than its cell");
             }
         }
-        require(text("rrGraphBookDetail")
+        require(text("graphBookDetail")
                         == get("stats.time_left").arg(get("stats.duration_hours").arg(12).arg(45)),
                 "Book time left is missing");
         // On the Nia the hours use a clock format instead of wrapping.
         graph.setReading(23, 35706, 45 * 60000, (12 * 60 + 5) * 60000);
         graph.resize(758, chapterMetrics::graphHeight);
         QApplication::processEvents();
-        require(text("rrGraphBookDetail")
+        require(text("graphBookDetail")
                                 == get("stats.time_left")
                                            .arg(get("stats.duration_clock").arg(12).arg("05"))
-                        && text("rrGraphNextChapter")
+                        && text("graphNextChapter")
                                 == get("stats.time_left")
                                            .arg(get("stats.duration_minutes").arg(45)),
                 "A narrow cell did not use the clock format for hours only");
@@ -2734,8 +2731,7 @@ int main(int argc, char **argv)
             require(scaled.height() >= int(chapterMetrics::graphHeight)
                             && int(chapterMetrics::cellHeight) == kobalt::ui::px(253),
                     "Stats did not scale its height");
-            for (const auto *name :
-                 { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell" }) {
+            for (const auto *name : { "graphChapterCell", "graphBookCell", "graphSessionCell" }) {
                 const auto *cell = scaled.findChild<QWidget *>(name);
                 const auto labels = cell->findChildren<QLabel *>();
                 require(cell->height() == int(chapterMetrics::cellHeight)
@@ -2751,7 +2747,7 @@ int main(int argc, char **argv)
         }
         kobalt::ui::setDensity(300);
         graph.setProgress("Last chapter", 1, 1, 0, 0, 1);
-        require(text("rrGraphNextChapter") == get("stats.last_chapter"),
+        require(text("graphNextChapter") == get("stats.last_chapter"),
                 "Last chapter still names a next chapter");
         // Without shared counts, Stats charts chapters by their length in pages.
         const auto lengths = kobalt::chapterPageLengths({ { "One", "a", 0 },
@@ -2800,12 +2796,12 @@ int main(int argc, char **argv)
                     graph.setData(balanced, {}, true, {});
                     graph.setChapterNumber(4, 385);
                     graph.setProgress("Chapter I", 1, 24, 24, 1, 240);
-                    auto *bars = graph.findChild<QWidget *>("rrChapterBars");
+                    auto *bars = graph.findChild<QWidget *>("chapterBars");
                     host.show();
                     graph.open();
-                    const auto *contents = graph.findChild<QLabel *>("rrGraphChapterNumber");
-                    const auto *page = graph.findChild<QLabel *>("rrGraphChapterPosition");
-                    const auto *separator = graph.findChild<QLabel *>("rrGraphPositionSeparator");
+                    const auto *contents = graph.findChild<QLabel *>("graphChapterNumber");
+                    const auto *page = graph.findChild<QLabel *>("graphChapterPosition");
+                    const auto *separator = graph.findChild<QLabel *>("graphPositionSeparator");
                     require(contents->isVisible() != phone && separator->isVisible() != phone
                                     && page->isVisible(),
                             "Phone Stats keeps a contents count or loses its chapter page");
@@ -2828,7 +2824,7 @@ int main(int argc, char **argv)
                     require(bars->y() == int(cm::rowHeight) + int(cm::barsTop),
                             "The graph lost its top padding");
                     for (const auto *name :
-                         { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell" })
+                         { "graphChapterCell", "graphBookCell", "graphSessionCell" })
                         require(graph.findChild<QWidget *>(name)->height() == int(cm::cellHeight),
                                 "Chart growth shrank a Stats cell");
                 }
@@ -2851,8 +2847,8 @@ int main(int argc, char **argv)
         const auto bytesBeforeBrowsing = privateInterfaceFontBytes();
         picker.setDropdownGeometry(QRect(0, 200, 1072, picker.fontPanelHeight()));
         picker.showChoices("Font", choices, {}, ChoiceScreen::Mode::Fonts);
-        auto *next = picker.findChild<QPushButton *>("rrFontPagerNext");
-        auto *previous = picker.findChild<QPushButton *>("rrFontPagerPrevious");
+        auto *next = picker.findChild<QPushButton *>("fontPagerNext");
+        auto *previous = picker.findChild<QPushButton *>("fontPagerPrevious");
         require(next && previous, "Font picker lacks paging controls");
         int selectionChanges = 0;
         picker.changed = [&] { ++selectionChanges; };
@@ -2911,7 +2907,7 @@ int main(int argc, char **argv)
                 "Default slots must each occupy a third of a row");
         bool finished = false;
         picker.back = [&] { finished = true; };
-        auto *done = picker.findChild<QPushButton *>("rrFontClose");
+        auto *done = picker.findChild<QPushButton *>("fontClose");
         require(done && done->isVisible(), "Missing close button");
         require(done->text().isEmpty() && done->width() <= metrics::choices::pickerHeader,
                 "Close cell is not a compact icon button");
@@ -2936,7 +2932,7 @@ int main(int argc, char **argv)
         };
         picker.setFontGeometry(QRect(0, 0, 1072, picker.fontPanelHeight()));
         picker.showChoices("Font", sections, "NV Ancizar Serif", ChoiceScreen::Mode::Fonts);
-        auto *section = picker.findChild<QLabel *>("rrFontSection");
+        auto *section = picker.findChild<QLabel *>("fontSection");
         require(section && section->text() == "RECOMMENDED FONTS",
                 "Font section heading is missing");
         require(picker.findChild<QPushButton *>("ancizar")->isChecked(),
@@ -3046,8 +3042,8 @@ int main(int argc, char **argv)
         current->setAccessory(ListRow::None{});
         require(current->grab().toImage() != selectedImage,
                 "Size selector has no checkmark on its current choice");
-        require(!picker.findChild<QPushButton *>("rrChoicesNext")->isVisible()
-                        && !picker.findChild<QPushButton *>("rrChoicesPrevious")->isVisible(),
+        require(!picker.findChild<QPushButton *>("choicesNext")->isVisible()
+                        && !picker.findChild<QPushButton *>("choicesPrevious")->isVisible(),
                 "Size selector exposed paging controls");
     }
     // Compare visible mixed-case ink across the bundled families, independent
@@ -3196,7 +3192,7 @@ int main(int argc, char **argv)
         kobalt::ChapterGraph graph(&host);
         graph.resize(900, kobalt::ui::metrics::chapters::graphHeight);
         graph.setProgress("A chapter with a title that needs layout", 4, 10, 12, 25, 100);
-        auto *graphTitle = graph.findChild<QLabel *>("rrGraphChapterTitle");
+        auto *graphTitle = graph.findChild<QLabel *>("graphChapterTitle");
         for (int round = 0; round < 2; ++round) {
             require(setInterfaceWeight(heavierTextSteps), "Heavier text did not replace the faces");
             require(!setInterfaceWeight(heavierTextSteps),
@@ -3205,8 +3201,8 @@ int main(int argc, char **argv)
             app.processEvents();
             graphTitle->setGeometry(0, 0, 1, 1);
             graph.setProgress("A chapter with a title that needs layout", 4, 10, 12, 25, 100);
-            const auto *position = graph.findChild<QLabel *>("rrGraphChapterPosition");
-            const auto *mode = graph.findChild<QPushButton *>("rrGraphMode");
+            const auto *position = graph.findChild<QLabel *>("graphChapterPosition");
+            const auto *mode = graph.findChild<QPushButton *>("graphMode");
             require(graphTitle->width() > 1
                             && !graphTitle->geometry().intersects(position->geometry())
                             && !graphTitle->geometry().intersects(mode->geometry())
@@ -4315,7 +4311,7 @@ int main(int argc, char **argv)
         page.setState({ "en-en", "ar-ar" }, false, {});
         page.setStorage({ { "en-en", 92000000 }, { "ar-ar", 3500000 } }, 1000000000);
         app.processEvents();
-        auto *first = page.findChild<QWidget *>("rrDictionaryRow0");
+        auto *first = page.findChild<QWidget *>("dictionaryRow0");
         require(first && first->property("dictionary_id").toString() == "en-en",
                 "Book-language monolingual dictionary is not first");
         QSet<QString> seen;
@@ -4327,11 +4323,11 @@ int main(int argc, char **argv)
             for (auto *child : page.findChildren<QWidget *>()) {
                 if (!child->isVisible())
                     continue;
-                if (child->objectName().startsWith("rrDictionaryRow")
-                    || child->objectName().startsWith("rrDictionarySection")
-                    || child->objectName().startsWith("rrDictionaryLanguage"))
+                if (child->objectName().startsWith("dictionaryRow")
+                    || child->objectName().startsWith("dictionarySection")
+                    || child->objectName().startsWith("dictionaryLanguage"))
                     blocks.append(child);
-                if (child->objectName().startsWith("rrDictionaryAction")) {
+                if (child->objectName().startsWith("dictionaryAction")) {
                     if (actionWidth < 0)
                         actionWidth = child->width();
                     require(child->width() == actionWidth,
@@ -4341,31 +4337,31 @@ int main(int argc, char **argv)
             std::sort(blocks.begin(), blocks.end(),
                       [](QWidget *left, QWidget *right) { return left->y() < right->y(); });
             require(!blocks.isEmpty()
-                            && blocks.first()->objectName().startsWith("rrDictionarySection"),
+                            && blocks.first()->objectName().startsWith("dictionarySection"),
                     "Continued dictionary page lacks a section caption");
-            require(blocks.last()->objectName().startsWith("rrDictionaryRow"),
+            require(blocks.last()->objectName().startsWith("dictionaryRow"),
                     "Dictionary page ends with an orphan caption");
             for (auto *block : blocks)
-                if (block->objectName().startsWith("rrDictionaryRow")) {
+                if (block->objectName().startsWith("dictionaryRow")) {
                     const auto id = block->property("dictionary_id").toString();
                     require(!seen.contains(id),
                             "Dictionary repeated between installed and available sections");
                     seen.insert(id);
                 }
-            auto *next = page.findChild<QPushButton *>("rrDictionariesNext");
+            auto *next = page.findChild<QPushButton *>("dictionariesNext");
             const auto fraction =
-                    page.findChild<QLabel *>("rrDictionariesPage")->text().split(" of ");
+                    page.findChild<QLabel *>("dictionariesPage")->text().split(" of ");
             if (fraction.first() == fraction.last())
                 break;
             next->click();
         } while (pageCount < 20);
         require(seen.size() == entries.size() && pageCount > 1, "Dictionary paging lost entries");
-        auto *catalogCounter = page.findChild<QLabel *>("rrDictionariesPage");
+        auto *catalogCounter = page.findChild<QLabel *>("dictionariesPage");
         const auto finalCatalogPage = catalogCounter->text();
-        page.findChild<QPushButton *>("rrDictionariesNext")->click();
+        page.findChild<QPushButton *>("dictionariesNext")->click();
         require(catalogCounter->text().startsWith("1 of "),
                 "Dictionary list did not wrap forwards");
-        page.findChild<QPushButton *>("rrDictionariesPrevious")->click();
+        page.findChild<QPushButton *>("dictionariesPrevious")->click();
         require(catalogCounter->text() == finalCatalogPage,
                 "Dictionary list did not wrap backwards");
         page.setLanguage("zz");
@@ -4377,9 +4373,9 @@ int main(int argc, char **argv)
                                 && !label->text().contains("for this book"),
                         "Unknown language retains book-specific captions");
         auto resetPage = [&] {
-            auto *previous = page.findChild<QPushButton *>("rrDictionariesPrevious");
+            auto *previous = page.findChild<QPushButton *>("dictionariesPrevious");
             for (int turn = 0; turn < 20
-                 && !page.findChild<QLabel *>("rrDictionariesPage")->text().startsWith("1 of ");
+                 && !page.findChild<QLabel *>("dictionariesPage")->text().startsWith("1 of ");
                  ++turn)
                 previous->click();
             app.processEvents();
@@ -4403,11 +4399,11 @@ int main(int argc, char **argv)
         QStringList ordered;
         do {
             for (int i = 0;
-                 auto *row = page.findChild<QWidget *>(QString("rrDictionaryRow%1").arg(i)); ++i)
+                 auto *row = page.findChild<QWidget *>(QString("dictionaryRow%1").arg(i)); ++i)
                 ordered.append(row->property("dictionary_id").toString());
-            auto *next = page.findChild<QPushButton *>("rrDictionariesNext");
+            auto *next = page.findChild<QPushButton *>("dictionariesNext");
             const auto fraction =
-                    page.findChild<QLabel *>("rrDictionariesPage")->text().split(" of ");
+                    page.findChild<QLabel *>("dictionariesPage")->text().split(" of ");
             if (fraction.first() == fraction.last())
                 break;
             next->click();
@@ -4416,10 +4412,10 @@ int main(int argc, char **argv)
                 "Available dictionaries are not monolingual-first then target-language ordered");
         page.setLanguage("zz");
         resetPage();
-        page.findChild<QPushButton *>("rrDictionariesNext")->click();
+        page.findChild<QPushButton *>("dictionariesNext")->click();
         app.processEvents();
         auto *continuedLanguage = dynamic_cast<kobalt::ui::ListHeader *>(
-                page.findChild<QWidget *>("rrDictionaryLanguage0"));
+                page.findChild<QWidget *>("dictionaryLanguage0"));
         require(continuedLanguage && continuedLanguage->leftLabel()->text() == "English",
                 "Language subcaption is not repeated on a continued page");
         page.setLanguage("en");
@@ -4438,10 +4434,10 @@ int main(int argc, char **argv)
             page.setTransfer({}, 0, 0, false);
             page.setState({}, false, kobalt::DictionaryDownloadResult::Cancelled);
         };
-        QPointer<QPushButton> downloadAction = page.findChild<QPushButton *>("rrDictionaryAction0");
+        QPointer<QPushButton> downloadAction = page.findChild<QPushButton *>("dictionaryAction0");
         downloadAction->click();
         auto *confirmation = dynamic_cast<kobalt::ui::ChoiceModal *>(
-                owner.findChild<QWidget *>("rrDictionaryDownload"));
+                owner.findChild<QWidget *>("dictionaryDownload"));
         app.processEvents();
         require(confirmation && confirmation->isVisible() && starts == 0,
                 "Get must ask for confirmation before starting a download");
@@ -4458,7 +4454,7 @@ int main(int argc, char **argv)
                 "Cancel must dismiss confirmation without downloading");
         app.processEvents();
         downloadAction->click();
-        owner.findChild<QPushButton *>("rrDictionaryDownloadConfirm")->click();
+        owner.findChild<QPushButton *>("dictionaryDownloadConfirm")->click();
         require(starts == 1 && downloadAction
                         && downloadAction->text() == kobalt::strings::get("dictionaries.stop"),
                 "Download action did not become Stop in place");
@@ -4475,13 +4471,13 @@ int main(int argc, char **argv)
         require(!failureShown(), "A Stop request marked the download as failed");
         downloadAction->click();
         app.processEvents();
-        owner.findChild<QPushButton *>("rrDictionaryDownloadConfirm")->click();
+        owner.findChild<QPushButton *>("dictionaryDownloadConfirm")->click();
         require(starts == 2, "Reused dictionary action retained an outdated click handler");
         page.setState({}, true, {});
         page.setTransfer("en-en", 2000000, 3500000, false);
         app.processEvents();
-        auto *activeRow = page.findChild<QWidget *>("rrDictionaryRow0");
-        auto *otherRow = page.findChild<QWidget *>("rrDictionaryRow1");
+        auto *activeRow = page.findChild<QWidget *>("dictionaryRow0");
+        auto *otherRow = page.findChild<QWidget *>("dictionaryRow1");
         require(otherRow, "Progress test needs a second dictionary row");
         PaintCountingObserver unrelatedPaints;
         otherRow->installEventFilter(&unrelatedPaints);
@@ -4492,17 +4488,17 @@ int main(int argc, char **argv)
             page.setTransfer("en-en", received, 3500000, false);
             page.setState({}, true, {});
             app.processEvents();
-            require(page.findChild<QWidget *>("rrDictionaryRow0") == activeRow
-                            && page.findChild<QWidget *>("rrDictionaryRow1") == otherRow,
+            require(page.findChild<QWidget *>("dictionaryRow0") == activeRow
+                            && page.findChild<QWidget *>("dictionaryRow1") == otherRow,
                     "Download progress rebuilt dictionary rows");
         }
         require(unrelatedPaints.paints == 0,
                 "Download progress repainted an unchanged dictionary row");
-        auto *stopAction = page.findChild<QPushButton *>("rrDictionaryAction0");
+        auto *stopAction = page.findChild<QPushButton *>("dictionaryAction0");
         require(stopAction && !stopAction->icon().isNull()
                         && stopAction->iconSize().width() == kobalt::ui::px(28),
                 "Transfer progress must use the Stop button's icon slot");
-        require(page.findChild<QWidget *>("rrDictionaryRow0")->height()
+        require(page.findChild<QWidget *>("dictionaryRow0")->height()
                         == kobalt::ui::metrics::list::oneLine,
                 "Downloading changed the dictionary row height");
         page.setTransfer({}, 0, 0, false);
@@ -4510,25 +4506,25 @@ int main(int argc, char **argv)
         app.processEvents();
         require(failureShown(), "Failed transfer lacks its row error");
         page.installRequested = [](const QString &) { };
-        page.findChild<QPushButton *>("rrDictionaryAction0")->click();
+        page.findChild<QPushButton *>("dictionaryAction0")->click();
         app.processEvents();
         require(!failureShown(), "Next page action retained transfer failure");
-        owner.findChild<QPushButton *>("rrDictionaryDownloadCancel")->click();
+        owner.findChild<QPushButton *>("dictionaryDownloadCancel")->click();
         app.processEvents();
         page.setState({ "en-en" }, false, {});
         resetPage();
         auto *installedHeader = dynamic_cast<kobalt::ui::ListHeader *>(
-                page.findChild<QWidget *>("rrDictionarySection0"));
+                page.findChild<QWidget *>("dictionarySection0"));
         require(installedHeader
                         && installedHeader->leftLabel()->text().startsWith(
                                 "Installed for this book"),
                 "Completed install did not move into the installed section");
-        page.findChild<QPushButton *>("rrDictionariesPrevious")->click();
+        page.findChild<QPushButton *>("dictionariesPrevious")->click();
         page.setCatalog({ english[1] });
         page.setState({ "en-en" }, false, {});
         app.processEvents();
-        require(!page.findChild<QPushButton *>("rrDictionariesPrevious")->isEnabled()
-                        && !page.findChild<QPushButton *>("rrDictionariesNext")->isEnabled(),
+        require(!page.findChild<QPushButton *>("dictionariesPrevious")->isEnabled()
+                        && !page.findChild<QPushButton *>("dictionariesNext")->isEnabled(),
                 "Dictionary page did not clamp after the list shrank");
     }
     {
@@ -4676,16 +4672,16 @@ int main(int argc, char **argv)
              { kobalt::ui::interfaceFont().family(), kobalt::ui::brandFont(30).family() }) {
             settings.showDictionaryFontSizes(100, family, true, [](int) { });
             app.processEvents();
-            const int small = sampleHeight("rrDictionaryFontSize80");
-            require(small > 0 && sampleHeight("rrDictionaryFontSize140") > small,
+            const int small = sampleHeight("settingsDictionaryFontSize80");
+            require(small > 0 && sampleHeight("settingsDictionaryFontSize140") > small,
                     "Dictionary size previews do not draw the selected text sizes");
-            auto *option = settings.sheet->findChild<QWidget *>("rrDictionaryFontSize140");
-            auto *preview = option->findChild<QWidget *>("rrDictionaryFontPreview140");
+            auto *option = settings.sheet->findChild<QWidget *>("settingsDictionaryFontSize140");
+            auto *preview = option->findChild<QWidget *>("settingsDictionaryFontPreview140");
             require(preview && option->rect().contains(preview->geometry()),
                     "Extra large dictionary preview escapes its row");
             for (int percent : { 80, 100, 120, 140 }) {
                 auto *choice = settings.sheet->findChild<QAbstractButton *>(
-                        QString("rrDictionaryFontSize%1").arg(percent));
+                        QString("settingsDictionaryFontSize%1").arg(percent));
                 require(choice
                                 && choice->text()
                                         == kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(
@@ -4695,7 +4691,7 @@ int main(int argc, char **argv)
                                 == kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent),
                         "Dictionary size choice lost its accessible name");
                 auto *sample = settings.sheet->findChild<QWidget *>(
-                        QString("rrDictionaryFontPreview%1").arg(percent));
+                        QString("settingsDictionaryFontPreview%1").arg(percent));
                 auto *label = sample->findChild<QLabel *>();
                 require(label, "Dictionary preview has no sample label");
                 const int textWidth =
@@ -4734,7 +4730,7 @@ int main(int argc, char **argv)
                 int index = 0;
                 for (int percent : { 80, 100, 120, 140 }) {
                     auto *choice = settings.sheet->findChild<QAbstractButton *>(
-                            QString("rrDictionaryFontSize%1").arg(percent));
+                            QString("settingsDictionaryFontSize%1").arg(percent));
                     const auto name =
                             kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent);
                     const auto shown = scale == 1.5 ? QString() : phone ? shortNames[index] : name;
@@ -4757,9 +4753,9 @@ int main(int argc, char **argv)
         });
         app.processEvents();
         auto *indent = static_cast<kobalt::ui::SettingSlider *>(
-                settings.sheet->findChild<QSlider *>("rrParagraphIndentSlider"));
+                settings.sheet->findChild<QSlider *>("settingsParagraphIndentSlider"));
         auto *gap = static_cast<kobalt::ui::SettingSlider *>(
-                settings.sheet->findChild<QSlider *>("rrParagraphSpacingSlider"));
+                settings.sheet->findChild<QSlider *>("settingsParagraphSpacingSlider"));
         require(indent && gap, "Paragraph adjustment sliders are missing");
         const int inset = kobalt::ui::metrics::control::sliderInset;
         const auto xAt = [inset](kobalt::ui::SettingSlider *control, double position) {
@@ -4869,14 +4865,14 @@ int main(int argc, char **argv)
         require(indent->value() == 60 && paragraphCommits == beforeTouchCancel,
                 "Multi-touch indent drag lost its fine value or committed");
         indent->setValue(60);
-        settings.sheet->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphIndentMore")->click();
         require(chosenIndent == 61, "Indent plus did not keep one-percent adjustment");
-        settings.sheet->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphIndentLess")->click();
         require(chosenIndent == 60, "Indent minus snapped instead of adjusting one percent");
         indent->setValue(0);
-        settings.sheet->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphIndentLess")->click();
         require(chosenIndent == -1, "Indent minus did not reach Publisher");
-        settings.sheet->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphIndentMore")->click();
         require(chosenIndent == 0, "Indent plus did not leave Publisher at zero");
         const QVector<int> gapStops{ -1, 0, 25, 50, 75, 100, 125, 150, 175, 200 };
         const QVector<double> gapPositions{ 0, .2, .3, .4, .5, .6, .7, .8, .9, 1 };
@@ -4926,14 +4922,14 @@ int main(int argc, char **argv)
         touch(gap, QEvent::TouchEnd, gapQuarter);
         require(gap->value() == 60 && paragraphCommits == beforeGapCancel,
                 "Cancelled paragraph gap drag lost its fine value or committed");
-        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphSpacingMore")->click();
         require(chosenGap == 61, "Paragraph gap plus did not keep one-percent adjustment");
-        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphSpacingLess")->click();
         require(chosenGap == 60, "Paragraph gap minus snapped instead of adjusting one percent");
         gap->setValue(0);
-        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphSpacingLess")->click();
         require(chosenGap == -1, "Paragraph gap minus did not reach Publisher");
-        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        settings.sheet->findChild<QPushButton *>("settingsParagraphSpacingMore")->click();
         require(chosenGap == 0, "Paragraph gap plus did not leave Publisher at zero");
         // Compare complete rail and label pixels with the original visible stops.
         for (auto *control : { indent, gap }) {
@@ -5029,8 +5025,8 @@ int main(int argc, char **argv)
     }
     {
         kobalt::DictionaryPanel panel(&reader);
-        auto *definition =
-                dynamic_cast<kobalt::ui::PagedText *>(panel.findChild<QWidget *>("rrDefinition"));
+        auto *definition = dynamic_cast<kobalt::ui::PagedText *>(
+                panel.findChild<QWidget *>("dictionaryDefinition"));
         require(definition, "Dictionary definition widget is missing");
         const auto body = kobalt::ui::brandFont(30).family();
         const auto otherBody = kobalt::ui::chromeFont(30).family();
@@ -5068,7 +5064,7 @@ int main(int argc, char **argv)
                                 .arg(foreground.name(), background.name());
         panel.open("word", contrast, QRect(10, 10, 40, 40));
         app.processEvents();
-        auto *definition = panel.findChild<QWidget *>("rrDefinition");
+        auto *definition = panel.findChild<QWidget *>("dictionaryDefinition");
         require(definition && definition->isVisible(),
                 "Contrast fixture did not open a dictionary definition");
         const auto image = definition->grab().toImage().convertToFormat(QImage::Format_RGB32);
@@ -5250,11 +5246,11 @@ int main(int argc, char **argv)
             missing.html = "<p>A matching definition.</p>";
         panel.open("hablaban", missing, selection);
         const auto original = panel.geometry();
-        auto *edit = panel.findChild<QPushButton *>("rrDictionaryEdit");
-        auto *query = panel.findChild<QLineEdit *>("rrDictionaryQuery");
-        auto *cancel = panel.findChild<QPushButton *>("rrDictionaryClose");
-        auto *submit = panel.findChild<QPushButton *>("rrDictionarySubmit");
-        auto *definition = panel.findChild<QWidget *>("rrDefinition");
+        auto *edit = panel.findChild<QPushButton *>("dictionaryEdit");
+        auto *query = panel.findChild<QLineEdit *>("dictionaryQuery");
+        auto *cancel = panel.findChild<QPushButton *>("dictionaryClose");
+        auto *submit = panel.findChild<QPushButton *>("dictionarySubmit");
+        auto *definition = panel.findChild<QWidget *>("dictionaryDefinition");
         const auto editImage = edit->grab().toImage().convertToFormat(QImage::Format_ARGB32);
         int editInk = 0;
         for (int y = 4; y < editImage.height() - 4; ++y)
@@ -5302,7 +5298,7 @@ int main(int argc, char **argv)
             requested = value;
         };
         edit->click();
-        auto *heading = panel.findChild<QLabel *>("rrDictionaryWord");
+        auto *heading = panel.findChild<QLabel *>("dictionaryWord");
         require(query->font().family() == heading->font().family()
                         && query->font().pixelSize() == heading->font().pixelSize(),
                 "Editing the lookup must retain its heading font and size");
@@ -5313,7 +5309,7 @@ int main(int argc, char **argv)
         require(panel.geometry().bottom()
                         < reader.property("reader_keyboard_bounds").toRect().top(),
                 "The dictionary sheet must not overlap its sibling keyboard");
-        require(panel.findChild<QLabel *>("rrDictionaryEditHint")->isVisible(),
+        require(panel.findChild<QLabel *>("dictionaryEditHint")->isVisible(),
                 "Editing must explain how to update the dictionary word");
         query->setText(" \n\t ");
         require(!submit->isEnabled(), "A blank lookup must not submit");
@@ -5326,7 +5322,7 @@ int main(int argc, char **argv)
                 "Keyboard submission must preserve accents, trim whitespace and run once");
         require(panel.geometry() == original && definition->isVisible() && !query->isVisible(),
                 "Submission must restore the original dictionary sheet");
-        require(panel.findChild<QPushButton *>("rrDictionarySelect")->accessibleDescription()
+        require(panel.findChild<QPushButton *>("dictionarySelect")->accessibleDescription()
                         == "Spanish",
                 "Editing must retain the selected dictionary");
         panel.open(requested, missing, selection);
@@ -5360,8 +5356,8 @@ int main(int argc, char **argv)
         entry.source = QString::fromUtf8("WordNet 3.0 · English Wiktionary");
         panel.open("Trevelyan", entry, QRect(100, 100, 40, 40));
         app.processEvents();
-        auto *body =
-                dynamic_cast<kobalt::ui::PagedText *>(panel.findChild<QWidget *>("rrDefinition"));
+        auto *body = dynamic_cast<kobalt::ui::PagedText *>(
+                panel.findChild<QWidget *>("dictionaryDefinition"));
         require(body->pages() == 1,
                 "Compact dictionary sources must not add a page to a short definition");
         if (qEnvironmentVariableIsSet("KOBALT_DICTIONARY_CONTROLS_CAPTURE"))
@@ -5386,9 +5382,9 @@ int main(int argc, char **argv)
         result.html = "<p>A definition.</p>";
         result.dictionary = "English to Dutch";
         panel.open("word", result, QRect(100, 100, 40, 40));
-        auto *selector = panel.findChild<QPushButton *>("rrDictionarySelect");
+        auto *selector = panel.findChild<QPushButton *>("dictionarySelect");
         const int currentWidth = selector->width();
-        const auto wordBounds = panel.findChild<QLabel *>("rrDictionaryWord")->geometry();
+        const auto wordBounds = panel.findChild<QLabel *>("dictionaryWord")->geometry();
         require(currentWidth > int(kobalt::ui::metrics::chrome::cellWidth)
                         && selector->text().isEmpty(),
                 "Dictionary selection must leave room for its icon and menu arrow");
@@ -5402,7 +5398,7 @@ int main(int argc, char **argv)
         result.dictionary = "English";
         panel.open("word", result, QRect(100, 100, 40, 40));
         require(selector->width() == currentWidth
-                        && panel.findChild<QLabel *>("rrDictionaryWord")->geometry() == wordBounds,
+                        && panel.findChild<QLabel *>("dictionaryWord")->geometry() == wordBounds,
                 "Changing dictionary names must not move or resize the lookup header");
         result.dictionary = "English monolingual";
         panel.open("word", result, QRect(100, 100, 40, 40));
@@ -5430,9 +5426,9 @@ int main(int argc, char **argv)
         dictionary.open("word", result, QRect(100, 100, 40, 40));
         app.processEvents();
         auto *definition = dynamic_cast<kobalt::ui::PagedText *>(
-                dictionary.findChild<QWidget *>("rrDefinition"));
+                dictionary.findChild<QWidget *>("dictionaryDefinition"));
         auto *definitionPager =
-                dictionary.findChild<QPushButton *>("rrDictionaryNext")->parentWidget();
+                dictionary.findChild<QPushButton *>("dictionaryNext")->parentWidget();
         require(definitionPager && definitionPager->isVisible(), "Long definition lacks its pager");
         const int standardPages = definition->pages();
         dictionary.setDefinitionFont({}, 140);
@@ -5448,18 +5444,18 @@ int main(int argc, char **argv)
         app.processEvents();
         const QRect definitionGeometry = definition->geometry();
         const int definitionPages = definition->pages();
-        dictionary.findChild<QPushButton *>("rrDictionarySelect")->click();
+        dictionary.findChild<QPushButton *>("dictionarySelect")->click();
         app.processEvents();
         require(definition->geometry() == definitionGeometry
                         && definition->pages() == definitionPages,
                 "Dictionary picker changed definition geometry or pagination");
-        auto *choices = dictionary.findChild<QWidget *>("rrDictionaryChoices");
-        auto *count = dictionary.findChild<QLabel *>("rrDictionaryChoicesPages");
+        auto *choices = dictionary.findChild<QWidget *>("dictionaryChoices");
+        auto *count = dictionary.findChild<QLabel *>("dictionaryChoicesPages");
         // A narrow sheet uses compact header cells.
         const int closeWidth = kobalt::isNarrowWidth(dictionary.width(), kobalt::ui::density())
                 ? int(kobalt::ui::metrics::chrome::compactCellWidth)
                 : int(kobalt::ui::metrics::chrome::cellWidth);
-        require(dictionary.findChild<QPushButton *>("rrDictionaryClose")->size()
+        require(dictionary.findChild<QPushButton *>("dictionaryClose")->size()
                         == QSize(closeWidth, kobalt::ui::metrics::chrome::actionHeight),
                 "Dictionary close is not a full header cell");
         require(dictionary.x() == 0 && dictionary.width() == reader.width(),
@@ -5477,7 +5473,7 @@ int main(int argc, char **argv)
             require(choices->rect().contains(
                             QRect(button->mapTo(choices, QPoint()), button->size())),
                     "Dictionary choice or pager is clipped");
-            if (button->objectName().startsWith("rrDictionaryChoice") && button->isCheckable())
+            if (button->objectName().startsWith("dictionaryChoice") && button->isCheckable())
                 require(button->height() == kobalt::ui::metrics::lookup::choiceHeight,
                         "Dictionary choice row lost its compact height");
             selected |= button->isChecked() && button->text() == result.dictionary;
@@ -5495,7 +5491,7 @@ int main(int argc, char **argv)
             int visibleChoices = 0;
             QVector<QRect> cells;
             for (auto *button : choices->findChildren<QPushButton *>()) {
-                if (!button->isVisible() || !button->objectName().startsWith("rrDictionaryChoice")
+                if (!button->isVisible() || !button->objectName().startsWith("dictionaryChoice")
                     || !button->isCheckable())
                     continue;
                 ++visibleChoices;
@@ -5516,7 +5512,7 @@ int main(int argc, char **argv)
                         "Dense dictionary choice escapes the sheet");
             }
             maximumChoices = qMax(maximumChoices, visibleChoices);
-            dictionary.findChild<QPushButton *>("rrDictionaryChoicesNext")->click();
+            dictionary.findChild<QPushButton *>("dictionaryChoicesNext")->click();
             require(++turns < 40, "Dense dictionary chooser did not wrap");
         } while (count->text() != firstPage);
         require(reached.size() == dictionaries.size(),
@@ -5525,7 +5521,7 @@ int main(int argc, char **argv)
             require(maximumChoices >= 4,
                     "Two-column dictionary chooser did not increase visible options");
 
-        dictionary.findChild<QPushButton *>("rrDictionarySelect")->click();
+        dictionary.findChild<QPushButton *>("dictionarySelect")->click();
         app.processEvents();
         require(definitionPager->isVisible() && definition->geometry() == definitionGeometry
                         && definition->pages() == definitionPages,
@@ -5535,8 +5531,8 @@ int main(int argc, char **argv)
     // word the face cannot draw in full is drawn in the interface sans. The
     // Latin-only title serif stands in for the book face here.
     {
-        auto *word = dictionary.findChild<QLabel *>("rrDictionaryWord");
-        auto *select = dictionary.findChild<QPushButton *>("rrDictionarySelect");
+        auto *word = dictionary.findChild<QLabel *>("dictionaryWord");
+        auto *select = dictionary.findChild<QPushButton *>("dictionarySelect");
         const auto serif = kobalt::ui::brandFont(kobalt::ui::metrics::chrome::titleText).family();
         dictionary.setBookFont(serif);
         const auto familyFor = [&](const QString &text) {
@@ -6151,7 +6147,7 @@ int main(int argc, char **argv)
         require(host.childAt(host.rect().center()) == &paper,
                 "An empty scrubber intercepted a tap on the page");
         scrubber.setImageAction("Zoom image");
-        auto *button = scrubber.findChild<QPushButton *>("rrScrubberImage");
+        auto *button = scrubber.findChild<QPushButton *>("scrubberImage");
         require(button && host.childAt(button->mapTo(&host, button->rect().center())) == button,
                 "Restoring a scrubber action must make it tappable again");
         scrubber.setImageAction({});
@@ -6175,7 +6171,7 @@ int main(int argc, char **argv)
             ++requests;
             scrubber.setPreview(page, QImage(1, 1, QImage::Format_RGB32));
         };
-        auto *next = scrubber.findChild<QPushButton *>("rrNavigationNext");
+        auto *next = scrubber.findChild<QPushButton *>("navigationNext");
         require(next && next->isEnabled(), "Missing next chapter action");
         next->click();
         require(scrubber.previewReady() && scrubber.selectedPage() == 7,
@@ -6212,14 +6208,14 @@ int main(int argc, char **argv)
         scrubber.returnRequested = [&] { ++returns; };
         scrubber.stayRequested = [&] { ++stays; };
         scrubber.setImageAction("Zoom image");
-        auto *imageAction = scrubber.findChild<QPushButton *>("rrScrubberImage");
+        auto *imageAction = scrubber.findChild<QPushButton *>("scrubberImage");
         require(imageAction && !imageAction->isHidden(), "Image suggestion is missing");
         imageAction->click();
-        scrubber.findChild<QPushButton *>("rrScrubberImageDismiss")->click();
+        scrubber.findChild<QPushButton *>("scrubberImageDismiss")->click();
         require(imageOpens == 1 && imageDismissals == 1 && !returns && !stays,
                 "Image suggestion dispatched return actions");
         scrubber.setReturnAction("Return to page 8", "Chapter");
-        auto *returnAction = scrubber.findChild<QPushButton *>("rrScrubberReturn");
+        auto *returnAction = scrubber.findChild<QPushButton *>("scrubberReturn");
         require(returnAction && returnAction->text() == "Return to page 8",
                 "Image suggestion displaced return action");
         require(!imageAction->isHidden() && !returnAction->isHidden(),
@@ -6227,10 +6223,10 @@ int main(int argc, char **argv)
         require(imageAction->geometry().right() < returnAction->geometry().left(),
                 "Image and return actions overlap");
         imageAction->click();
-        scrubber.findChild<QPushButton *>("rrScrubberImageDismiss")->click();
+        scrubber.findChild<QPushButton *>("scrubberImageDismiss")->click();
 
         returnAction->click();
-        scrubber.findChild<QPushButton *>("rrScrubberStay")->click();
+        scrubber.findChild<QPushButton *>("scrubberStay")->click();
         require(returns == 1 && stays == 1 && imageOpens == 2 && imageDismissals == 2,
                 "Return action dispatched image actions");
         scrubber.show();
@@ -6251,7 +6247,7 @@ int main(int argc, char **argv)
                         "Image label was squeezed");
                 require(returnAction->width() >= returnAction->sizeHint().width(),
                         "Return label was squeezed");
-                const auto *dismiss = scrubber.findChild<QPushButton *>("rrScrubberImageDismiss");
+                const auto *dismiss = scrubber.findChild<QPushButton *>("scrubberImageDismiss");
                 require(dismiss->geometry().right() < returnAction->x(),
                         "Image close overlaps Return");
             }
@@ -6286,9 +6282,9 @@ int main(int argc, char **argv)
         checkMarkers();
         scrubber.setBook(1600, 2000, chapters, { 1072, 1448 });
         checkMarkers();
-        scrubber.findChild<QPushButton *>("rrScrubberZoomIn")->click();
+        scrubber.findChild<QPushButton *>("scrubberZoomIn")->click();
         checkMarkers();
-        scrubber.findChild<QPushButton *>("rrScrubberZoomOut")->click();
+        scrubber.findChild<QPushButton *>("scrubberZoomOut")->click();
         checkMarkers();
         chapters = { { 1300, "Replacement" }, { 1700, "Last" } };
         scrubber.setBook(1600, 2000, chapters, { 1072, 1448 });
@@ -6508,7 +6504,7 @@ int main(int argc, char **argv)
             require(menu.actions().size() == 2 && menu.action("open") && menu.action("plain")
                             && !menu.action("x"),
                     "Action menu rows are missing");
-            auto *header = menu.findChild<QWidget *>("rrActionMenuHeader");
+            auto *header = menu.findChild<QWidget *>("actionMenuHeader");
             require(header && header->accessibleName() == "A book An author 42% · 1 MB",
                     "Action menu header is incomplete");
             // The header is as tall as its thumbnail plus margins, without spare space.
@@ -6523,7 +6519,7 @@ int main(int argc, char **argv)
             require(calls == QStringList({ "dismissed", "open" }),
                     "Choosing an action did not close the menu first");
             ActionMenu plain(&host, {}, { { "Only", "only", false, ControlIcon::More, {} } });
-            require(!plain.findChild<QWidget *>("rrActionMenuHeader"), "An empty header was shown");
+            require(!plain.findChild<QWidget *>("actionMenuHeader"), "An empty header was shown");
         }
         {
             // A row measured before polishing used the application font, not

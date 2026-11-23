@@ -54,23 +54,23 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     : ui::Panel(parent, Qt::TopEdge), keyboardFactory(std::move(makeKeyboard))
 {
     setEdgeWidth(chrome::heavyRule);
-    setObjectName("rrDictionary");
+    setObjectName("dictionary");
     dictionary = new ui::CellButton(ui::ControlIcon::Dictionaries, this);
-    dictionary->setObjectName("rrDictionarySelect");
+    dictionary->setObjectName("dictionarySelect");
     dictionary->setDropdownIndicator(true);
     dictionary->setRule(Qt::LeftEdge);
     headword = new ui::PrivateTextLabel(this);
-    headword->setObjectName("rrDictionaryWord");
+    headword->setObjectName("dictionaryWord");
     headword->setTextFormat(Qt::PlainText);
     headword->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     edit = new ui::CellButton(ui::ControlIcon::EditHighlight, this);
-    edit->setObjectName("rrDictionaryEdit");
+    edit->setObjectName("dictionaryEdit");
     edit->setRule(Qt::LeftEdge);
     edit->setAccessibleName(strings::get("dictionary_panel.edit_lookup"));
     edit->setEnabled(bool(keyboardFactory));
     connect(edit, &QPushButton::clicked, this, [this] { editQuery(); });
     query = new ui::QueryEdit(this);
-    query->setObjectName("rrDictionaryQuery");
+    query->setObjectName("dictionaryQuery");
     query->setMaxLength(256);
     query->setAccessibleName(strings::get("dictionary_panel.lookup_word"));
     query->setInputMethodHints(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
@@ -80,14 +80,14 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
                             + ui::styles::font(chrome::titleText) + "}");
     query->hide();
     editHint = new ui::InterfaceLabel(strings::get("dictionary_panel.edit_hint"), this);
-    editHint->setObjectName("rrDictionaryEditHint");
+    editHint->setObjectName("dictionaryEditHint");
     editHint->setWordWrap(true);
     ui::readerStyle(editHint,
                     ui::styles::font(chrome::descriptionText)
                             + "background:transparent;color:palette(placeholder-text);");
     editHint->hide();
     submit = new ui::CellButton(ui::ControlIcon::Check, this);
-    submit->setObjectName("rrDictionarySubmit");
+    submit->setObjectName("dictionarySubmit");
     submit->setRule(Qt::LeftEdge);
     submit->setAccessibleName(strings::get("dictionary_panel.update_lookup"));
     submit->hide();
@@ -108,7 +108,7 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     });
     dictionary->setAccessibleName(strings::get("dictionary_panel.choose_dictionary"));
     close = new ui::CellButton(ui::ControlIcon::Close, this);
-    close->setObjectName("rrDictionaryClose");
+    close->setObjectName("dictionaryClose");
     close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("dictionary_panel.close_definition"));
     connect(close, &QPushButton::clicked, this, [this] {
@@ -118,7 +118,7 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
             dismissed();
     });
     search = new ui::CellButton(ui::ControlIcon::Search, this);
-    search->setObjectName("rrDictionarySearch");
+    search->setObjectName("dictionarySearch");
     search->setAccessibleName(strings::get("dictionary_panel.search_in_book"));
     search->setRule(Qt::LeftEdge);
     connect(search, &QPushButton::clicked, this, [this] {
@@ -126,7 +126,7 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
             searchRequested(word);
     });
     save = new ui::CheckCellButton(ui::ControlIcon::Dictionary, this);
-    save->setObjectName("rrDictionarySave");
+    save->setObjectName("dictionarySave");
     save->setRule(Qt::LeftEdge);
     save->hide();
     connect(save, &QPushButton::clicked, this, [this](bool checked) {
@@ -136,17 +136,17 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
             save->setChecked(saved);
     });
     actions = new ui::CellButton(ui::ControlIcon::More, this);
-    actions->setObjectName("rrDictionaryActions");
+    actions->setObjectName("dictionaryActions");
     actions->setRule(Qt::LeftEdge);
     actions->setAccessibleName(strings::get("dictionary_panel.actions"));
     actions->hide();
     connect(actions, &QPushButton::clicked, this, [this] { openActions(); });
     text = new ui::PagedText(this);
-    text->setObjectName("rrDefinition");
+    text->setObjectName("dictionaryDefinition");
     text->setTextFont(ui::interfaceFont(chrome::labelText));
     text->setMargins(QMargins(chrome::inset, chrome::blockTop, chrome::inset, chrome::blockTop));
-    pages = new ui::PagerBar(this, "rrDictionary");
-    pages->counter->setObjectName("rrDictionaryPages");
+    pages = new ui::PagerBar(this, "dictionary");
+    pages->counter->setObjectName("dictionaryPages");
     connect(pages->previous, &QPushButton::clicked, this, [this] {
         text->setPage(text->page() - 1);
         refresh();
@@ -157,9 +157,9 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     });
     // An ink rule closes the list over the definition.
     dropdown = new ui::Panel(this, Qt::BottomEdge);
-    dropdown->setObjectName("rrDictionaryChoices");
-    choicesPaging = new ui::PagerBar(dropdown, "rrDictionaryChoices");
-    choicesPaging->counter->setObjectName("rrDictionaryChoicesPages");
+    dropdown->setObjectName("dictionaryChoices");
+    choicesPaging = new ui::PagerBar(dropdown, "dictionaryChoices");
+    choicesPaging->counter->setObjectName("dictionaryChoicesPages");
     connect(choicesPaging->previous, &QPushButton::clicked, this, [this] {
         optionsPage = choicesPaging->turnTarget(-1);
         redrawChoices();
@@ -367,17 +367,17 @@ void DictionaryPanel::openActions()
     QVector<ui::ActionMenuItem> items;
     if (keyboardFactory)
         items.append(ui::actionItem(strings::get("dictionary_panel.edit_lookup"),
-                                    "rrDictionaryMenuEdit", ui::ControlIcon::EditHighlight,
+                                    "dictionaryMenuEdit", ui::ControlIcon::EditHighlight,
                                     [this] { editQuery(); }));
     items.append(ui::actionItem(strings::get("dictionary_panel.search_in_book"),
-                                "rrDictionaryMenuSearch", ui::ControlIcon::Search, [this] {
+                                "dictionaryMenuSearch", ui::ControlIcon::Search, [this] {
                                     if (searchRequested && !word.isEmpty())
                                         searchRequested(word);
                                 }));
     if (saveAvailable)
         items.append(ui::actionItem(strings::get(saved ? "dictionary_panel.remove_from_words"
                                                        : "dictionary_panel.save_to_words"),
-                                    "rrDictionaryMenuSave",
+                                    "dictionaryMenuSave",
                                     saved ? ui::ControlIcon::WordsSaved : ui::ControlIcon::WordsAdd,
                                     [this] {
                                         if (saveToggled)
@@ -386,7 +386,7 @@ void DictionaryPanel::openActions()
     // The menu stays inside the sheet, so a tap on it is not a tap outside.
     auto *menu = new ui::ActionMenu(this, {}, items);
     actionMenu = menu;
-    menu->setObjectName("rrDictionaryMenu");
+    menu->setObjectName("dictionaryMenu");
     menu->dismissed = [this] {
         if (actionMenu) {
             actionMenu->hide();
@@ -667,7 +667,7 @@ void DictionaryPanel::redrawChoices(bool atCurrent)
             previous = caption;
         }
         auto *button = new DictionaryChoiceRow(dropdown, columns > 1 && column == 0);
-        button->setObjectName(QString("rrDictionaryChoice%1").arg(optionButtons.size()));
+        button->setObjectName(QString("dictionaryChoice%1").arg(optionButtons.size()));
         button->setTitle(option.name);
         button->setCheckable(true);
         button->setChecked(option.id == currentId);

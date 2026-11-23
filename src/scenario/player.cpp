@@ -511,8 +511,8 @@ public:
             return expect(step);
         if (step.contains("reveal"))
             return reveal(step.value("reveal").toString(),
-                          step.value("next").toString("rrSettingsOptionsNext"),
-                          step.value("previous").toString("rrSettingsOptionsPrevious"));
+                          step.value("next").toString("settingsOptionsNext"),
+                          step.value("previous").toString("settingsOptionsPrevious"));
         // Puts text into a field, as a person types it on the keyboard.
         if (step.contains("type")) {
             const auto name = step.value("into").toString();
@@ -813,7 +813,7 @@ public:
     QString hold(const QJsonObject &target, int milliseconds, int repetition)
     {
         auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
-        auto *page = find(host, "rrPage");
+        auto *page = find(host, "readingPage");
         if (!reader || !page)
             return "no reader page";
         // The reply may come after a timeout, so it must not refer to this frame.

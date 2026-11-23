@@ -211,10 +211,10 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
         nh_log("reader: native settings controls unavailable");
         return;
     }
-    heading->setObjectName("rrAlternativeReaderHeading");
+    heading->setObjectName("alternativeReaderHeading");
     heading->setText(strings::get("app.name"));
-    row->setObjectName("rrAlternativeReader");
-    check->setObjectName("rrAlternativeReaderEnabled");
+    row->setObjectName("alternativeReader");
+    check->setObjectName("alternativeReaderEnabled");
     for (const auto &name : reference->dynamicPropertyNames())
         row->setProperty(name.constData(), reference->property(name.constData()));
     row->setSizePolicy(reference->sizePolicy());
@@ -225,7 +225,7 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
     setText(row, referenceCheck->text());
     setChecked(row, enabled());
     auto *error = new QLabel(strings::get("native_ui.could_not_save_reader_preference"), section);
-    error->setObjectName("rrAlternativeReaderError");
+    error->setObjectName("alternativeReaderError");
     error->setWordWrap(true);
     error->hide();
     QObject::connect(check, &QCheckBox::toggled, row, [check, error, enabled, save](bool on) {

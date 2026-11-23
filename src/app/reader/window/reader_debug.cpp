@@ -155,11 +155,11 @@ void Reader::askCacheEviction(bool allBooks)
                                     : "debug.evict_cache_confirm_description"),
               strings::get(allBooks ? "debug.clear_caches_title" : "debug.evict_cache_title"),
               {},
-              "rrCacheEvictionPrompt" },
-            { strings::get("common.cancel"), "rrCacheEvictionCancel" },
-            { strings::get(allBooks ? "debug.clear" : "debug.evict"), "rrCacheEvictionConfirm" });
+              "cacheEvictionPrompt" },
+            { strings::get("common.cancel"), "cacheEvictionCancel" },
+            { strings::get(allBooks ? "debug.clear" : "debug.evict"), "cacheEvictionConfirm" });
     evictionDialog = choice;
-    evictionDialog->setObjectName("rrCacheEviction");
+    evictionDialog->setObjectName("cacheEviction");
     auto finish = [this, allBooks](bool evict) {
         if (!evictionDialog)
             return;

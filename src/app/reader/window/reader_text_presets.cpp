@@ -339,8 +339,8 @@ void Reader::saveNewTextPreset()
                 { strings::get("text_presets.limit").arg(textpresets::maximumCount),
                   strings::get("text_presets.save_title"),
                   {} },
-                { strings::get("common.ok"), "rrTextPresetLimitOk" });
-        notice->setObjectName("rrTextPresetLimit");
+                { strings::get("common.ok"), "textPresetLimitOk" });
+        notice->setObjectName("textPresetLimit");
         notice->setDimmed(true);
         notice->setGeometry(rect());
         const auto close = [notice] {
@@ -375,16 +375,16 @@ void Reader::editTextPresetName(const QString &id)
             { QString(),
               strings::get(existing ? "text_presets.rename_title" : "text_presets.save_title"),
               {} },
-            { strings::get("common.cancel"), "rrTextPresetNameCancel" },
-            { strings::get("common.save"), "rrTextPresetNameSave" });
+            { strings::get("common.cancel"), "textPresetNameCancel" },
+            { strings::get("common.save"), "textPresetNameSave" });
     textPresetEditor = dialog;
-    dialog->setObjectName("rrTextPresetName");
+    dialog->setObjectName("textPresetName");
     dialog->setDimmed(true);
     dialog->setGeometry(rect());
     auto *card = dialog->card();
     auto *editor = new PresetNameEdit(card);
     ui::prepareNativeEditor(editor);
-    editor->setObjectName("rrTextPresetNameInput");
+    editor->setObjectName("textPresetNameInput");
     dialog->setFocusProxy(editor);
     editor->setMaxLength(textpresets::maximumName);
     editor->setText(existing ? preset.name : textpresets::suggestedName(presets, preset));
@@ -410,7 +410,7 @@ void Reader::editTextPresetName(const QString &id)
     // The dialog has no description, so it has no description label. A taken
     // name shows its note here, in the description's type, under the input.
     auto *note = new ui::InterfaceLabel(QString(), inputRow);
-    note->setObjectName("rrTextPresetNameNote");
+    note->setObjectName("textPresetNameNote");
     note->setTextFormat(Qt::PlainText);
     note->setWordWrap(true);
     note->setAlignment(Qt::AlignCenter);
@@ -536,9 +536,9 @@ void Reader::showTextPresetActions(const QString &id)
     if (!preset || textPresetActions)
         return;
     QVector<ui::ActionMenuItem> items{
-        ui::actionItem(strings::get("text_presets.update_from_current"), "rrTextPresetUpdateFrom",
+        ui::actionItem(strings::get("text_presets.update_from_current"), "textPresetUpdateFrom",
                        ui::ControlIcon::Check, [this, id] { updateTextPreset(id); }),
-        ui::actionItem(strings::get("text_presets.delete"), "rrTextPresetDelete",
+        ui::actionItem(strings::get("text_presets.delete"), "textPresetDelete",
                        ui::ControlIcon::Trash, [this, id] { confirmDeleteTextPreset(id); }),
     };
     ui::ActionMenuHeader header;
@@ -548,11 +548,11 @@ void Reader::showTextPresetActions(const QString &id)
         header.detail = strings::get("text_presets.used_for_new_books");
     // Rename is the header's edit cell.
     const auto rename =
-            ui::actionItem(strings::get("text_presets.rename"), "rrTextPresetRename",
+            ui::actionItem(strings::get("text_presets.rename"), "textPresetRename",
                            ui::ControlIcon::EditHighlight, [this, id] { editTextPresetName(id); });
     auto *actions = new ui::ActionMenu(this, header, items, rename);
     textPresetActions = actions;
-    actions->setObjectName("rrTextPresetActions");
+    actions->setObjectName("textPresetActions");
     actions->dismissed = [this] {
         if (!textPresetActions)
             return;
@@ -575,14 +575,14 @@ void Reader::confirmDeleteTextPreset(const QString &id)
     const auto *preset = textpresets::find(presets, id);
     if (!preset)
         return;
-    auto *dialog = new ui::ChoiceModal(
-            this,
-            { strings::get("text_presets.delete_detail"),
-              strings::get("text_presets.delete_prompt").arg(preset->name),
-              {} },
-            { strings::get("common.cancel"), "rrTextPresetDeleteCancel" },
-            { strings::get("text_presets.delete"), "rrTextPresetDeleteConfirm" });
-    dialog->setObjectName("rrTextPresetDeleteDialog");
+    auto *dialog =
+            new ui::ChoiceModal(this,
+                                { strings::get("text_presets.delete_detail"),
+                                  strings::get("text_presets.delete_prompt").arg(preset->name),
+                                  {} },
+                                { strings::get("common.cancel"), "textPresetDeleteCancel" },
+                                { strings::get("text_presets.delete"), "textPresetDeleteConfirm" });
+    dialog->setObjectName("textPresetDeleteDialog");
     dialog->setDimmed(true);
     dialog->setGeometry(rect());
     const auto close = [dialog] {

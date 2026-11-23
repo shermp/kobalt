@@ -22,7 +22,7 @@ int main(int argc, char **argv)
             wait.after(check);
     };
     wait.after(check);
-    auto *fallback = wait.findChild<QTimer *>("rrSaveWaitFallback");
+    auto *fallback = wait.findChild<QTimer *>("saveWaitFallback");
     require(fallback && fallback->isSingleShot() && fallback->isActive()
                     && fallback->interval() >= 1000,
             "A waiting check has no long fallback timer");

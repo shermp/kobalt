@@ -161,7 +161,7 @@ QString syncPercentText(double percent)
 
 SyncChoiceView::SyncChoiceView(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrKosyncChoiceView");
+    setObjectName("kosyncChoiceView");
     // The height follows the width, because the page boxes scale with it. A
     // fixed vertical policy would cap the height at a hint for an older width.
     QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Preferred);
