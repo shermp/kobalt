@@ -676,16 +676,20 @@ private:
     // Lays out the slice that holds the character `before` of the spine item,
     // after the slices before it, as reading forward does.
     bool showSliceAt(int before);
-    // The part of the text of `item` before `position`, from its XHTML.
-    // Measures where the next few chapters start in the text of their spine
-    // items. A frame asks for the book page of every chapter once the book
-    // is measured, and reads one XHTML file for each. Idle time does that
-    // ahead of the frame. True while chapters are left.
+    // Measure at most one spine item per idle step. True while chapters remain.
     bool measureChapterPlaces(const std::function<bool()> &current) const;
     double textFraction(int item, const QString &position, bool previous = false,
                         const std::function<bool()> &current = {}) const;
+    // Cache the off-window positions that share this file. Return the next
+    // index, or first when cancelled. Skip entries with exact page numbers.
+    int cacheChapterTextFractions(int item, int first, int count,
+                                  const std::function<const QString &(int)> &positionAt,
+                                  const std::function<bool()> &current,
+                                  const QVector<int> &exact = {}) const;
+    QByteArray textFractionXhtml(int item, const std::function<bool()> &current) const;
     double readTextFraction(int item, const QString &position, bool previous = false,
-                            const std::function<bool()> &current = {}) const;
+                            const std::function<bool()> &current = {},
+                            qint64 *wordsBefore = nullptr) const;
     // The page in its chapter and the pages of the chapter from the
     // estimate of the pages, when only a part of the book has a layout.
     void estimateChapterPages(const QVector<ChapterLink> &links, ChapterSelection &result) const;

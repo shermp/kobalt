@@ -6,6 +6,7 @@
 #include <QStringList>
 #include <QXmlStreamReader>
 #include "support/qt_compat.h"
+#include <algorithm>
 #include <climits>
 #include <cmath>
 
@@ -301,39 +302,68 @@ PageEstimateItem measurePageEstimate(const QByteArray &xhtml)
     return measurer.item();
 }
 
-double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bool previous,
-                                qint64 *wordsBefore, const std::function<bool()> &current)
+QVector<PageEstimateFraction>
+pageEstimateTextFractions(const QByteArray &xhtml, const QVector<PageEstimatePosition> &positions,
+                          const std::function<bool()> &current)
 {
-    // The steps of the path: an element name or "text()", and its index
-    // among the siblings of the same kind, counted from one.
-    struct Step
+    QVector<PageEstimateFraction> result(positions.size());
+    if (positions.isEmpty())
+        return result;
+
+    struct Prefix
     {
-        QString name;
-        int index = 1;
+        qint64 characters = -1, words = -1;
     };
 
-    QVector<Step> steps;
-    int offset = 0;
-    QString rest = path;
-    const int dot = rest.lastIndexOf('.');
-    if (dot > rest.lastIndexOf('/')) {
-        offset = qMax(0, rest.mid(dot + 1).toInt());
-        rest.truncate(dot);
+    struct PathNode
+    {
+        QHash<QPair<QString, int>, int> children;
+        QVector<QPair<int, int>> endpoints; // (text offset, result index)
+        Prefix start;
+        int parent = 0, requests = 0;
+    };
+
+    // Share the requested path prefixes. The XML walk follows one edge per
+    // element, regardless of how many positions are in other branches.
+    QVector<PathNode> paths(1);
+    paths[0].start = { 0, 0 };
+    QVector<int> leaf;
+    for (int i = 0; i < positions.size(); ++i) {
+        if (i && i % 128 == 0 && current && !current())
+            return result;
+        QString rest = positions[i].path;
+        int offset = 0;
+        const int dot = rest.lastIndexOf('.');
+        if (dot > rest.lastIndexOf('/')) {
+            offset = qMax(0, rest.mid(dot + 1).toInt());
+            rest.truncate(dot);
+        }
+        int node = 0;
+        for (const auto &part : rest.split('/', qt::skipEmptyParts)) {
+            const int open = part.indexOf('[');
+            const auto name = open < 0 ? part : part.left(open);
+            const int index =
+                    open < 0 ? 1 : qMax(1, part.mid(open + 1, part.size() - open - 2).toInt());
+            const auto key = qMakePair(name, index);
+            int next = paths[node].children.value(key, -1);
+            if (next < 0) {
+                next = paths.size();
+                paths[node].children.insert(key, next);
+                paths.append(PathNode{});
+                paths[next].parent = node;
+            }
+            node = next;
+            ++paths[node].requests;
+        }
+        paths[node].endpoints.append(qMakePair(offset, i));
+        leaf.append(node);
     }
-    for (const auto &part : rest.split('/', qt::skipEmptyParts)) {
-        const int open = part.indexOf('[');
-        Step step;
-        step.name = open < 0 ? part : part.left(open);
-        if (open >= 0)
-            step.index = qMax(1, part.mid(open + 1, part.size() - open - 2).toInt());
-        steps.append(step);
-    }
-    const bool text = !steps.isEmpty() && steps.last().name == QLatin1String("text()");
-    const int elements = steps.size() - (text ? 1 : 0);
-    // The characters as the measurer counts them: one space between words.
-    qint64 characters = 0, target = -1, fallback = -1;
+    for (auto &node : paths)
+        std::sort(node.endpoints.begin(), node.endpoints.end());
+
+    QVector<Prefix> textOffsets(positions.size());
+    qint64 characters = 0;
     LogicalWordCounter wordCounter;
-    qint64 targetWords = -1, fallbackWords = -1;
     int wordSkip = 0;
     bool interrupted = false;
     unsigned work = 0;
@@ -358,24 +388,28 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
             }
         }
     };
-    // For each open element below <html>: the children seen by name, and
-    // the text nodes.
-    QVector<QHash<QString, int>> children{ {} };
-    QVector<int> texts{ 0 };
-    // How many steps the open elements match, and how deep they are.
-    int matched = 0, depth = 0;
+
+    struct Element
+    {
+        int path = -1, texts = 0, resolvedOnEntry = 0;
+        QHash<QString, int> children;
+    };
+
+    QVector<Element> stack(1);
+    stack[0].path = 0;
+    int resolved = 0;
+    bool positiveTarget = false;
     bool body = false;
     QXmlStreamReader reader(xhtml);
     while (!reader.atEnd()) {
         if (interrupted || (++work % 128 == 0 && current && !current()))
-            return -1;
+            return result;
         const auto token = reader.readNext();
+        auto &parent = stack.last();
         if (token == QXmlStreamReader::StartElement) {
             const auto name = reader.name().toString().toLower();
-            if (depth == 0 && name == QLatin1String("html")) {
-                // The root has no step.
+            if (stack.size() == 1 && name == QLatin1String("html"))
                 continue;
-            }
             if (wordSkip || skipped(name) || name == QLatin1String("svg")
                 || name == QLatin1String("rt") || name == QLatin1String("rp"))
                 ++wordSkip;
@@ -383,69 +417,83 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
                 && (blockNames().contains(name) || name == QLatin1String("br")
                     || name == QLatin1String("hr")))
                 wordCounter.boundary();
-            const int index = ++children.last()[name];
-            ++depth;
-            children.append(QHash<QString, int>());
-            texts.append(0);
-            body = body || (depth == 1 && name == QLatin1String("body"));
-            if (target < 0 && matched == depth - 1 && matched < elements
-                && steps[matched].name == name && steps[matched].index == index) {
-                ++matched;
-                fallback = characters;
-                fallbackWords = wordCounter.words();
-                if (matched == elements && !text) {
-                    target = characters;
-                    targetWords = wordCounter.words();
-                }
+            body = body || (stack.size() == 1 && name == QLatin1String("body"));
+            Element opened;
+            if (parent.path >= 0 && !paths[parent.path].children.isEmpty()) {
+                const int index = ++parent.children[name];
+                opened.path = paths[parent.path].children.value(qMakePair(name, index), -1);
             }
-        } else if (token == QXmlStreamReader::EndElement && depth > 0) {
-            // A step that the element does not have: the position is at the
-            // start of the deepest element found.
-            if (target < 0 && matched == depth && matched < steps.size()) {
-                target = fallback;
-                targetWords = fallbackWords;
+            if (opened.path >= 0) {
+                auto &node = paths[opened.path];
+                node.start = { characters, wordCounter.words() };
+                opened.resolvedOnEntry = resolved;
+                resolved += node.endpoints.size();
+                if (!node.endpoints.isEmpty() && characters > 0)
+                    positiveTarget = true;
+            }
+            stack.append(opened);
+        } else if (token == QXmlStreamReader::EndElement && stack.size() > 1) {
+            if (parent.path >= 0) {
+                const auto &node = paths[parent.path];
+                // Requests still missing a deeper step use this element's start.
+                const int after = parent.resolvedOnEntry + node.requests;
+                if (resolved < after && node.start.characters > 0)
+                    positiveTarget = true;
+                resolved = after;
             }
             if (!wordSkip && blockNames().contains(reader.name().toString().toLower()))
                 wordCounter.boundary();
             if (wordSkip)
                 --wordSkip;
-            matched = qMin(matched, depth - 1);
-            --depth;
-            children.removeLast();
-            texts.removeLast();
-        } else if (token == QXmlStreamReader::Characters && body && depth > 0) {
+            stack.removeLast();
+        } else if (token == QXmlStreamReader::Characters && body && stack.size() > 1) {
             const auto value = reader.text().toString();
             int at = 0;
-            // Empty CDATA sections produce a Characters token but no engine text node.
             if (value.isEmpty() || reader.isWhitespace()) {
                 count(value, at, INT_MAX);
                 continue;
             }
-            const int index = ++texts.last();
-            if (target < 0 && text && matched == depth && matched == elements
-                && steps.last().index == index) {
-                count(value, at, offset);
-                target = characters;
-                targetWords = wordCounter.words();
+            if (parent.path >= 0) {
+                const auto key = qMakePair(QStringLiteral("text()"), ++parent.texts);
+                const int text = paths[parent.path].children.value(key, -1);
+                if (text >= 0) {
+                    int previousOffset = 0;
+                    for (const auto &endpoint : paths[text].endpoints) {
+                        count(value, at, endpoint.first - previousOffset);
+                        previousOffset = endpoint.first;
+                        textOffsets[endpoint.second] = { characters, wordCounter.words() };
+                        ++resolved;
+                        positiveTarget = positiveTarget || characters > 0;
+                    }
+                }
             }
             count(value, at, INT_MAX);
-            // A chapter that starts before its first character has fraction zero
-            // for every positive text length. Empty chapters still return -1.
-            if (target == 0 && characters > 0)
+            if (resolved == positions.size() && !positiveTarget && characters > 0)
                 break;
         }
     }
     if (interrupted || (current && !current()) || !body || characters <= 0)
-        return -1;
-    if (target < 0) {
-        target = fallback < 0 ? 0 : fallback;
-        targetWords = fallbackWords;
+        return result;
+    // Parents precede children. Propagate the deepest matched start to paths
+    // whose element or text node did not exist.
+    for (int i = 1; i < paths.size(); ++i)
+        if (paths[i].start.characters < 0)
+            paths[i].start = paths[paths[i].parent].start;
+    for (int i = 0; i < positions.size(); ++i) {
+        const auto prefix = textOffsets[i].characters >= 0 ? textOffsets[i] : paths[leaf[i]].start;
+        const qint64 target = prefix.characters - (positions[i].previous && prefix.characters > 0);
+        result[i] = { qBound(0.0, double(target) / characters, 1.0), prefix.words };
     }
-    if (wordsBefore)
-        *wordsBefore = qMax<qint64>(0, targetWords);
-    if (previous && target > 0)
-        --target;
-    return qBound(0.0, double(target) / characters, 1.0);
+    return result;
+}
+
+double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bool previous,
+                                qint64 *wordsBefore, const std::function<bool()> &current)
+{
+    const auto result = pageEstimateTextFractions(xhtml, { { path, previous } }, current).first();
+    if (result.wordsBefore >= 0 && wordsBefore)
+        *wordsBefore = result.wordsBefore;
+    return result.fraction;
 }
 
 double PageEstimateLayout::linesPerPage() const

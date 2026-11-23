@@ -126,6 +126,24 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
                                 qint64 *wordsBefore = nullptr,
                                 const std::function<bool()> &current = {});
 
+struct PageEstimatePosition
+{
+    QString path;
+    bool previous = false;
+};
+
+struct PageEstimateFraction
+{
+    double fraction = -1;
+    qint64 wordsBefore = -1;
+};
+
+// Resolve positions in the same spine item in one read, in input order.
+// An interrupted read leaves every fraction and word count at -1.
+QVector<PageEstimateFraction>
+pageEstimateTextFractions(const QByteArray &xhtml, const QVector<PageEstimatePosition> &positions,
+                          const std::function<bool()> &current = {});
+
 struct PageEstimateLayout
 {
     // All in pixels: the body font size, the height of one line, the width

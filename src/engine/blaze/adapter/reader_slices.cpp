@@ -571,27 +571,25 @@ bool EngineDocument::measureChapterPlaces(const std::function<bool()> &current) 
     const auto list = chapters();
     const auto graph = chapterGraph();
     const int total = list.size() + graph.size();
-    // One file in one step: a page turn waits for the step that runs.
-    int files = 1;
-    while (done < total && files > 0) {
+    const auto positionAt = [&](int i) -> const QString & {
+        return i < list.size() ? list[i].position : graph[i - list.size()].position;
+    };
+    // Read at most one file per idle step. Several TOC entries can share it.
+    while (done < total) {
         if (current && !current())
             return true;
-        const auto &position =
-                done < list.size() ? list[done].position : graph[done - list.size()].position;
+        const auto &position = positionAt(done);
         const int item = spineItemIndex(position);
-        // The text on the screen has a layout to count from.
         if (item < 0 || item >= spineItemCount_ || (item >= windowFirst_ && item <= windowLast_)
             || source_->textFractions.contains(position)) {
             ++done;
             continue;
         }
-        textFraction(item, position, false, current);
-        // Retry this place after an interruption. textFraction keeps no
-        // partial result, and its reads and parser check between chunks.
-        if (current && !current())
+        const int end = cacheChapterTextFractions(item, done, total, positionAt, current);
+        if (end == done)
             return true;
-        ++done;
-        --files;
+        done = end;
+        break;
     }
     return done < total;
 }
@@ -1270,44 +1268,148 @@ double EngineDocument::textFraction(int item, const QString &position, bool prev
         source_->textFractions.clear();
         source_->textWordPrefixes.clear();
     }
-    const double fraction = readTextFraction(item, position, previous, current);
+    qint64 words = -1;
+    const double fraction = readTextFraction(item, position, previous, current, &words);
     if (current && !current())
         return -1;
+    if (!previous && words >= 0)
+        source_->textWordPrefixes.insert(position, words);
     source_->textFractions.insert(key, fraction);
     return fraction;
 }
 
-double EngineDocument::readTextFraction(int item, const QString &position, bool previous,
-                                        const std::function<bool()> &current) const
+QByteArray EngineDocument::textFractionXhtml(int item, const std::function<bool()> &current) const
 {
     const auto href = spineItems().value(item);
     if (href.isEmpty())
-        return -1;
+        return {};
     auto stream = source_->container->OpenStream(Utf8ToUnicode(href.toUtf8().constData()).c_str(),
                                                  LVOM_READ);
     if (stream.isNull())
-        return -1;
+        return {};
     QByteArray xhtml(int(stream->GetSize()), Qt::Uninitialized);
     int offset = 0;
     while (offset < xhtml.size()) {
         if (current && !current())
-            return -1;
+            return {};
         lvsize_t read = 0;
         if (stream->Read(xhtml.data() + offset, qMin(pageEstimatePart, int(xhtml.size()) - offset),
                          &read)
             != LVERR_OK)
-            return -1;
+            return {};
         if (!read)
             break;
         offset += int(read);
     }
     xhtml.resize(offset);
-    qint64 words = -1;
-    const double fraction =
-            pageEstimateTextFraction(xhtml, pathInSpineItem(position), previous, &words, current);
-    if (!previous && words >= 0)
-        source_->textWordPrefixes.insert(position, words);
-    return fraction;
+    return xhtml;
+}
+
+int EngineDocument::cacheChapterTextFractions(int item, int first, int count,
+                                              const std::function<const QString &(int)> &positionAt,
+                                              const std::function<bool()> &current,
+                                              const QVector<int> &exact) const
+{
+    bool stopped = false;
+    std::function<bool()> active;
+    if (current) {
+        active = [&] {
+            stopped = stopped || !current();
+            return !stopped;
+        };
+    }
+    // Keep the pending paths bounded on books with long TOCs.
+    constexpr int maxPlaces = 256;
+    int end = first + 1;
+    while (end < count && end - first < maxPlaces && spineItemIndex(positionAt(end)) == item)
+        ++end;
+    if (end == first + 1) {
+        textFraction(item, positionAt(first), false, active);
+        return stopped ? first : end;
+    }
+    QStringList keys;
+    QVector<PageEstimatePosition> paths;
+    QStringList starts;
+    int firstFilePosition = first;
+    int startsBeforeFile = 0;
+    QSet<QString> seen;
+    for (int i = first; i < end; ++i) {
+        if (!exact.isEmpty() && exact.at(i) >= 0)
+            continue;
+        const auto &position = positionAt(i);
+        if (seen.contains(position))
+            continue;
+        seen.insert(position);
+        if (source_->textFractions.contains(position))
+            continue;
+        const auto path = pathInSpineItem(position);
+        if (path.section('.', 0, 0).isEmpty()) {
+            // A bare fragment needs no XHTML.
+            starts.append(position);
+            continue;
+        }
+        if (keys.isEmpty()) {
+            firstFilePosition = i;
+            startsBeforeFile = starts.size();
+        }
+        keys.append(position);
+        paths.append({ path, false });
+    }
+    const auto makeRoom = [&](int additional) {
+        if (source_->textFractions.size() + additional <= 4096)
+            return;
+        // Keep cache hits in this group. They were omitted from the XML walk.
+        const auto keepGroup = [&](auto &cache) {
+            for (auto it = cache.begin(); it != cache.end();) {
+                if (seen.contains(it.key()))
+                    ++it;
+                else
+                    it = cache.erase(it);
+            }
+        };
+        keepGroup(source_->textFractions);
+        keepGroup(source_->textWordPrefixes);
+    };
+    QVector<PageEstimateFraction> values;
+    if (!paths.isEmpty()) {
+        const auto xhtml = textFractionXhtml(item, active);
+        if (active && !active())
+            return first;
+        if (xhtml.isNull()) {
+            // Bare fragments before the failed read were resolved without I/O.
+            // Leave subsequent positions available to reopen the file.
+            end = firstFilePosition + 1;
+            keys = keys.mid(0, 1);
+            starts = starts.mid(0, startsBeforeFile);
+            values.append(PageEstimateFraction{});
+        } else {
+            values = pageEstimateTextFractions(xhtml, paths, active);
+        }
+    }
+    if (active && !active())
+        return first;
+    makeRoom(keys.size() + starts.size());
+    for (const auto &position : starts) {
+        source_->textFractions.insert(position, 0);
+        source_->textWordPrefixes.insert(position, 0);
+    }
+    for (int i = 0; i < keys.size(); ++i) {
+        source_->textFractions.insert(keys[i], values[i].fraction);
+        if (values[i].wordsBefore >= 0)
+            source_->textWordPrefixes.insert(keys[i], values[i].wordsBefore);
+    }
+    return end;
+}
+
+double EngineDocument::readTextFraction(int item, const QString &position, bool previous,
+                                        const std::function<bool()> &current,
+                                        qint64 *wordsBefore) const
+{
+    const auto xhtml = textFractionXhtml(item, current);
+    if (xhtml.isNull() || (current && !current()))
+        return -1;
+    return pageEstimateTextFraction(xhtml, pathInSpineItem(position), previous, wordsBefore,
+                                    current);
 }
 
 QVector<int> EngineDocument::bookPages(const QStringList &positions,
@@ -1420,6 +1522,7 @@ QVector<int> EngineDocument::chapterBookPages(const QStringList &positions,
         if (itemStarts.size() == starts.size())
             itemStarts.last() = pages();
     }
+    int prefetchedEnd = 0;
     for (int i = 0; i < positions.size(); ++i) {
         if (current && !current())
             return {};
@@ -1470,6 +1573,14 @@ QVector<int> EngineDocument::chapterBookPages(const QStringList &positions,
         }
         // Other text counts from its XHTML.
         if (pages < 0) {
+            if (i >= prefetchedEnd && (item < windowFirst_ || item > windowLast_)
+                && !source_->textFractions.contains(position)) {
+                prefetchedEnd = cacheChapterTextFractions(
+                        item, i, positions.size(),
+                        [&](int n) -> const QString & { return positions.at(n); }, current, result);
+                if (prefetchedEnd == i)
+                    return {};
+            }
             double fraction = qMax(0.0, textFraction(item, position, false, current));
             if (exclusive && fraction == 0 && item > 0) {
                 // The first character of a chapter excludes that whole chapter.

@@ -64,6 +64,8 @@ struct ReaderLocationProbe
         return true;
     }
 
+    static ReaderSource &source(EngineDocument &model) { return *model.source_; }
+
     // How many positions have their place in the text of a spine item.
     static int textPlaces(const EngineDocument &model)
     {
@@ -262,6 +264,41 @@ struct Page
         return layout;
     }
 };
+
+void batchedTextFractions()
+{
+    const QByteArray xhtml =
+            "<html><head><title>skip</title></head><body><p>one <i>two</i> three&#x1f680; "
+            "<rt>ignore</rt>four</p><p> five&#x3000;six</p></body></html>";
+    // There are 34 source characters. The ruby annotation contributes to the
+    // character fraction, but not to the logical word count.
+    const QVector<PageEstimatePosition> paths{
+        { "/body/p[2]/text().6" },  { "/body/p/text()[2].7", true }, { "/body/p/i" },
+        { "/body/p/text()[2].7" },  { "/body/p/text()[3].999" },     { "/body/p[2]/text().3" },
+        { "/body/p[2]/text().6" },  { "/body/p/i/missing" },         { "/body/p[2]/text()[9]" },
+        { "/body/missing/text()" },
+    };
+    const int characters[] = { 30, 13, 3, 14, 25, 28, 30, 3, 25, 0 };
+    const int words[] = { 5, 3, 1, 3, 4, 5, 5, 1, 4, 0 };
+    const auto fractions = pageEstimateTextFractions(xhtml, paths);
+    require(fractions.size() == paths.size(), "A duplicate or missing path lost its result");
+    for (int i = 0; i < paths.size(); ++i)
+        require(fractions[i].fraction == characters[i] / 34.0
+                        && fractions[i].wordsBefore == words[i],
+                qPrintable("Wrong source fraction or word prefix for " + paths[i].path));
+
+    const auto empty = pageEstimateTextFractions("<html><body> </body></html>", paths);
+    const auto longText =
+            "<html><body><p>one</p><p>" + QByteArray(50000, 'a') + "</p></body></html>";
+    int checks = 0;
+    const auto stopped = pageEstimateTextFractions(longText, paths, [&] { return ++checks < 2; });
+    require(checks >= 2 && stopped.size() == paths.size() && empty.size() == paths.size(),
+            "Batch cancellation missed a long text node");
+    for (int i = 0; i < paths.size(); ++i)
+        require(stopped[i].fraction < 0 && stopped[i].wordsBefore < 0 && empty[i].fraction < 0
+                        && empty[i].wordsBefore < 0,
+                "A cancelled or empty chapter published a partial fraction");
+}
 
 void blocks()
 {
@@ -2082,20 +2119,60 @@ void interruptedChapterPlace()
 {
     EngineDocument model(test::readerFonts());
     openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
-    const auto target = model.pageStart(10);
-    require(model.spineItemOf(target) == 1, "The target must be in the long chapter");
+    const auto target = model.pageStart(10), later = model.pageStart(11);
+    const auto retry = model.pageStart(12), last = model.pageStart(13);
+    require(model.spineItemOf(target) == 1 && model.spineItemOf(later) == 1 && target != later,
+            "The target must be in the long chapter");
     model.setChapterSlices(6);
     QString error;
     require(model.showSpineItems(0, 0, &error), qPrintable(error));
-    model.setChapters({ { "Later", target } }, {});
+    model.setChapters({ { "Later", target }, { "Next page", later }, { "Duplicate", target } }, {});
     int checks = 0;
-    require(Probe::measurePlace(model, [&] { return ++checks <= 4; }) && checks > 4,
+    require(Probe::measurePlace(model, [&] { return ++checks != 5; }) && checks > 4,
             "Chapter-place measurement did not stop during its read or parse");
     require(Probe::measuredPlaces(model) == 0 && Probe::textPlaces(model) == 0,
             "An interrupted chapter place was kept or skipped");
-    require(!Probe::measurePlace(model, {}) && Probe::measuredPlaces(model) == 1
-                    && Probe::textPlaces(model) == 1,
-            "The interrupted chapter place was not retried");
+    require(!Probe::measurePlace(model, {}) && Probe::measuredPlaces(model) == 3
+                    && Probe::textPlaces(model) == 2,
+            "A single idle step must retry both distinct chapter places in the same file");
+
+    auto &source = Probe::source(model);
+    const auto cachedWords = source.textWordPrefixes.value(later, -1);
+    require(cachedWords >= 0, "The first batch must keep its word prefixes");
+    source.pageEstimate.chapterPlaces = 0;
+    source.textFractions.remove(target);
+    source.textWordPrefixes.remove(target);
+    const QString start = QStringLiteral("/body/DocFragment[2].0");
+    model.setChapters({ { "Start", start },
+                        { "Missing", target },
+                        { "Retry", retry },
+                        { "Cached", later },
+                        { "Last", last } },
+                      {});
+    QTemporaryDir empty;
+    require(empty.isValid(), "Cannot create an empty source for a failed chapter read");
+    const auto original = source.container;
+    source.container = LVOpenDirectory(lString8(empty.path().toUtf8().constData()));
+    require(!source.container.isNull() && Probe::measurePlace(model, {})
+                    && Probe::measuredPlaces(model) == 2
+                    && source.textFractions.value(start, -1) == 0
+                    && source.textWordPrefixes.value(start, -1) == 0
+                    && source.textFractions.value(target, 0) < 0
+                    && !source.textFractions.contains(retry)
+                    && !source.textFractions.contains(last),
+            "A failed read must leave later positions in the same file available for retry");
+    source.container = original;
+    while (source.textFractions.size() < 4096) {
+        const auto old = QString::number(source.textFractions.size());
+        source.textFractions.insert(old, 0);
+        source.textWordPrefixes.insert(old, 0);
+    }
+    require(!Probe::measurePlace(model, {}) && source.textWordPrefixes.value(retry, -1) >= 0
+                    && source.textWordPrefixes.value(last, -1) >= 0
+                    && source.textWordPrefixes.value(later, -1) == cachedWords
+                    && source.textFractions.contains(later)
+                    && !source.textFractions.contains(QStringLiteral("42")),
+            "Retry and eviction must keep the recovered and previously cached word prefixes");
 }
 
 // The layout at the open gives its pages, also of a spine item without text
@@ -3743,6 +3820,7 @@ int main(int argc, char **argv)
     reopenAfterWholeBookPreparation();
     nestedSliceHonorsCancellation();
     blocks();
+    batchedTextFractions();
     QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
     require(file.open(QIODevice::ReadOnly), "Cannot read the book fixture");
     const auto bytes = file.readAll();

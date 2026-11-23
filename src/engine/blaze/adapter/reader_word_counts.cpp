@@ -342,13 +342,23 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
         }
         const auto chapters = this->chapters();
         QVector<qint64> prefixes;
-        for (const auto &chapter : chapters) {
+        int prefetchedEnd = 0;
+        for (int i = 0; i < chapters.size(); ++i) {
+            const auto &chapter = chapters.at(i);
             engineActivity().checkpoint();
             if (current && !current())
                 return {};
             const int item = spineItemIndex(chapter.position);
             if (item < 0 || item >= map.items())
                 return {};
+            if (i >= prefetchedEnd && (item < windowFirst_ || item > windowLast_)
+                && !source_->textFractions.contains(chapter.position)) {
+                prefetchedEnd = cacheChapterTextFractions(
+                        item, i, chapters.size(),
+                        [&](int n) -> const QString & { return chapters.at(n).position; }, current);
+                if (prefetchedEnd == i)
+                    return {};
+            }
             textFraction(item, chapter.position, false, current);
             const auto prefix = source_->textWordPrefixes.value(chapter.position, -1);
             if (prefix < 0)
