@@ -587,11 +587,25 @@ QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &link
     return unloaded ? QString() : link.position;
 }
 
-QPair<QString, QString> EngineDocument::mainTextHints() const
+QPair<QString, QString> EngineDocument::mainTextHints(bool forFrame) const
 {
     if (!source_ || source_->parent || source_->container.isNull())
         return {};
     if (source_->boundaries.status == ReaderSource::Boundaries::Unchecked) {
+        if (forFrame && !mainTextMarks.isEmpty()) {
+            const auto start = mainTextMarks.value("start").toObject().value("anchor");
+            const auto end = mainTextMarks.value("end").toObject().value("anchor");
+            if (start.isString() && end.isString()) {
+                const auto first = start.toString();
+                const auto after = end.toString();
+                // Same-item ranges can depend on the publisher's anchor table. Separate
+                // spine items and an explicit end of book only need their spine order.
+                if (!first.isEmpty()
+                    && (after.isEmpty() || spineItemIndex(first) != spineItemIndex(after))
+                    && validMainTextRange(first, after))
+                    return {};
+            }
+        }
         ReaderSource::Boundaries index;
         index.status = ReaderSource::Boundaries::Complete;
         index.hints = detect(*source_, spineItems(), nonLinearSpineItems(), index);

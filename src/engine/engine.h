@@ -319,7 +319,8 @@ public:
     virtual bool validMainTextRange(const QString &first, const QString &after,
                                     bool *deferred = nullptr) const = 0;
 
-    virtual QPair<QString, QString> mainTextHints() const { return {}; }
+    // During frame capture, both saved marks can make the publication defaults unnecessary.
+    virtual QPair<QString, QString> mainTextHints(bool /* forFrame */ = false) const { return {}; }
 
     virtual RoughPages roughPages() const = 0;
 

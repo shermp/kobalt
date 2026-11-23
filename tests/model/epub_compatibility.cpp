@@ -1,6 +1,7 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
+#include "reading/opening_job.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include "engine/blaze/adapter/xml_entities.h"
 #include "engine/blaze/extensions/embedded_font_cache.h"
@@ -261,6 +262,58 @@ void checkUnloadedMainTextRange()
             "Equivalent first-child positions changed the order of the boundaries");
 }
 
+void checkSavedMainTextBoundaries()
+{
+    const auto files = test::publisherPackage(
+            "en", "Marked boundaries",
+            { { "front.xhtml", test::publisherHtml("<p>Front</p>") },
+              { "story.xhtml",
+                test::publisherHtml("<section epub:type='bodymatter'><p>Main</p>"
+                                    "</section><section epub:type='backmatter'>"
+                                    "<p>Notes</p></section>") } },
+            "<itemref idref='front.xhtml'/><itemref idref='story.xhtml'/>");
+    const auto story = QStringLiteral("/body/DocFragment[2]");
+    const auto front = QStringLiteral("/body/DocFragment[1]");
+    const auto publisher = qMakePair(story + "/body[1]/section[1]", story + "/body[1]/section[2]");
+    const auto mark = [](const QString &anchor) { return QJsonObject{ { "anchor", anchor } }; };
+    for (bool reversed : { false, true }) {
+        int reads = 0;
+        EngineDocument model(test::readerFonts());
+        auto resources = openPublication(model, files, [&](const QString &name) {
+            if (name == "META-INF/container.xml")
+                ++reads;
+            return true;
+        });
+        resources->releaseBytes();
+        reads = 0;
+        model.mainTextMarks = { { "start", mark(front) }, { "end", mark(story) } };
+        ReaderFrame frame;
+        captureChapters(frame, model);
+        require(!reads && frame.state.value("main_text_marks").toObject() == model.mainTextMarks
+                        && frame.state.value("main_text_bounded").toBool(),
+                "A marked frame read publisher boundaries or lost its saved range");
+
+        model.releaseImages();
+        QMap<QString, qint64> sizes;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            sizes.insert(it.key(), it.value().size());
+        require(model.rebindResources(resources->fresh(), sizes), "Could not rebind marked book");
+        model.mainTextMarks["end"] = mark(QStringLiteral(""));
+        captureChapters(frame, model);
+        require(!reads && frame.state.value("main_text_last").toInt() == -1,
+                "An explicit end of book read the publisher range after a retained opening");
+
+        model.mainTextMarks = reversed
+                ? QJsonObject{ { "start", mark(story) }, { "end", mark(front) } }
+                : QJsonObject{};
+        captureChapters(frame, model);
+        require(reads > 0 && model.mainTextHints() == publisher
+                        && !model.mainTextMarks.contains("end")
+                        && frame.state.value("main_text_marks").toObject() == model.mainTextMarks,
+                "Clearing or reversing saved marks failed to restore the publisher boundaries");
+    }
+}
+
 void checkBoundaryScanAcrossChapterMode()
 {
     const auto files = test::publisherPackage(
@@ -286,6 +339,9 @@ void checkBoundaryScanAcrossChapterMode()
         resources->releaseBytes();
         reads = 0;
         fail = failFirstScan;
+        // The range editor still needs the publisher defaults when both marks are set.
+        model.mainTextMarks = { { "start", QJsonObject{ { "anchor", "/body/DocFragment[1]" } } },
+                                { "end", QJsonObject{ { "anchor", "/body/DocFragment[2]" } } } };
         const auto first = model.mainTextHints();
         require(reads > 0 && (failFirstScan ? first != expected : first == expected),
                 "The whole-book boundary scan did not exercise the selected resource");
@@ -846,6 +902,7 @@ int main(int argc, char **argv)
     checkChapterGlossary();
     checkUnloadedMainTextRange();
     checkBoundaryScanAcrossChapterMode();
+    checkSavedMainTextBoundaries();
     checkBoxedMainTextBoundaries();
     checkUnresolvedSpineFallbacks();
     checkNcxPageListWithNavContents();

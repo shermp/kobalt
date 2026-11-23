@@ -144,7 +144,7 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
         bookPages(result.chapters);
         bookPages(result.chapterGraph);
     }
-    auto hints = engine.mainTextHints();
+    auto hints = engine.mainTextHints(true);
     bool deferred = false;
     if (!engine.validMainTextRange(hints.first, hints.second, &deferred))
         hints.second.clear();

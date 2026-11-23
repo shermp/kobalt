@@ -205,7 +205,7 @@ public:
     QStringList spineLocationNames() const;
     bool validMainTextRange(const QString &first, const QString &after,
                             bool *deferred = nullptr) const override;
-    QPair<QString, QString> mainTextHints() const override;
+    QPair<QString, QString> mainTextHints(bool forFrame = false) const override;
     QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index,
                                     bool *deferred = nullptr) const override;
     QString afterChapter(const QVector<ChapterLink> &links, int index,
