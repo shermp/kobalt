@@ -895,6 +895,31 @@ static void checkRasterScaling()
     }
 }
 
+static void checkBlackGlyphCoverage()
+{
+    lUInt32 pixels[256];
+    lUInt8 mask[256];
+    LVColorDrawBuf buffer(256, 1, reinterpret_cast<lUInt8 *>(pixels), 32);
+    const lUInt32 ink = 0;
+    for (int channel = 0; channel < 256; ++channel) {
+        const lUInt32 paper = qRgba(channel, 255 - channel, channel ^ 0x55, 128);
+        for (int coverage = 0; coverage < 256; ++coverage) {
+            pixels[coverage] = paper;
+            mask[coverage] = lUInt8(coverage);
+        }
+        buffer.Draw(0, 0, mask, 256, 1, &ink);
+        for (int coverage = 0; coverage < 256; ++coverage) {
+            const auto blend = [coverage](int value) {
+                return coverage == 255 ? 0 : (value * (255 - ((coverage * 255) >> 8))) >> 8;
+            };
+            const lUInt32 expected = coverage
+                    ? qRgba(blend(qRed(paper)), blend(qGreen(paper)), blend(qBlue(paper)), 0)
+                    : paper;
+            require(pixels[coverage] == expected, "Black glyph changed the source-over result");
+        }
+    }
+}
+
 static void checkDrawPalette()
 {
     LVColorDrawBuf color(2, 2, 32);
@@ -1782,6 +1807,7 @@ int main(int argc, char **argv)
                 "Legacy font alias changed");
     }
     checkDrawPalette();
+    checkBlackGlyphCoverage();
     checkRasterScaling();
     checkGif();
     checkSvg();

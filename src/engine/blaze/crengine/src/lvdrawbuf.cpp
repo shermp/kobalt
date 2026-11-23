@@ -2168,6 +2168,27 @@ void LVColorDrawBuf::Draw( int x, int y, const lUInt8 * bitmap, int width, int h
         if (bopacity == 0) // Fully transparent color
             return;
 
+        // Blaze: opaque black adds no source color. For nonzero glyph coverage,
+        // (coverage * 255) >> 8 is coverage - 1, so the background weight
+        // is 256 - coverage. At full coverage all three channels become zero.
+        if ( bmpcl == 0 ) {
+            while (height--) {
+                lUInt32 * __restrict dst = ((lUInt32*)GetScanLine(y++)) + x;
+                for (int col = 0; col < width; ++col) {
+                    const lUInt8 coverage = bitmap[col];
+                    if (coverage) {
+                        const lUInt32 background = dst[col];
+                        const unsigned alpha = 256 - coverage;
+                        const lUInt32 rb = (((background & 0xFF00FF) * alpha) >> 8) & 0xFF00FF;
+                        const lUInt32 g = (((background & 0x00FF00) * alpha) >> 8) & 0x00FF00;
+                        dst[col] = rb | g;
+                    }
+                }
+                bitmap += bmp_width;
+            }
+            return;
+        }
+
         while (height--)
         {
             const lUInt8 * __restrict src = bitmap;

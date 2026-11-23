@@ -140,6 +140,16 @@ The default upstream configuration searches one linked list per local cache. Bla
 
 **Upstream:** present upstream.
 
+### Blend opaque black glyphs with the background
+
+**Summary:** the 32-bit draw buffer scales the background channels directly when the glyph ink is opaque black.
+
+In the original blend, the ink contributes zero to each color channel. For any nonzero bitmap coverage, the remaining background weight is exactly 256 minus the coverage. Blaze uses that weight and preserves the entire destination pixel at zero coverage. Painting 48 pages each of Moby-Dick and War and Peace used about 5% and 10% less CPU in the Qt 5.2 ARM emulator. Their page pixels matched.
+
+**Code:** the bitmap overload of `LVColorDrawBuf::Draw` in [lvdrawbuf.cpp](crengine/src/lvdrawbuf.cpp).
+
+**Upstream:** present upstream. We checked the blending formula in the pinned source.
+
 ### Stop at the first ink when checking word overlap
 
 **Summary:** the horizontal overlap check stops scanning a glyph row once it finds the edge.
