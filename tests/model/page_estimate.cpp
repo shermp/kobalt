@@ -3745,9 +3745,27 @@ static void lazyChapterFragments()
             "Retrying a temporary read failure did not restore the saved range");
 }
 
+static void spineSubscripts()
+{
+    const auto check = [](const QString &path, int item, bool atStart) {
+        bool start = !atStart;
+        require(spineItemIndex(path, &start) == item && start == atStart,
+                "Spine subscript or fragment start changed");
+    };
+    check(QStringLiteral("/body"), -1, false);
+    check(QStringLiteral("/body/DocFragment"), 0, true);
+    check(QStringLiteral("/body[1]/DocFragment[0024].0"), 23, true);
+    check(QStringLiteral("/DocFragment[3]/body/DocFragment[7]"), 2, false);
+    check(QStringLiteral("/DocFragment[0]"), 0, true);
+    check(QStringLiteral("/DocFragment[2147483648].0"), 0, true);
+    check(QStringLiteral("/DocFragment[+2]"), 0, false);
+    check(QStringLiteral("/DocFragment[2"), 0, false);
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    spineSubscripts();
     layoutProgressForward();
 #if __has_include(<koblaze.h>)
     if (argc > 2 && QByteArray(argv[1]) == "--chapter") {

@@ -452,15 +452,32 @@ int chapterSlicePages()
 
 int spineItemIndex(const QString &position, bool *atStart)
 {
-    static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
-    const auto match = fragment.match(position);
-    if (atStart) {
-        const auto end = match.capturedEnd();
-        *atStart = match.hasMatch()
-                && (end == position.size()
-                    || (end + 2 == position.size() && position.endsWith(".0")));
+    static const auto fragment = QStringLiteral("/DocFragment");
+    const auto start = position.indexOf(fragment);
+    if (start < 0) {
+        if (atStart)
+            *atStart = false;
+        return -1;
     }
-    return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
+    auto end = start + fragment.size();
+    int index = 0;
+    if (end < position.size() && position.at(end) == QLatin1Char('[')) {
+        const auto first = end + 1;
+        auto digit = first;
+        while (digit < position.size() && position.at(digit) >= QLatin1Char('0')
+               && position.at(digit) <= QLatin1Char('9'))
+            ++digit;
+        // Only a complete decimal subscript belongs to the fragment. An
+        // omitted or ill-formed subscript keeps the historical first item.
+        if (digit > first && digit < position.size() && position.at(digit) == QLatin1Char(']')) {
+            index = position.mid(first, digit - first).toInt();
+            end = digit + 1;
+        }
+    }
+    if (atStart)
+        *atStart = end == position.size()
+                || (position.size() - end == 2 && position.endsWith(QLatin1String(".0")));
+    return qMax(1, index) - 1;
 }
 
 static bool inspectMemoryArchive(const QByteArray &bytes, Publication &publication, QString *error)
