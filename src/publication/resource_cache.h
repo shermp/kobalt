@@ -51,7 +51,7 @@ public:
 
     quint64 imageRevision() const { return imageRevision_; }
 
-    bool contains(const QString &name) const { return names_.contains(name); }
+    bool contains(const QString &name) const;
 
     const QStringList &names() const { return names_; }
 
@@ -79,6 +79,7 @@ private:
     };
 
     QStringList names_;
+    bool searchNamesByBisection_;
     Loader loader_;
     Statistics transferStatistics_;
     ImageProbe imageProbe_;

@@ -14,6 +14,21 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     auto cancelled = std::make_shared<std::atomic_bool>(false);
     {
+        QStringList names;
+        for (int i = 0; i < 80; ++i)
+            names.append(QStringLiteral("chapter%1.xhtml").arg(i, 3, 10, QChar('0')));
+        for (int pass = 0; pass < 2; ++pass) {
+            ResourceCache directory(names, ResourceCache::Access{});
+            require(directory.names() == names, "Resource enumeration changed order");
+            for (const auto &name : names)
+                require(directory.contains(name), "Missing resource name");
+            require(!directory.contains("chapter040a.xhtml")
+                            && !directory.contains("Chapter040.xhtml"),
+                    "Directory lookup accepted a different name");
+            names.move(0, names.size() - 1);
+        }
+    }
+    {
         const int block = int(ResourceCache::blockBytes);
         for (const int size : { 0, 1, block - 1, block, block + 1, 2 * block + 17 }) {
             QByteArray payload(size, Qt::Uninitialized);

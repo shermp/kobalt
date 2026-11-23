@@ -3,6 +3,7 @@
 #include "resource_cache.h"
 #include <QCryptographicHash>
 #include <QElapsedTimer>
+#include <algorithm>
 #include <cstring>
 
 namespace kobalt {
@@ -18,11 +19,22 @@ ResourceCache::ResourceCache(QStringList names, Loader loader,
 
 ResourceCache::ResourceCache(QStringList names, Access access)
     : names_(std::move(names)),
+      searchNamesByBisection_(names_.size() >= 64
+                              && std::is_sorted(names_.cbegin(), names_.cend())),
       loader_(std::move(access.loader)),
       transferStatistics_(std::move(access.statistics)),
       imageProbe_(std::move(access.imageProbe)),
       cancelled_(std::move(access.cancelled))
 {
+}
+
+bool ResourceCache::contains(const QString &name) const
+{
+    // File and device providers supply sorted map keys. Archive-order callers
+    // retain their original enumeration without a second copy of the directory.
+    if (searchNamesByBisection_)
+        return std::binary_search(names_.cbegin(), names_.cend(), name);
+    return names_.contains(name);
 }
 
 std::shared_ptr<ResourceCache> ResourceCache::fresh() const
