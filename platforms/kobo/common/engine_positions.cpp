@@ -142,17 +142,6 @@ const Source *chapterSource(SourceCache &cached, quint64 identity, ldomDocument 
     return cached.valid ? &cached.source : nullptr;
 }
 
-// CREngine wraps some content in its own elements while it lays out a
-// chapter. They are not in the source, so a path through one cannot match.
-bool engineWrapper(ldomNode *node)
-{
-    for (const char *name : { "autoBoxing", "tabularBox", "rubyBox", "mathBox", "floatBox",
-                              "inlineBox", "pseudoElem" })
-        if (node->isNodeName(name))
-            return true;
-    return false;
-}
-
 // Plain EPUB chapters often have no element IDs. An element is then found by
 // its index among its parent's elements, from <body>, which CREngine keeps
 // inside the chapter's DocFragment. Each step must have the same element name.
@@ -184,7 +173,7 @@ bool engineElementPath(ldomNode *fragment, ldomNode *element, ElementPath &path)
     if (!body)
         return false;
     for (auto *node = element; node != body; node = node->getParentNode()) {
-        if (!node || !node->isElement() || engineWrapper(node))
+        if (!node || !node->isElement() || node->isBoxingNode(true))
             return false;
         auto *parent = node->getParentNode();
         if (!parent)
@@ -195,7 +184,7 @@ bool engineElementPath(ldomNode *fragment, ldomNode *element, ElementPath &path)
             auto *child = parent->getChildNode(i);
             if (!child->isElement())
                 continue;
-            if (engineWrapper(child))
+            if (child->isBoxingNode(true))
                 return false;
             if (child == node)
                 found = true;
@@ -220,7 +209,7 @@ ldomNode *engineElement(ldomNode *fragment, const ElementPath &path)
             auto *child = node->getChildNode(i);
             if (!child->isElement())
                 continue;
-            if (engineWrapper(child))
+            if (child->isBoxingNode(true))
                 return nullptr;
             if (index++ == path.indices[step]) {
                 next = child;
@@ -848,13 +837,10 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
         if (!body) {
             return fail(strings::get("error.missing_publication_body"));
         }
-        for (int i = 0; i < body->getChildCount(); ++i) {
-            auto *node = body->getChildNode(i);
-            if (node != fragment && node->isElement() && node->isNodeName("DocFragment")
-                && qstring(node->getAttributeValue("Source")) == path) {
-                return fail(strings::get("error.ambiguous_native_chapter_path"));
-            }
-        }
+        // The spine lists direct DocFragments of the body. Exclude this one if it is listed.
+        const int ownEntry = fragment->getParentNode() == body ? 1 : 0;
+        if (engine.spineItems().count(path) > ownEntry)
+            return fail(strings::get("error.ambiguous_native_chapter_path"));
         // Keep the exact local anchor. Nickel gets a valid chapter start when
         // neither an ID nor the source structure supplies an exact offset.
         // This still lets it update the active book, cover and percentage.

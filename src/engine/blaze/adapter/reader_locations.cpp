@@ -87,11 +87,7 @@ QString spineHref(ldomNode *fragment)
 
 bool wrapper(ldomNode *node)
 {
-    for (const char *name :
-         { "autoBoxing", "tabularBox", "rubyBox", "mathBox", "floatBox", "inlineBox" })
-        if (node->isNodeName(name))
-            return true;
-    return false;
+    return node->isBoxingNode();
 }
 
 bool generated(ldomNode *node)
