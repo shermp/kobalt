@@ -570,7 +570,7 @@ if(BUILD_TESTING)
         "${KOBALT_ROOT}/platforms/kobo/common/native_font_scale.cpp")
     set_target_properties(kobalt-power-screen-tests PROPERTIES ENABLE_EXPORTS ON)
     target_compile_definitions(kobalt-power-screen-tests PRIVATE KOBALT_TEST_ASSET_ROOT="${KOBALT_ASSETS}"
-        KOBALT_CONFIG_DIR="/unused" KOBALT_SYSTEM_FONT_DIRECTORY="")
+        KOBALT_CONFIG_DIR="." KOBALT_SYSTEM_FONT_DIRECTORY="")
     target_link_libraries(kobalt-power-screen-tests PRIVATE kobalt-desktop kobalt-core Qt6::Test Qt6::GuiPrivate)
     target_compile_options(kobalt-power-screen-tests PRIVATE -Wall -Wextra -Werror)
     add_dependencies(kobalt-tests kobalt-power-screen-tests)

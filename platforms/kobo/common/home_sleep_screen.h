@@ -51,8 +51,8 @@ private:
     sleep::Snapshot snapshot, shutdownBackdrop, fontBackdrop;
     // What lies under the status, so a battery change repaints only that.
     QVector<QImage> underlay;
-    // Nickel Home before its sleep view covers it, for a page-based power-off design.
-    QImage homePage;
+    // Clean Home page or shared artwork, before the sleeping status was painted.
+    sleep::Snapshot homeBackdrop;
     NativeBatteryStatus paintedBattery;
     void save(const sleep::Snapshot &, const QString &identity);
     bool poweredOff = false, invalidated = false;

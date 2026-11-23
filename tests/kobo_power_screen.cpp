@@ -800,7 +800,60 @@ private slots:
         power.show();
         QCOMPARE(pixels(), direct);
         owner.clear();
+        // Nickel may show its power view before reporting that sleep started.
+        // Its artwork must not become the reading-page backdrop at shutdown.
+        QVERIFY(owner.prepareHomeScreen());
+        owner.present();
+        QVERIFY(owner.prepareHomeScreen(true));
+        owner.present();
+        const auto viewFirst = pixels();
+        QVERIFY(!viewFirst.isNull());
+        owner.clear();
+        custom.off.backdrop = sleep::Mode::Plain; // No cover in this fixture.
+        sleep::setCustom(preferences, custom);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        QVERIFY(owner.prepareHomeScreen(true));
+        owner.present();
+        QCOMPARE(viewFirst, pixels());
+        owner.clear();
         power.setStyleSheet({});
+        // Changing the only candidate after sleep makes a second random pick observable.
+        const auto previousDirectory = QDir::currentPath();
+        const auto restoreDirectory = qScopeGuard([&] { QDir::setCurrent(previousDirectory); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        for (auto mode : { sleep::Mode::Wallpaper, sleep::Mode::Overlay }) {
+            const QString folder = mode == sleep::Mode::Wallpaper ? "wallpapers" : "screensaver";
+            QVERIFY(QDir().mkpath(folder));
+            const auto file = folder + "/art.png";
+            QImage art(60, 90, QImage::Format_ARGB32);
+            art.fill(Qt::green);
+            QVERIFY(art.save(file));
+            custom.same = true;
+            custom.sleep = { mode, sleep::Design::Seal, {} };
+            sleep::setCustom(preferences, custom);
+            QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+            power.hide();
+            QVERIFY(owner.prepareHomeScreen(true));
+            power.show();
+            const auto original = pixels();
+            QVERIFY(!original.isNull());
+            owner.clear();
+            power.hide();
+            QVERIFY(owner.prepareHomeScreen());
+            power.show();
+            owner.present();
+            art.fill(Qt::blue);
+            QVERIFY(art.save(file));
+            QVERIFY(owner.prepareHomeScreen(true));
+            owner.present();
+            QCOMPARE(pixels(), original);
+            owner.clear();
+            power.hide();
+            QVERIFY(owner.prepareHomeScreen(true));
+            power.show();
+            QVERIFY(pixels() != original);
+            owner.clear();
+        }
         // Every transition from Nickel requests one flash, even from a text-only screen.
         QLabel title(QStringLiteral("My Books"), &window);
         title.adjustSize();
@@ -808,7 +861,8 @@ private slots:
         power.raise();
         for (auto design : { sleep::Design::Seal, sleep::Design::Page }) {
             choose(design);
-            for (const auto &paper : { QColor(Qt::white), QColor(140, 140, 140), QColor(Qt::red) }) {
+            for (const auto &paper :
+                 { QColor(Qt::white), QColor(140, 140, 140), QColor(Qt::red) }) {
                 power.hide();
                 auto palette = window.palette();
                 palette.setColor(QPalette::Window, paper);
@@ -1276,17 +1330,28 @@ private slots:
     void powerOffKeepsSelectedDesign_data()
     {
         QTest::addColumn<int>("design");
+        QTest::addColumn<bool>("landscape");
         for (auto design : { kobalt::sleep::Design::Seal, kobalt::sleep::Design::Widgets })
-            QTest::newRow(qPrintable(kobalt::sleep::value(design))) << int(design);
+            QTest::newRow(qPrintable(kobalt::sleep::value(design))) << int(design) << false;
+        QTest::newRow("landscape-seal") << int(kobalt::sleep::Design::Seal) << true;
     }
 
     void powerOffKeepsSelectedDesign()
     {
         QFETCH(int, design);
+        QFETCH(bool, landscape);
+        auto *display = QGuiApplication::primaryScreen();
+        const auto original = display->orientation();
+        const auto orient = [display](Qt::ScreenOrientation value) {
+            QWindowSystemInterface::handleScreenOrientationChange(display, value);
+            QWindowSystemInterface::flushWindowSystemEvents();
+        };
+        const auto restore = qScopeGuard([&] { orient(original); });
+        orient(landscape ? Qt::LandscapeOrientation : Qt::PortraitOrientation);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         MainWindowView window;
-        window.resize(800, 1200);
+        window.resize(landscape ? QSize(1200, 800) : QSize(800, 1200));
         AbstractPowerView power(&window);
         power.setGeometry(window.rect());
         window.show();
@@ -1295,7 +1360,7 @@ private slots:
         kobalt::sleep::Snapshot snapshot;
         snapshot.image = QImage(window.size(), QImage::Format_RGB32);
         snapshot.image.fill(Qt::gray);
-        snapshot.orientation = Qt::PortraitOrientation;
+        snapshot.orientation = display->orientation();
         snapshot.mode = kobalt::sleep::Mode::Cover;
         snapshot.design = kobalt::sleep::Design(design);
         snapshot.details.title = "Coverless shutdown check";

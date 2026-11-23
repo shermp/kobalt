@@ -118,8 +118,12 @@ bool nativeReading()
 QImage nativeScreen()
 {
     for (auto *widget : QApplication::topLevelWidgets())
-        if (widget->isVisible() && widget->inherits("MainWindowView"))
+        if (widget->isVisible() && widget->inherits("MainWindowView")) {
+            for (auto *child : widget->findChildren<QWidget *>())
+                if (child->isVisible() && child->inherits("AbstractPowerView"))
+                    return {};
             return widget->grab().toImage().convertToFormat(QImage::Format_RGB32);
+        }
     return {};
 }
 
@@ -348,7 +352,7 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
 
 bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIdentity)
 {
-    auto pageBeforeSleep = std::move(homePage);
+    auto previous = std::move(homeBackdrop);
     const bool hadSleepScreen = !snapshot.image.isNull();
     if (preparePrivateScreen(powerOff, openingIdentity))
         return true;
@@ -380,14 +384,26 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         return mode == sleep::Mode::Page || mode == sleep::Mode::Overlay;
     };
     QImage page;
+    const bool sharedArt =
+            (look.mode == sleep::Mode::Overlay || look.mode == sleep::Mode::Wallpaper)
+            && (sleep::design(preferences.object) != sleep::Design::Custom
+                || sleep::custom(preferences.object).same);
+    const bool reuseArt =
+            powerOff && sharedArt && previous.mode == look.mode && !previous.image.isNull();
     const bool keepPage = !powerOff && needsPage(sleep::look(preferences.object, true).mode);
-    if (needsPage(look.mode) || keepPage)
-        page = powerOff && hadSleepScreen ? std::move(pageBeforeSleep) : nativeScreen();
-    if (keepPage)
-        homePage = page;
+    if (!reuseArt && (needsPage(look.mode) || keepPage)) {
+        if (!powerOff || !hadSleepScreen)
+            page = nativeScreen();
+        else if (previous.mode == sleep::Mode::Page)
+            page = std::move(previous.image);
+    }
+    if (keepPage && !sharedArt) {
+        homeBackdrop.mode = sleep::Mode::Page;
+        homeBackdrop.image = page;
+    }
     if (!needsPage(look.mode))
         page = {};
-    else if (page.isNull())
+    else if (!reuseArt && page.isNull())
         look.mode = sleep::Mode::Cover;
     const auto *screen = QGuiApplication::primaryScreen();
     QSize size = screen ? screen->size() : QSize(800, 1200);
@@ -417,7 +433,10 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
     shot.details.font = preferences.object.value("default_font_face").toString();
     shot.details.greeting = preferences.object.value(sleep::greetingKey).toString();
     shot.mode = look.mode;
-    if (!page.isNull()) {
+    if (reuseArt) {
+        shot.image = std::move(previous.image);
+        shot.dimPage = previous.dimPage;
+    } else if (!page.isNull()) {
         shot.image = std::move(page);
         shot.dimPage = true;
         if (look.mode == sleep::Mode::Overlay) {
@@ -450,6 +469,8 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         shot.image = QImage(size, QImage::Format_RGB32);
         shot.image.fill(shot.dark ? Qt::black : Qt::white);
     }
+    if (!powerOff && sharedArt && shot.mode == look.mode)
+        homeBackdrop = shot;
     snapshot = std::move(shot);
     poweredOff = powerOff;
     composeHome();
@@ -489,6 +510,7 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     snapshot.design = look.design;
     snapshot.place = sleep::place(preferences.object, {}, look);
     poweredOff = powerOff;
+    reader::portraitSleepSnapshot(snapshot);
     compose();
 }
 
@@ -535,6 +557,7 @@ void HomeSleepScreen::setFontSource(ReaderEnvironment &environment, std::functio
 
 void HomeSleepScreen::composeHome()
 {
+    reader::portraitSleepSnapshot(snapshot);
     if (prepareFonts && prepareFonts())
         fontBackdrop = snapshot;
     compose();
@@ -556,7 +579,6 @@ void HomeSleepScreen::compose()
 {
     if (snapshot.image.isNull())
         return;
-    reader::portraitSleepSnapshot(snapshot);
     const auto battery = nativeReaderBattery();
     paintedBattery = battery;
     const auto status = poweredOff ? reader::SleepStatus::PoweredOff
@@ -588,7 +610,7 @@ void HomeSleepScreen::clearFrame()
     underlay.clear();
     shutdownBackdrop = {};
     fontBackdrop = {};
-    homePage = {};
+    homeBackdrop = {};
     poweredOff = false;
 }
 
