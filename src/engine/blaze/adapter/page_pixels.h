@@ -65,14 +65,26 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorT
     auto *tiles = colorTiles ? colorTiles->data() : nullptr;
     for (int y = 0; y < height; ++y) {
         const auto *pixels = reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        for (int x = 0; x < width; ++x) {
-            const QRgb pixel = pixels[x];
-            if (qRed(pixel) == qGreen(pixel) && qGreen(pixel) == qBlue(pixel))
+        for (int first = 0; first < width; first += 32) {
+            auto *tile = tiles ? &tiles[(y / 32) * tileColumns + first / 32] : nullptr;
+            // Faint colour marks a tile. Keep looking in marked tiles until
+            // a pixel passes the stronger threshold for the page itself.
+            if (hasColor && tile && *tile)
                 continue;
-            if (hasVisibleColor(pixel))
-                hasColor = true;
-            if (tiles)
-                tiles[(y / 32) * tileColumns + x / 32] = 1;
+            const int end = qMin(width, first + 32);
+            for (int x = first; x < end; ++x) {
+                const QRgb pixel = pixels[x];
+                if (qRed(pixel) == qGreen(pixel) && qGreen(pixel) == qBlue(pixel))
+                    continue;
+                if (tile)
+                    *tile = 1;
+                if (hasColor || hasVisibleColor(pixel)) {
+                    hasColor = true;
+                    if (!tile)
+                        return true;
+                    break;
+                }
+            }
         }
     }
     return hasColor;

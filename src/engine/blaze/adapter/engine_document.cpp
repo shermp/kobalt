@@ -138,7 +138,7 @@ private:
 };
 
 // A white border and mostly white paper distinguish illustrations from dark artwork.
-// Check every visible source pixel so even a small colour accent prevents inversion.
+// Even a single visible colour accent prevents inversion.
 class IllustrationProbe : public LVImageDecoderCallback
 {
 public:
@@ -163,13 +163,17 @@ private:
     bool OnLineDecoded(LVImageSource *, int y, lUInt32 *pixels) override
     {
         ++lines;
+        if (!neutral)
+            return true;
         for (int x = 0; x < width; ++x) {
             const auto pixel = pixels[x];
             // CREngine uses an inverted alpha channel. Invisible RGB is irrelevant.
             const int transparency = pixel >> 24;
             if (transparency != 255
-                && (qRed(pixel) != qGreen(pixel) || qRed(pixel) != qBlue(pixel)))
+                && (qRed(pixel) != qGreen(pixel) || qRed(pixel) != qBlue(pixel))) {
                 neutral = false;
+                return true;
+            }
             const bool paper = transparency == 255
                     || (qRed(pixel) >= 245 && qGreen(pixel) >= 245 && qBlue(pixel) >= 245);
             ++total;

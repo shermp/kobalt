@@ -202,7 +202,8 @@ int main(int argc, char **argv)
             for (int x = 30; x < 70; ++x)
                 illustration.setPixel(x, y, type == "color" ? qRgb(255, 0, 0) : qRgb(60, 60, 60));
         if (type == "accent")
-            illustration.setPixel(50, 50, qRgb(255, 0, 0));
+            illustration.setPixel(illustration.width() - 1, illustration.height() - 1,
+                                  qRgb(255, 0, 0));
         QByteArray bytes;
         QBuffer encoded(&bytes);
         require(encoded.open(QIODevice::WriteOnly) && illustration.save(&encoded, "PNG"),

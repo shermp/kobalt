@@ -12,6 +12,14 @@ int main()
     std::mt19937 random(42);
     QImage empty;
     CHECK(!kobalt::normalizePagePixels(empty, false, nullptr, 0));
+    QImage sparse(65, 2, QImage::Format_RGB32);
+    sparse.fill(qRgb(40, 40, 40));
+    sparse.setPixel(0, 0, qRgb(40, 40, 41));
+    sparse.setPixel(31, 1, qRgb(40, 40, 90));
+    sparse.setPixel(64, 1, qRgb(40, 40, 41));
+    QVector<uchar> marked(3, 0);
+    CHECK(kobalt::normalizePagePixels(sparse, false, &marked, 3));
+    CHECK(marked.at(0) && !marked.at(1) && marked.at(2));
     for (int width : { 1, 2, 3, 4, 5, 7, 31, 32, 33, 65, 1072 }) {
         for (int pattern = 0; pattern < 5; ++pattern)
             for (bool dark : { false, true })
