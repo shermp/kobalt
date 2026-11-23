@@ -218,6 +218,14 @@ The saving is one read of the central directory for each opening, which matters 
 
 **Upstream:** not upstream.
 
+### EPUB 3 books with a second table of contents
+
+When the EPUB 3 navigation document supplies the contents but no printed pages, the importer checks the NCX for a `pageList`. The XML parser reads the NCX once. Its document writer skips the contents of the top-level `navMap` and keeps the printed page labels and destinations. When tags in the skipped contents are unbalanced, the ordinary DOM writer reads the NCX again and applies its usual recovery.
+
+**Code:** [ncx_page_list.h](extensions/ncx_page_list.h) and `ImportEpubDocument` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
+
+**Upstream:** not upstream.
+
 ## Features
 
 ### Vertical writing

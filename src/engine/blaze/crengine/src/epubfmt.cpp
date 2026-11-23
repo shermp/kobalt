@@ -52,6 +52,7 @@ public:
 #include "../../extensions/spine_fallback.h"
 #include "../../extensions/dtbook.h"
 #include "../../extensions/nav_labels.h"
+#include "../../extensions/ncx_page_list.h"
 
 //static void dumpZip( LVContainerRef arc ) {
 //    lString32 arcName = LVExtractFilenameWithoutExtension( arc->GetName() );
@@ -1893,7 +1894,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             codeBase.append(1, U'/');
         appender.setCodeBase(codeBase);
         if ( !stream.isNull() ) {
-            ldomDocument * ncxdoc = LVParseXMLStream( stream );
+            // Blaze: the EPUB 3 navigation document may already supply the TOC.
+            ldomDocument * ncxdoc = has_toc ? blaze::parseNcxPageList(stream) : LVParseXMLStream(stream);
             if ( ncxdoc!=NULL ) {
                 if ( !has_toc ) {
                     ldomNode * navMap = ncxdoc->nodeFromXPath( cs32("ncx/navMap"));

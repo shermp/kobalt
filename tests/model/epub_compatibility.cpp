@@ -250,6 +250,41 @@ void checkUnresolvedSpineFallbacks()
     }
 }
 
+void checkNcxPageListWithNavContents()
+{
+    auto files = test::engineBook(false, 2, 3);
+    auto &opf = files["OEBPS/book.opf"];
+    opf.replace("version=\"2.0\"", "version=\"3.0\"");
+    opf.replace("</manifest>",
+                "<item id='nav' href='nav.xhtml' media-type='application/xhtml+xml' "
+                "properties='nav'/></manifest>");
+    files["OEBPS/nav.xhtml"] = test::publisherHtml(
+            "<nav epub:type='toc'><ol><li><a href='c1.xhtml'>Navigation</a></li></ol></nav>");
+    auto &ncx = files["OEBPS/toc.ncx"];
+    for (int variant = 0; variant < 3; ++variant) {
+        if (variant == 1) {
+            ncx.replace("</ncx>",
+                        "<pageList><pageTarget type='front' value='14'><navLabel><text>xiv</text>"
+                        "</navLabel><content src='c2.xhtml'/></pageTarget></pageList></ncx>");
+        }
+        if (variant == 2)
+            ncx.replace("</navMap>", "<navPoint><navLabel></navMap>");
+        EngineDocument model(test::readerFonts());
+        openPublication(model, files);
+        const auto contents = model.chapters();
+        require(contents.size() == 1 && contents.first().title == "Navigation",
+                "The NCX replaced the EPUB 3 navigation contents");
+        const auto pages = model.printedPages();
+        if (variant != 0)
+            require(pages.size() == 1 && pages.first().title == "xiv"
+                            && model.goTo(pages.first().position)
+                            && model.spineItemOf(model.position()) == 1,
+                    "Missing NCX page target beside EPUB 3 navigation contents");
+        else
+            require(pages.isEmpty(), "An NCX without a page list supplied printed pages");
+    }
+}
+
 void checkNavigation(bool epub3)
 {
     auto files = test::engineBook(true, 3, 12);
@@ -710,6 +745,7 @@ int main(int argc, char **argv)
     checkUnloadedMainTextRange();
     checkBoxedMainTextBoundaries();
     checkUnresolvedSpineFallbacks();
+    checkNcxPageListWithNavContents();
     checkNavigation(false);
     checkNavigation(true);
     return 0;
