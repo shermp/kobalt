@@ -191,6 +191,10 @@ void checkUnloadedMainTextRange()
             "Missing source boundaries in the second spine item");
     require(model.validMainTextRange(start, end), "The loaded chapter rejected its main text");
     QString error;
+    require(model.showSpineItems(1, 1, &error), qPrintable(error));
+    const auto paragraph = root + "/section[1]/p/text()";
+    require(model.textRange(paragraph + ".0", paragraph + ".4").text == "Main",
+            "A preceding placeholder changed the loaded chapter's paragraph position");
     require(model.showSpineItems(0, 0, &error), qPrintable(error));
     require(model.validMainTextRange(hints.first, hints.second),
             "The source boundaries were lost outside the chapter window");

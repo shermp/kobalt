@@ -766,7 +766,7 @@ These changes serve Kobalt's reader on slow single-core devices. They add host i
 
 **Summary:** Blaze can lay out one slice of a spine item at a time, instead of the whole book.
 
-The host selects a character range of each spine item. The block renderer calls `koblazeEnterBlock` and leaves out blocks outside the slice, and the page splitter starts the first page of a slice at the top of its first block. The EPUB importer can load a window of spine items and inserts an empty fragment for each skipped item, so saved positions keep their fragment indices.
+The host selects a character range of each spine item. The block renderer calls `koblazeEnterBlock` and leaves out blocks outside the slice, and the page splitter starts the first page of a slice at the top of its first block. The EPUB importer can load a window of spine items and inserts an empty fragment for each skipped item, so saved positions keep their fragment indices. It sends the empty HTML and body directly to the fragment writer. This avoids creating a stream and running the HTML parser for each skipped item.
 
 **Code:** [chapter_layout.cpp](extensions/chapter_layout.cpp), [spine_window.cpp](extensions/spine_window.cpp), [koblaze.h](crengine/include/koblaze.h), and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp), [lvpagesplitter.cpp](crengine/src/lvpagesplitter.cpp) and [epubfmt.cpp](crengine/src/epubfmt.cpp).
 

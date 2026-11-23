@@ -1700,11 +1700,12 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 appender.setFragmentType(); // unset
                 if ( !koblazeSpineItemLoaded((int)i) ) {
                     // Blaze: keep an empty DocFragment so saved positions retain their spine indices.
-                    LVStreamRef mstream = LVCreateMemoryStream();
-                    lString8 s("<html><body></body></html>");
-                    mstream->Write(s.c_str(), s.length(), NULL);
-                    LVHTMLParser mparser(mstream, &appender);
-                    mparser.Parse();
+                    appender.OnStart(NULL);
+                    appender.OnTagOpenNoAttr(U"", U"html");
+                    appender.OnTagOpenNoAttr(U"", U"body");
+                    appender.OnTagClose(U"", U"body");
+                    appender.OnTagClose(U"", U"html");
+                    appender.OnStop();
                     fragmentCount++;
                     continue;
                 }
