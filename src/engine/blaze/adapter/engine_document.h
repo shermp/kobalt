@@ -360,10 +360,10 @@ public:
     QString position() const override;
     QString title() const override;
     QString author() const override;
-    // Decodes the host cover first, then the publication cover, within the
+    // Decodes the embedded or host cover in the requested order, within the
     // requested size and 4 million pixels. Empty means neither is usable.
     QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
-                      QString *usedPath = nullptr) const override;
+                      QString *usedPath = nullptr, bool preferEmbedded = false) const override;
     QVector<ChapterLink> landmarks() const override;
     QString printedPageLabel(const QString &position, bool exclusiveEnd = false,
                              bool *deferred = nullptr) override;

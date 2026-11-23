@@ -486,10 +486,10 @@ public:
     virtual QString position() const = 0;
     virtual QString title() const = 0;
     virtual QString author() const = 0;
-    // Decodes the host cover first, then the publication cover, within the
+    // Decodes the embedded or host cover in the requested order, within the
     // requested size and 4 million pixels. Empty means neither is usable.
     virtual QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
-                              QString *usedPath = nullptr) const = 0;
+                              QString *usedPath = nullptr, bool preferEmbedded = false) const = 0;
     virtual QVector<ChapterLink> landmarks() const = 0;
     virtual QString printedPageLabel(const QString &position, bool exclusiveEnd = false,
                                      bool *deferred = nullptr) = 0;

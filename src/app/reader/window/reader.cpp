@@ -497,7 +497,7 @@ void Reader::prepareSleepCover()
 #endif
                 }
             },
-            services.coverImagePath);
+            services.coverImagePath, services.preferEmbeddedSleepCover);
 }
 
 void Reader::prepareSleepOverlay()

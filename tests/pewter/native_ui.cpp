@@ -1,6 +1,7 @@
 #include "nickel.h"
 #include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_ui.h"
+#include "platforms/kobo/common/reader_host_services.h"
 #include "platform/api/kobo_refresh.h"
 #include "platforms/kobo/display/sleep_refresh.h"
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -303,6 +304,8 @@ int main(int argc, char **argv)
     for (bool tolino : { false, true }) {
         pewter::options().tolino = tolino;
         require(kobalt::nativeReaderSleepScreenAvailable(), "sleep screens support both brands");
+        require(kobalt::nickel::readerHostServices().preferEmbeddedSleepCover == tolino,
+                "Tolino prefers the embedded sleep cover");
         require(kobalt::nativeReaderCoverPath(nullptr).isEmpty(), "missing volume has no cover");
         require(kobalt::nativeReaderCoverPath(&volume).isEmpty(), "empty image ID has no cover");
         volume.data->values["ImageID"] = QStringLiteral("default");

@@ -971,7 +971,7 @@ QString EngineDocument::author() const
 }
 
 QImage EngineDocument::coverImage(QSize maximumSize, const QString &preferredPath,
-                                  QString *usedPath) const
+                                  QString *usedPath, bool preferEmbedded) const
 {
     if (usedPath)
         usedPath->clear();
@@ -1027,6 +1027,14 @@ QImage EngineDocument::coverImage(QSize maximumSize, const QString &preferredPat
         }
         return image;
     };
+    const auto embedded = [&] {
+        return engine_ ? decode(engine_->getCoverPageImageStream()) : QImage();
+    };
+    if (preferEmbedded) {
+        const auto image = embedded();
+        if (!image.isNull())
+            return image;
+    }
     if (!preferredPath.isEmpty()) {
         const auto image = decode(LVOpenFileStream(cre(preferredPath).c_str(), LVOM_READ));
         if (!image.isNull()) {
@@ -1035,7 +1043,7 @@ QImage EngineDocument::coverImage(QSize maximumSize, const QString &preferredPat
             return image;
         }
     }
-    return engine_ ? decode(engine_->getCoverPageImageStream()) : QImage();
+    return preferEmbedded ? QImage() : embedded();
 }
 
 QString EngineDocument::position() const

@@ -575,7 +575,7 @@ public:
     void coverImage(QSize maximumSize, std::function<void(QImage)> finished,
                     QString preferredPath = {});
     void coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished,
-                    QString preferredPath);
+                    QString preferredPath, bool preferEmbedded = false);
 
     void sleepOverlay(const QStringList &directories, std::function<void(QImage)> finished);
     // Lists the wallpapers and decodes one image for each entry of `wanted`, a

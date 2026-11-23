@@ -57,11 +57,15 @@ NativeWifiPowerBindings wifiPowerBindings(const std::function<bool()> &nickelSyn
     return result;
 }
 
-QString syncDeviceModel()
+const void *currentDevice()
 {
     const auto current = reinterpret_cast<const void *(*)()>(
             dlsym(RTLD_DEFAULT, "_ZN6Device16getCurrentDeviceEv"));
-    const auto *device = current ? current() : nullptr;
+    return current ? current() : nullptr;
+}
+
+QString syncDeviceModel(const void *device)
+{
     if (!device)
         return QStringLiteral("Kobo");
 
@@ -242,7 +246,12 @@ ReaderHostServices readerHostServices()
     result.sleepWallpaperDirectories =
             QStringList{ QStringLiteral(KOBALT_CONFIG_DIR "/wallpapers") };
     result.nativeSleepPreview = nativeSleepPreview;
-    result.deviceName = syncDeviceModel();
+    const auto *device = currentDevice();
+    result.deviceName = syncDeviceModel(device);
+    // Tolino can cache the first reading page as the full-size book cover.
+    const auto isTolino =
+            reinterpret_cast<bool (*)(const void *)>(dlsym(RTLD_DEFAULT, "_ZNK6Device8isTolinoEv"));
+    result.preferEmbeddedSleepCover = device && isTolino && isTolino(device);
     result.colorDisplay = [] { return pageAnimationPanel() == AnimationPanel::Color; };
     result.downloadableDictionaries = false;
     result.browserAvailable = nativeReaderBrowserAvailable;

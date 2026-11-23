@@ -1356,7 +1356,7 @@ void Reader::loadGalleryCover()
                 if (guard->sleepEditor)
                     guard->sleepEditor->setCover(image);
             },
-            services.coverImagePath);
+            services.coverImagePath, services.preferEmbeddedSleepCover);
 }
 
 // A hidden option: long-pressing Night in the gallery sets its greeting.

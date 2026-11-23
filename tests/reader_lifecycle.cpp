@@ -5094,9 +5094,11 @@ private slots:
                     .toString(),
             "OEBPS/c1.xhtml", 100, 1, true
         };
-        host.configureServices = [sleep, supported, chargeState,
+        host.configureServices = [sleep, supported, chargeState, hasCover,
                                   coverPath](ReaderHostServices &services) {
             services.coverImagePath = coverPath;
+            // Exercise the host fallback when the publication has no artwork.
+            services.preferEmbeddedSleepCover = !hasCover;
             services.battery = [chargeState] {
                 return BatteryStatus{ 67, chargeState > 0, chargeState == 2 };
             };
@@ -7424,6 +7426,18 @@ private slots:
         QTRY_VERIFY(nativeDone);
         QCOMPARE(cover.size(), nativeImage.size());
         QCOMPARE(provenance.absoluteFilePath(), nativePath);
+        nativeDone = false;
+        host.session()->coverImage(
+                { 60, 90 },
+                [&](QImage image, QFileInfo source) {
+                    cover = std::move(image);
+                    provenance = std::move(source);
+                    nativeDone = true;
+                },
+                nativePath, true);
+        QTRY_VERIFY(nativeDone);
+        QCOMPARE(cover.size(), QSize(60, 30));
+        QVERIFY(provenance.filePath().isEmpty());
         QFile corrupt(nativePath);
         QVERIFY(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
         corrupt.write("broken PNG");
@@ -12185,7 +12199,6 @@ private slots:
         {
             std::atomic_bool entered{ false }, released{ false };
         };
-
         const auto gate = std::make_shared<Gate>();
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -12201,6 +12214,7 @@ private slots:
 
         QSemaphore profileSaved;
         storage::RecordWriter profileWriter;
+
         struct Release
         {
             std::shared_ptr<Gate> gate;

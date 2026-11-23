@@ -48,7 +48,7 @@ Saving a highlight immediately before sleep finishes the accepted save before ha
   - Power-off uses its configured background and status. If both statuses are random, they share the same pick for that sleep.
 
 - Bookmark is the default.
-- Bookmark, Card and Cover use Kobo's full-screen cached cover if available, then the cover embedded in the book. The image fits without cropping and empty space is black. If no cover is usable, Kobalt uses the reading page.
+- Bookmark, Card and Cover use Kobo's full-screen cached cover if available, then the cover embedded in the book. On Tolino, these designs try the embedded cover first because the cached image can show the title page. The image fits without cropping and empty space is black. If no cover is usable, Kobalt uses the reading page.
 - Reading page dims the current page. An unavailable or changing page uses Kobo's sleep screen. Menus and dialogs are omitted and clock slots show a lock icon.
 - Use Kobo's screen uses Nickel's normal image.
 

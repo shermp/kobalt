@@ -96,6 +96,7 @@ struct ReaderHostServices
     // Optional host-resolved high-resolution cover. The reader decodes it on
     // its worker and falls back to the publication cover if it is unusable.
     QString coverImagePath;
+    bool preferEmbeddedSleepCover = false;
     // Optional host paths for user-supplied sleep PNGs.
     QStringList sleepOverlayDirectories;
     // Optional host paths for user-supplied sleep wallpapers.

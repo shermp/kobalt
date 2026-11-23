@@ -39,7 +39,7 @@ On Kobo, the first reading page after opening a book gets a full-screen refresh 
 - While a book opens, Kobalt shows its logo until the cover is ready, then shows the cover above the loading caption, progress bar and status line.
   - Select Do not show book cover while opening in Settings > System to keep the Kobalt logo instead, also when reopening or handing a book to the built-in reader. Progress and status messages stay visible in either mode.
   - The fixed cover area and controls form one centered group. Covers keep their proportions and stay centered in that area. A sharper cover can replace a thumbnail without moving the controls. Identical displayed cover pixels do not repaint.
-  - Kobo uses the same cover source as the cover sleep screen. If no cover can be read, Kobalt keeps its logo. The status line starts with “Preparing your book”.
+  - While opening a book, Kobalt tries the full-screen cover from Nickel’s cache first. If no cover can be read, Kobalt keeps its logo. The status line starts with “Preparing your book”.
   - Confirmed reuse of a retained book or a parsed-book cache changes it to “Reopening your book”. After four seconds, either path shows “This may take a while”. The delay does not restart when reuse is confirmed.
   - The status line keeps the same space throughout opening.
 

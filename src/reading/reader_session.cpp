@@ -1783,21 +1783,21 @@ void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage)> fi
 }
 
 void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished,
-                               QString preferredPath)
+                               QString preferredPath, bool preferEmbedded)
 {
     auto engine = engine_;
     const auto lease = lease_;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, lease, maximumSize, preferredPath, finished] {
+            [engine, guard, lease, maximumSize, preferredPath, preferEmbedded, finished] {
                 EngineJob activity;
                 QFileInfo before(preferredPath);
                 const auto bytes = before.size();
                 const auto modified = before.lastModified();
                 QString usedPath;
                 auto image = lease && !lease->revoked()
-                        ? engine->coverImage(maximumSize, preferredPath, &usedPath)
+                        ? engine->coverImage(maximumSize, preferredPath, &usedPath, preferEmbedded)
                         : QImage();
                 const QFileInfo after(usedPath);
                 const auto source = !usedPath.isEmpty() && before.isAbsolute() && before.isFile()
