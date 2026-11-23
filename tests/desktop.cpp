@@ -14228,13 +14228,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void settingsZenPage_data()
     {
         QTest::addColumn<bool>("signedIn");
-        QTest::newRow("signed-out") << false;
-        QTest::newRow("signed-in") << true;
+        QTest::addColumn<bool>("shortScreen");
+        QTest::newRow("signed-out") << false << false;
+        QTest::newRow("signed-in") << true << false;
+        QTest::newRow("phone-landscape") << true << true;
     }
 
     void settingsZenPage()
     {
         QFETCH(bool, signedIn);
+        QFETCH(bool, shortScreen);
         auto light = std::make_shared<GestureLightState>();
         Fixture fixture(false, false, false, true, false, false,
                         [light](ReaderHostServices &services) {
@@ -14259,6 +14262,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                          { "sync_on_close", false },
                                          { "automatic", false } }));
         }
+        if (shortScreen)
+            selectPreview(fixture, 5);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
@@ -14283,6 +14288,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.visible("rrZenAutomaticSync"), signedIn);
         for (const char *row : { "rrKosyncLogin", "rrDarkMode", "rrEdgeLight", "rrAboutVersion" })
             QVERIFY2(!fixture.widget(row), row);
+        if (shortScreen) {
+            const auto firstPage = labelText(fixture, "rrSettingsOptionsPage");
+            QVERIFY(revealSettingsOption(fixture, "rrZenAbout"));
+            const auto aboutPage = labelText(fixture, "rrSettingsOptionsPage");
+            QVERIFY(aboutPage != firstPage);
+            QVERIFY(fixture.press("rrZenAbout"));
+            QVERIFY(fixture.press("rrSettingsBack"));
+            QCOMPARE(labelText(fixture, "rrSettingsOptionsPage"), aboutPage);
+            return;
+        }
         if (signedIn) {
             QVERIFY(fixture.press("rrZenAutomaticSync"));
             QTRY_VERIFY(fixture.visible("rrKosyncAutomaticPopup"));
@@ -16892,12 +16907,20 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsSystem"));
+        auto *counter = fixture.window.readerWindow()->findChild<QLabel *>("rrSettingsOptionsPage");
+        QVERIFY(counter);
+        const auto firstPage = counter->text();
         QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        const auto systemPage = counter->text();
+        QVERIFY(systemPage != firstPage);
         auto *theming = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTheming"));
         QVERIFY(theming);
         QCOMPARE(theming->caption(),
                  strings::get(ui::colorThemes ? "settings.theme_playful" : "settings.theme_custom")
                          .toUpper());
+        QVERIFY(fixture.press("rrTheming"));
+        QVERIFY(fixture.press("rrSettingsBack"));
+        QCOMPARE(counter->text(), systemPage);
     }
 
     // A new interface font restyles every widget. The busy notice and its bar

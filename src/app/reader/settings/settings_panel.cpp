@@ -589,14 +589,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     backButton->hide();
     headingRows->addWidget(backButton);
     connect(backButton, &QPushButton::clicked, this, [this] {
-        if (settingsPages->currentWidget() == themingPage) {
-            settingsPages->setCurrentIndex(int(SettingsPage::System));
+        if (settingsPages->currentWidget() == themingPage || zen) {
+            settingsPages->setCurrentIndex(int(zen ? SettingsPage::Zen : SettingsPage::System));
+            showOptionsPage(returnOptionPage);
             return;
         }
         sectionOpen = false;
-        // In Zen mode, back returns from About to the Zen page.
-        if (zen)
-            settingsPages->setCurrentIndex(int(SettingsPage::Zen));
         if (refitRequested)
             refitRequested();
     });
@@ -1184,9 +1182,11 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
                            strings::get("settings.hide_tab_labels_description"));
     hideTabLabelsOption->setLeadingIcon(ui::ControlIcon::TextTSlash);
     systemRows->addWidget(hideTabLabelsOption);
-    themingButton =
-            listAction(systemPage, systemRows, "rrTheming", strings::get("settings.theming"),
-                       [this] { settingsPages->setCurrentIndex(int(SettingsPage::Theming)); });
+    themingButton = listAction(systemPage, systemRows, "rrTheming",
+                               strings::get("settings.theming"), [this] {
+                                   returnOptionPage = optionPage;
+                                   settingsPages->setCurrentIndex(int(SettingsPage::Theming));
+                               });
     if (!selectedTheme.isEmpty())
         themingButton->setCaption(shownThemeName(selectedTheme).toUpper());
     section(systemPage, systemRows, "rrSystemDictionarySection",
@@ -1440,6 +1440,7 @@ void SettingsPanel::buildZen()
     zenAboutButton = listAction(
             zenPage, zenRows, "rrZenAbout", strings::get("settings.zen_about"),
             [this] {
+                returnOptionPage = optionPage;
                 settingsPages->setCurrentIndex(int(SettingsPage::About));
                 if (refitRequested)
                     refitRequested();

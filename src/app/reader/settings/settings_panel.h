@@ -313,6 +313,7 @@ private:
     QVector<QRect> pageRows() const;
     bool repaginateQueued = false;
     int optionPage = 0, pageHeight = 0;
+    int returnOptionPage = 0;
     void showOptionsPage(int page);
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;

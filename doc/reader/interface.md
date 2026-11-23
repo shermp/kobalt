@@ -189,11 +189,11 @@ The reader's return control combines the arrow and optically centered title in o
   - The tabs keep their size and place, so the tapped tab does not move. Gray dividers close the group at both ends, and paper covers the page beside it, so no book text shows next to the tabs.
   - Opening either view, closing it with its tab and returning from Settings to the Zen menu each update the screen once.
 
-- In Zen Mode, Settings shows one short page instead of the section tabs.
+- Zen settings use the full width. On short screens, Previous and Next page through the options.
   - A ZEN caption sits at the right of the Settings heading. Display holds Dark mode, which applies at once, as on the Display tab.
   - On a device with a frontlight, Light appears when the edge swipes for light are off, because Zen Mode has no other light control. Light closes Settings and opens the Light panel.
   - Sync holds Sync now, with the last sync time as its description, and Automatic sync with its schedule. It appears only when a KOSync account is signed in, KOSync is not hidden and the open book can use KOSync.
-  - About Kobalt shows the version as its description and opens the About page with a back cell. All other settings stay hidden until you leave Zen Mode. Turning Zen Mode on stays on the Display tab.
+  - About Kobalt shows the version as its description and opens the About page. Back returns to the Zen settings page where you opened About. All other settings stay hidden until you leave Zen Mode. Turning Zen Mode on stays on the Display tab.
 
 - To leave Zen Mode, hold Hold to leave Zen Mode.
   - The button inverts and fills three steps, one every half second. Each step updates only the button, so the screen shows no animation. Letting go early clears the steps and keeps Zen Mode.
