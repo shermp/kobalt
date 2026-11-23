@@ -1597,13 +1597,15 @@ void Reader::ensureAppearance()
     QSet<QWidget *> before;
     for (auto *widget : findChildren<QWidget *>())
         before.insert(widget);
-    // The window built these controls before it had a theme. Some take
-    // colours from the theme while they are made, so they are made without
-    // it and get it below.
     const auto dark = property("reader_dark");
-    setProperty("reader_dark", QVariant());
+    // In dark mode the controls can take their final colors as they are built.
+    // Light mode needs the full palette pass for selection and disabled text.
+    const bool builtInDarkTheme = themeReady && dark.toBool();
+    if (!builtInDarkTheme)
+        setProperty("reader_dark", QVariant());
     buildAppearance(appearanceLayout);
-    setProperty("reader_dark", dark);
+    if (!builtInDarkTheme)
+        setProperty("reader_dark", dark);
     // As for Settings: polishing applies the style sheets, which replace the
     // gray roles, and the theme restores them, as for the window's widgets.
     QVector<QWidget *> added;
@@ -1614,7 +1616,7 @@ void Reader::ensureAppearance()
         }
     for (auto *widget : added) {
         if (themeReady)
-            themeWidget(widget, themePalette);
+            themeWidget(widget, themePalette, builtInDarkTheme);
         else
             textRefresh(widget);
     }

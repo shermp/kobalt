@@ -63,7 +63,7 @@ public:
     void clearError() { error_.clear(); }
 
     void open(ReaderSession &main, QSize viewport, std::function<void()> changed,
-              std::function<void()> opened);
+              std::function<void()> opened, std::function<void(ReaderSession &)> firstEdit = {});
     void mutate(ReaderSession &main, QSize viewport, std::function<void()> changed,
                 std::function<void()> opened, std::function<void(ReaderSession &)> operation);
     void resetPreview();

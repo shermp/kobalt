@@ -181,8 +181,8 @@ public:
 
     QJsonObject resourceStats() const { return frame.resources; }
 
-    void openPreview(const ReaderSession &source, QSize size,
-                     std::function<void(QString)> finished);
+    void openPreview(const ReaderSession &source, QSize size, std::function<void(QString)> finished,
+                     std::function<void(ReaderSession &)> firstEdit = {});
     // `chapterMode`: 1 shows the chapter only, 0 the whole book, -1 keeps
     // what is shown. hybridChapterMode goes to the chapter when the
     // appearance changes and keeps what is shown otherwise.
@@ -684,7 +684,18 @@ private:
     int pendingTurn = 0;
     bool loadingImage = false;
     bool preview_ = false;
-    bool openingPreview_ = false;
+
+    struct OpeningPreview
+    {
+        QSize size;
+        QStringList faces;
+        // A positive value is a pixel size. A negative value identifies a face
+        // in the immutable source catalog. Zero opens with the source settings.
+        std::atomic_int fontChoice{ 0 };
+        appearance::Patch fontEdit() const;
+    };
+
+    std::shared_ptr<OpeningPreview> openingPreview_;
     bool retiring = false;
     QHash<int, QString> printedScreenLabels_, printedChapterLabels_;
     quint64 printedLayout_ = 0;

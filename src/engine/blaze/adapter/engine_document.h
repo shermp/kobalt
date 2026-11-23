@@ -107,7 +107,8 @@ public:
 
     QString resourceError() const override;
     QJsonObject resourceStats() const override;
-    bool openPreview(Engine &source, QSize size, QString *error) override;
+    bool openPreview(Engine &source, QSize size, QString *error,
+                     const appearance::Patch &fontEdit = {}) override;
     bool go(int page) override;
     // The page that `delta` page turns from `from` reach. When hiding is enabled,
     // skip other non-linear sections. Returns `from` at either end.

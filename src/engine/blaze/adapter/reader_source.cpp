@@ -2285,7 +2285,8 @@ PagePreview EngineDocument::previewTurn(int direction,
 #endif
 }
 
-bool EngineDocument::openPreview(Engine &other, QSize size, QString *error)
+bool EngineDocument::openPreview(Engine &other, QSize size, QString *error,
+                                 const appearance::Patch &fontEdit)
 {
     auto fail = [error](const QString &message) {
         *error = message;
@@ -2297,6 +2298,12 @@ bool EngineDocument::openPreview(Engine &other, QSize size, QString *error)
     auto &source = static_cast<EngineDocument &>(other);
     if (!source.engine_)
         return fail(strings::get("error.no_section_to_preview"));
+    const auto &fields = fontEdit.fields();
+    if (!fields.isEmpty()
+        && (fields.size() != 1
+            || (!fields.contains("font_pixels") && fields.value("font_face").toString().isEmpty())
+            || !source.updateAppearance(fontEdit, size, {}, AppearanceAction::Validate)))
+        return fail(strings::get("error.could_not_update_text"));
     auto *document = source.engine_->getDocument();
     auto pointer = document->createXPointer(cre(source.position()));
     auto *fragment = pointer.isNull() ? nullptr : pointer.getNode();
@@ -2412,6 +2419,8 @@ bool EngineDocument::openPreview(Engine &other, QSize size, QString *error)
     preview->container = LVContainerRef(
             new SectionContainer(container, cre(packagePath), std::move(previewPackage)));
     auto settings = source.state();
+    if (!fields.isEmpty())
+        settings.insert(fields.begin().key(), fields.begin().value());
     QString anchor = source.position();
     anchor.replace(QRegularExpression("/DocFragment(?:\\[\\d+\\])?"), "/DocFragment[1]");
     settings["position"] = anchor;

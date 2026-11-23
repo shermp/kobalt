@@ -125,7 +125,8 @@ public:
 
     virtual QString resourceError() const = 0;
     virtual QJsonObject resourceStats() const = 0;
-    virtual bool openPreview(Engine &source, QSize size, QString *error) = 0;
+    virtual bool openPreview(Engine &source, QSize size, QString *error,
+                             const appearance::Patch &fontEdit = {}) = 0;
     virtual bool go(int page) = 0;
     // The page that `delta` page turns from `from` reach. When hiding is enabled,
     // skip other non-linear sections. Returns `from` at either end.

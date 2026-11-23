@@ -8,7 +8,8 @@ AppearanceEditSession::~AppearanceEditSession()
 }
 
 void AppearanceEditSession::open(ReaderSession &main, QSize viewport, std::function<void()> changed,
-                                 std::function<void()> opened)
+                                 std::function<void()> opened,
+                                 std::function<void(ReaderSession &)> firstEdit)
 {
     Q_ASSERT(!preview_);
     previewState_ = PreviewState::Opening;
@@ -18,14 +19,16 @@ void AppearanceEditSession::open(ReaderSession &main, QSize viewport, std::funct
     const quint64 generation = ++generation_;
     QPointer<AppearanceEditSession> guard(this);
     preview_->openPreview(
-            main, viewport, [guard, generation, opened = std::move(opened)](QString error) {
+            main, viewport,
+            [guard, generation, opened = std::move(opened)](QString error) {
                 if (!guard || guard->generation_ != generation)
                     return;
                 guard->previewState_ = error.isEmpty() ? PreviewState::Ready : PreviewState::Failed;
                 guard->error_ = std::move(error);
                 if (opened)
                     opened();
-            });
+            },
+            std::move(firstEdit));
 }
 
 void AppearanceEditSession::mutate(ReaderSession &main, QSize viewport,
@@ -37,8 +40,9 @@ void AppearanceEditSession::mutate(ReaderSession &main, QSize viewport,
     }
     edited_ = true;
     if (!preview_)
-        open(main, viewport, std::move(changed), std::move(opened));
-    operation(*preview_);
+        open(main, viewport, std::move(changed), std::move(opened), std::move(operation));
+    else
+        operation(*preview_);
 }
 
 void AppearanceEditSession::resetPreview()

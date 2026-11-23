@@ -80,6 +80,164 @@ struct ReaderLocationProbe
 };
 } // namespace kobalt
 
+// A single size edit opens at its final passage and pixels. A later edit or
+// a reversal while the open is pending must still win.
+static void coldFontPreview(ReaderSession &source, ReaderSession &reference, QSize viewport)
+{
+    const int original = source.fontSize();
+    const int target = original < maximumFontPixels() ? original + 1 : original - 1;
+    const auto sourceImage = source.image();
+    const auto sourcePosition = source.state().value("position");
+    const auto edit = [](ReaderSession &reader, int pixels) {
+        reader.editAppearance(appearance::Patch({ { "font_pixels", pixels } }));
+    };
+    QEventLoop ready;
+    reference.updated = [&] {
+        if (!reference.busy())
+            ready.quit();
+    };
+    edit(reference, target);
+    ready.exec();
+    require(reference.error().isEmpty(), "The reference preview must apply the size edit");
+    const auto expectedImage = reference.image();
+    const auto expectedPosition = reference.state().value("position");
+    const auto expectedPage = reference.page();
+    edit(reference, original);
+    ready.exec();
+    reference.updated = {};
+    for (bool revert : { false, true }) {
+        ReaderSession preview(test::readerFonts(), test::readerPlaceholder());
+        preview.updated = [&] {
+            if (!preview.busy())
+                ready.quit();
+        };
+        preview.openPreview(
+                source, viewport,
+                [&](QString error) {
+                    require(error.isEmpty(), qPrintable(error));
+                    if (!preview.busy())
+                        ready.quit();
+                },
+                [&](ReaderSession &draft) { edit(draft, target); });
+        if (revert)
+            edit(preview, original);
+        ready.exec();
+        require(preview.error().isEmpty()
+                        && preview.image() == (revert ? reference.image() : expectedImage)
+                        && preview.state().value("position") == expectedPosition
+                        && preview.page() == (revert ? reference.page() : expectedPage)
+                        && preview.state().value("font_pixels").toInt()
+                                == (revert ? original : target),
+                "The cold font preview lost the latest size, passage, or page pixels");
+        require(revert || preview.layoutStarts() == 0,
+                "Opening at the requested size queued a second layout");
+    }
+    for (bool invalid : { false, true }) {
+        ReaderSession preview(test::readerFonts(), test::readerPlaceholder());
+        const int spacing = source.spacing() == maximumLineSpacing ? source.spacing() - 1
+                                                                   : source.spacing() + 1;
+        preview.updated = [&] {
+            if (!preview.busy())
+                ready.quit();
+        };
+        preview.openPreview(
+                source, viewport,
+                [&](QString error) {
+                    require(error.isEmpty(), qPrintable(error));
+                    if (!preview.busy())
+                        ready.quit();
+                },
+                [&](ReaderSession &draft) {
+                    edit(draft, invalid ? maximumFontPixels() + 1 : target);
+                    if (!invalid)
+                        draft.editAppearance(appearance::Patch({ { "line_spacing", spacing } }));
+                });
+        ready.exec();
+        require(preview.layoutStarts() == 1, "A combined or invalid edit must use normal reflow");
+        if (invalid)
+            require(!preview.error().isEmpty()
+                            && preview.state().value("font_pixels").toInt() == original,
+                    "Opening a preview must not clamp an invalid font-size edit");
+        else
+            require(preview.error().isEmpty() && preview.fontSize() == target
+                            && preview.spacing() == spacing,
+                    "A combined opening edit must retain its other typography settings");
+    }
+    const auto originalFace = source.fontFace();
+    const QString targetFace = originalFace == "Noto Serif" ? "IBM Plex Sans" : "Noto Serif";
+    require(source.fontFaces().contains(targetFace), "A registered preview font is required");
+    const auto faceEdit = [&](const QString &face) {
+        return appearance::Patch({ { "font_face", face } });
+    };
+    reference.updated = [&] {
+        if (!reference.busy())
+            ready.quit();
+    };
+    reference.editAppearance(faceEdit(targetFace));
+    ready.exec();
+    const auto faceImage = reference.image();
+    const auto facePosition = reference.state().value("position");
+    reference.editAppearance(faceEdit(originalFace));
+    ready.exec();
+    reference.updated = {};
+    for (bool alsoResize : { false, true }) {
+        ReaderSession preview(test::readerFonts(), test::readerPlaceholder());
+        preview.updated = [&] {
+            if (!preview.busy())
+                ready.quit();
+        };
+        preview.openPreview(
+                source, viewport,
+                [&](QString error) {
+                    require(error.isEmpty(), qPrintable(error));
+                    if (!preview.busy())
+                        ready.quit();
+                },
+                [&](ReaderSession &draft) {
+                    draft.editAppearance(faceEdit(targetFace));
+                    if (alsoResize)
+                        edit(draft, target);
+                });
+        ready.exec();
+        require(preview.error().isEmpty() && preview.fontFace() == targetFace
+                        && preview.fontSize() == (alsoResize ? target : original),
+                "The cold preview lost the selected font or size");
+        if (alsoResize)
+            require(preview.layoutStarts() == 1, "A family and size change must use normal reflow");
+        else
+            require(preview.layoutStarts() == 0 && preview.image() == faceImage
+                            && preview.state().value("position") == facePosition,
+                    "Opening with the selected family must preserve pixels and passage");
+    }
+    for (const auto &face : QStringList{ QString(), QStringLiteral("Unavailable test family") }) {
+        ReaderSession preview(test::readerFonts(), test::readerPlaceholder());
+        preview.updated = [&] {
+            if (!preview.busy())
+                ready.quit();
+        };
+        preview.openPreview(
+                source, viewport,
+                [&](QString error) {
+                    require(error.isEmpty(), qPrintable(error));
+                    if (!preview.busy())
+                        ready.quit();
+                },
+                [&](ReaderSession &draft) { draft.editAppearance(faceEdit(face)); });
+        ready.exec();
+        if (face.isEmpty())
+            require(preview.error().isEmpty() && preview.fontFace().isEmpty()
+                            && preview.layoutStarts() == (originalFace.isEmpty() ? 0 : 1),
+                    "Publisher fonts must use the ordinary preview");
+        else
+            require(!preview.error().isEmpty() && preview.layoutStarts() == 1
+                            && preview.state().value("font_face").toString() == originalFace,
+                    "Opening a preview must not substitute an unavailable family");
+    }
+    require(source.image() == sourceImage && source.state().value("position") == sourcePosition
+                    && source.fontSize() == original,
+            "The isolated size preview changed its source");
+}
+
 // Compare the chapter frames with a separate session that always lays out the whole book.
 static void hybridFontEdits(const QString &path, quint16 port)
 {
@@ -2018,6 +2176,7 @@ int run(int argc, char **argv)
                         && preview->markup().imageKey == preview->image().cacheKey(),
                 "The first appearance preview frame lost the reopened book's markup");
         require(preview->cachedPages() == 1, "A settings preview rendered unused neighbour pages");
+        coldFontPreview(*session, *preview, QSize(758, 900));
         preview->updated = [&] {
             if (!preview->busy())
                 rendered.quit();
@@ -2042,7 +2201,8 @@ int run(int argc, char **argv)
         // Its source must stay separate from the newly authorized reader.
         const int previousBookPages = session->bookPages();
         const auto previousImage = session->image();
-        require(previousBookPages > 0 && !previousImage.isNull(), "Live preview has no readable book");
+        require(previousBookPages > 0 && !previousImage.isNull(),
+                "Live preview has no readable book");
         auto previewSaved = session->state();
         previewSaved["fingerprint"] = QString::fromLatin1(session->sourceHash());
         const auto previewLease = lease;
@@ -2338,8 +2498,9 @@ int run(int argc, char **argv)
             drained.exec();
             require(comparisonStale, "An ended source compared a native reading position");
             require(emptyReplies == 3, "An ended source returned a pending text selection");
-            require(!published && (metadata.chapters().isEmpty()
-                                   || metadata.chapters().first().title != "Ended source"),
+            require(!published
+                            && (metadata.chapters().isEmpty()
+                                || metadata.chapters().first().title != "Ended source"),
                     "Chapter metadata reached the reader after its source ended");
         }
         // A source can end while the worker draws its next frame. A host may revoke
@@ -2365,13 +2526,14 @@ int run(int argc, char **argv)
                 bool published = false;
                 cancelled.updated = [&] { published = true; };
                 if (request == Pending::Font)
-                    cancelled.editAppearance(appearance::Patch(qt::object(
-                            { { "font_pixels", cancelled.fontSize() + 2 } })));
+                    cancelled.editAppearance(appearance::Patch(
+                            qt::object({ { "font_pixels", cancelled.fontSize() + 2 } })));
                 else if (request == Pending::Rotation)
                     cancelled.resize(QSize(900, 758));
                 else
                     require(cancelled.turn(1), "Cannot start the pending turn");
-                require(cancelled.busy() && cancelled.renderProgress().active == (request != Pending::Turn),
+                require(cancelled.busy()
+                                && cancelled.renderProgress().active == (request != Pending::Turn),
                         "The requested render must be in progress");
                 if (hostRevokes)
                     access->revoke();
@@ -2498,7 +2660,8 @@ int run(int argc, char **argv)
             require(wholeBook ? absolute->go(hit.page) : absolute->goTo(hit.start),
                     "Cannot navigate explicitly to the non-linear page");
             opened.exec();
-            require(absolute->image() == nonLinearImage && (!wholeBook || absolute->page() == hit.page),
+            require(absolute->image() == nonLinearImage
+                            && (!wholeBook || absolute->page() == hit.page),
                     "Absolute navigation skipped the non-linear page");
             absolute.reset();
             ReaderSession::drain([&] { drained.quit(); });

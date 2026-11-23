@@ -293,7 +293,9 @@
         {"press": "rrNavText"},
         {"visible": "rrLarger"},
         {"press": ["rrLarger", "rrSmaller"]},
-        {"event": "render-end"},
+        {"event": "appearance-preview-request"},
+        {"expect": "preview_ready", "is": true},
+        {"expect": "preview_busy", "is": false},
         {"mark": true},
         {"press": "rrPage"},
         {"event": "render-end"}
