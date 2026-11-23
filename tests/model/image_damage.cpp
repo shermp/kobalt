@@ -47,6 +47,16 @@ int main(int argc, char **argv)
     for (int y = 0; y < changed.height(); ++y)
         changed.setPixel(52, y, QColor(Qt::black).rgba());
     CHECK(imageDamage(base, changed) == QRect(52, 0, 1, 73));
+    quint32 padded[12]{}, otherStride[15]{};
+    QImage first(reinterpret_cast<uchar *>(padded), 3, 3, 4 * sizeof(quint32),
+                 QImage::Format_RGB32);
+    QImage second(reinterpret_cast<uchar *>(otherStride), 3, 3, 5 * sizeof(quint32),
+                  QImage::Format_RGB32);
+    otherStride[3] = 0xffffffffu;
+    CHECK(imageDamage(first, second).isEmpty());
+    otherStride[7] = 0xffffffffu;
+    CHECK(imageDamage(first, second) == QRect(2, 1, 1, 1));
+
     // Qt 5.2 has no QRandomGenerator. A seeded standard engine is as repeatable.
     std::mt19937 random(42);
     // Applying only the returned rectangle must reconstruct the destination,
@@ -58,6 +68,12 @@ int main(int argc, char **argv)
                              quint32(random()) | 0xff000000);
         auto patched = base.copy();
         const auto damage = imageDamage(base, changed);
+        QRect expected;
+        for (int y = 0; y < base.height(); ++y)
+            for (int x = 0; x < base.width(); ++x)
+                if (base.pixel(x, y) != changed.pixel(x, y))
+                    expected |= QRect(x, y, 1, 1);
+        CHECK(damage == expected);
         {
             QPainter painter(&patched);
             painter.setClipRect(damage);
