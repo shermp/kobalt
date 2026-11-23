@@ -472,7 +472,7 @@ void SearchPanel::append(const SearchBatch &batch, int totalPages)
     }
     const bool firstResults = hits.isEmpty() && !batch.hits.isEmpty();
     scanning = !batch.done;
-    hits += batch.hits;
+    hits.append(batch.hits);
     searched = true;
     complete = batch.done;
     pendingStatus = strings::get(batch.done ? (hits.isEmpty() ? "search_panel.no_matches_found"
@@ -645,7 +645,7 @@ void SearchPanel::redraw()
         clearDetails();
         visibleFirst = firstVisible;
         visibleCount = countVisible;
-        const auto requestedHits = hits.mid(firstVisible, countVisible);
+        const auto requestedHits = hits.page(firstVisible, countVisible);
         const bool needsDetails =
                 std::any_of(requestedHits.cbegin(), requestedHits.cend(),
                             [](const SearchHit &hit) { return hit.text.isEmpty(); });

@@ -1,5 +1,6 @@
 #include "book_fixtures.h"
 #include "reader_inputs.h"
+#include "reading/search_results.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QFile>
 #include <QGuiApplication>
@@ -129,9 +130,49 @@ static void reorderedMarks()
             "An excerpt crossed chapter boundaries inside a text node");
 }
 
+static void resultPages()
+{
+    using namespace kobalt;
+    SearchResults results;
+    QVector<SearchHit> expected;
+    // These opaque strings also cover unequal lengths, unrelated prefixes and
+    // surrogate pairs whose first code unit alone belongs to the common prefix.
+    const auto left = QString::fromUtf8("𐐀"), right = QString::fromUtf8("𐐁");
+    for (int i = 0; i < 83; ++i) {
+        const auto prefix = i < 40 ? QStringLiteral("chapter/") : QString::number(i % 3);
+        expected.append({ prefix + left + QString::number(i), prefix + right, {}, {}, {}, -1 });
+    }
+    expected[0].start = expected[0].end;
+    expected[44].before = QStringLiteral("");
+    expected[45].end = QString();
+    expected[46] = { "plain", "other", "before", "text", "after", 7, "chapter" };
+    for (const auto size : { 1, 35, 47 })
+        results.append(expected.mid(results.size(), size));
+    require(results.size() == expected.size(), "Wrong number of retained search results");
+    for (int first = 0; first < expected.size(); ++first) {
+        const auto page = results.page(first, 19);
+        require(page.size() == qMin(19, int(expected.size()) - first), "Wrong search page size");
+        for (int i = 0; i < page.size(); ++i) {
+            const auto &got = page[i], &want = expected[first + i];
+            for (auto field : { &SearchHit::start, &SearchHit::end, &SearchHit::before,
+                                &SearchHit::text, &SearchHit::after, &SearchHit::chapter })
+                require(got.*field == want.*field
+                                && (got.*field).isNull() == (want.*field).isNull(),
+                        "Reading a search results page changed a field");
+            require(got.page == want.page, "Reading a search results page changed its book page");
+        }
+    }
+    results.clear();
+    require(results.isEmpty() && results.page(0, 1).isEmpty(), "Search retained cleared results");
+    results.append({ expected.last() });
+    require(results.page(0, 1).first().start == expected.last().start,
+            "A new search reused an old position");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    resultPages();
     chapterScopes();
     reorderedMarks();
     require(argc == 2, "Pass the synthetic dictionary EPUB");

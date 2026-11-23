@@ -4,6 +4,7 @@
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
 #include "reading/chapter.h"
+#include "reading/search_results.h"
 #include "engine/types.h"
 #include "platform/api/keyboard_controller.h"
 #include <QLineEdit>
@@ -58,7 +59,8 @@ private:
     QString submittedQuery, excerptFamily;
     QVector<ChapterLink> chapters;
     bool canReturn = false;
-    QVector<SearchHit> hits, visibleHits;
+    SearchResults hits;
+    QVector<SearchHit> visibleHits;
     int visibleFirst = -1, visibleCount = 0;
     quint64 detailsEpoch = 0;
     void clearDetails();
