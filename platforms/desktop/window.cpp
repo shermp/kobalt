@@ -39,6 +39,7 @@
 #include <QToolTip>
 #include <QPainter>
 #include <QPainterPath>
+#include <QtMath>
 #include <QTime>
 #include <QScreen>
 #include <QWindow>
@@ -399,22 +400,41 @@ protected:
 
 private:
     // The Clara follows Kobo's front photo, as on the website: tight top
-    // corners (about 5 mm) and round bottom corners (about 14 mm).
+    // corners (about 5 mm) and round bottom corners (about 14 mm). The radii
+    // are those of a circle that looks about the same size.
     QPainterPath bodyShape(const QRectF &body) const
     {
-        const qreal top = phone ? 88 : libra ? 70 : 60;
-        const qreal bottom = phone ? 88 : libra ? 70 : 165;
+        const qreal top = continuousCorner * (phone ? 88 : libra ? 70 : 60);
+        const qreal bottom = continuousCorner * (phone ? 88 : libra ? 70 : 165);
         QPainterPath path;
         path.moveTo(body.left() + top, body.top());
-        path.arcTo(QRectF(body.right() - 2 * top, body.top(), 2 * top, 2 * top), 90, -90);
-        path.arcTo(QRectF(body.right() - 2 * bottom, body.bottom() - 2 * bottom, 2 * bottom,
-                          2 * bottom),
-                   0, -90);
-        path.arcTo(QRectF(body.left(), body.bottom() - 2 * bottom, 2 * bottom, 2 * bottom), 270,
-                   -90);
-        path.arcTo(QRectF(body.left(), body.top(), 2 * top, 2 * top), 180, -90);
+        addCorner(path, QPointF(body.right() - top, body.top() + top), top, 1, -1, true);
+        addCorner(path, QPointF(body.right() - bottom, body.bottom() - bottom), bottom, 1, 1,
+                  false);
+        addCorner(path, QPointF(body.left() + bottom, body.bottom() - bottom), bottom, -1, 1, true);
+        addCorner(path, QPointF(body.left() + top, body.top() + top), top, -1, -1, false);
         path.closeSubpath();
         return path;
+    }
+
+    // A continuous corner is a quarter superellipse. Unlike a circular arc,
+    // its curvature eases to zero where it meets the straight edges, so the
+    // corner has no visible seam, as on the real devices. It needs a larger
+    // square than a circle of similar size.
+    static constexpr qreal continuousCorner = 1.5;
+
+    // Adds the corner around `centre` in the square of half-size `size`, as a
+    // line through points of |x|^5 + |y|^5 = 1. `x` and `y` give the corner's
+    // quadrant; `down` walks from the horizontal edge to the vertical one.
+    static void addCorner(QPainterPath &path, QPointF centre, qreal size, int x, int y, bool down)
+    {
+        constexpr int steps = 32;
+        constexpr qreal exponent = 2.0 / 5;
+        for (int step = 0; step <= steps; ++step) {
+            const qreal angle = M_PI_2 * (down ? steps - step : step) / steps;
+            path.lineTo(centre.x() + x * size * qPow(qCos(angle), exponent),
+                        centre.y() + y * size * qPow(qSin(angle), exponent));
+        }
     }
 
     // The wordmark sits centred below the screen: on the Clara's chin at the
