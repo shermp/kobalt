@@ -134,11 +134,16 @@ public:
     // Wide enough for the longest choice, the caret and the margins.
     QSize sizeHint() const override
     {
-        int text = 0;
+        // Fractional widths, rounded up, so the longest choice is never elided.
+        const QFontMetricsF metrics(font());
+        qreal text = 0;
         for (int i = 0; i < count(); ++i)
-            text = qMax(text, fontMetrics().horizontalAdvance(itemText(i)));
-        return { text + caret + 3 * margin, toolbarControlHeight };
+            text = qMax(text, metrics.horizontalAdvance(itemText(i)));
+        return { qCeil(text) + 2 + caret + 3 * margin, toolbarControlHeight };
     }
+
+    // A picker never cuts off a choice; the window's minimum width grows instead.
+    QSize minimumSizeHint() const override { return sizeHint(); }
 
 protected:
     void paintEvent(QPaintEvent *) override
@@ -581,7 +586,6 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     screenPicker->addItems({ tr("Fill window"), tr("6-inch e-reader"),
                              tr("7-inch e-reader with buttons"), tr("5.8-inch smartphone") });
     screenPicker->setCurrentIndex(screenPreset);
-    screenPicker->setMinimumWidth(100);
     screenPicker->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     resolutionPicker = new PreviewPicker(toolbar);
     resolutionPicker->setObjectName("desktopResolutionPicker");
