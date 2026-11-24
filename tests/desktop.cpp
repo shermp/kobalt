@@ -18426,11 +18426,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 };
                 // Both the covered screen corners and their border belong to the bezel.
                 for (int inset : { -1, 3 }) {
-                    QCOMPARE(pixel(screen.topLeft() + QPoint(inset, inset)), QColor("#242424"));
-                    QCOMPARE(pixel(screen.topRight() + QPoint(-inset, inset)), QColor("#242424"));
-                    QCOMPARE(pixel(screen.bottomLeft() + QPoint(inset, -inset)), QColor("#242424"));
+                    QCOMPARE(pixel(screen.topLeft() + QPoint(inset, inset)), QColor("#121213"));
+                    QCOMPARE(pixel(screen.topRight() + QPoint(-inset, inset)), QColor("#121213"));
+                    QCOMPARE(pixel(screen.bottomLeft() + QPoint(inset, -inset)), QColor("#121213"));
                     QCOMPARE(pixel(screen.bottomRight() + QPoint(-inset, -inset)),
-                             QColor("#242424"));
+                             QColor("#121213"));
                 }
             }
         }

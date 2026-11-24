@@ -365,11 +365,12 @@ protected:
         const QRectF bodyRect(0, 0, portraitBody.width(), portraitBody.height());
         const QPainterPath shape = bodyShape(bodyRect);
         // The e-readers use the website's matte plastic. The phone's glass
-        // catches a little light only at its top edge.
+        // catches a little light only at its top edge, above the screen, so
+        // the screen's covered corners match the body.
         QLinearGradient fill(0, 0, 0, bodyRect.height());
         if (phone) {
             fill.setColorAt(0, QColor("#26272a"));
-            fill.setColorAt(0.04, phoneGlass);
+            fill.setColorAt(0.02, phoneGlass);
             fill.setColorAt(1, phoneGlass);
         } else {
             fill.setColorAt(0, QColor("#37383b"));
