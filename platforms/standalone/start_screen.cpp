@@ -243,6 +243,7 @@ void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels,
 {
     hostScaled = true;
     scale = { pixels, factor, rasterScale, nativePixels, topInset };
+    fitOpening();
     if (!view)
         return;
     view->setGeometry(0, topInset, pixels.width(), pixels.height() - topInset);
@@ -252,12 +253,29 @@ void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels,
     canvas->setSceneRect(QRectF(QPointF(), pixels));
 }
 
+// The opening screen uses the same device pixels and scale as the Library.
+// Without a host scale it fills the screen's own pixels, as on Android.
+void StartScreen::fitOpening()
+{
+    if (!openingSurface)
+        return;
+    if (!hostScaled) {
+        openingSurface->fitContent();
+        return;
+    }
+    if (openingSurface->content)
+        openingSurface->content->resize(scale.pixels);
+    openingSurface->setNativePixels(scale.nativePixels);
+    openingSurface->setRasterScale(scale.rasterScale);
+    openingSurface->setTransform(QTransform::fromScale(scale.scale, scale.scale));
+    openingSurface->setSceneRect(QRectF(QPointF(), scale.pixels));
+}
+
 void StartScreen::resizeEvent(QResizeEvent *event)
 {
     QStackedWidget::resizeEvent(event);
     fitLibrary();
-    if (openingSurface)
-        openingSurface->fitContent();
+    fitOpening();
 }
 
 bool StartScreen::eventFilter(QObject *object, QEvent *event)
@@ -305,10 +323,10 @@ void StartScreen::showOpening(const QString &bookKey, bool showCover)
     connect(opening->window(), &QDialog::rejected, this, &StartScreen::exitRequested);
     body->addWidget(opening->window());
     openingSurface->setContent(content);
-    openingSurface->viewportResized = [this] { openingSurface->fitContent(); };
+    openingSurface->viewportResized = [this] { fitOpening(); };
     addWidget(openingSurface);
     setCurrentWidget(openingSurface);
-    openingSurface->fitContent();
+    fitOpening();
 }
 
 void StartScreen::releaseOpening()

@@ -18494,6 +18494,36 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    // The opening screen uses the Library's device pixels and scale, so it
+    // keeps the preview's size on every display, as the Library and the reader do.
+    void openingFollowsPreviewScale()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
+        QVERIFY(start);
+        start->showLibrary();
+        auto *library = start->libraryCanvas();
+        QTRY_VERIFY(library->isVisible());
+        const auto matches = [&] {
+            auto *opening = static_cast<standalone::WidgetCanvas *>(
+                    start->findChild<QGraphicsView *>("androidOpeningCanvas"));
+            return opening && opening->content && library->transform() == opening->transform()
+                    && library->sceneRect() == opening->sceneRect()
+                    && opening->content->size() == library->sceneRect().size().toSize();
+        };
+        for (int preset : { 1, 3 }) {
+            fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+            start->showOpening({}, false);
+            QTRY_VERIFY(matches());
+            // A new preview size reaches the opening screen too.
+            fixture.window.findChild<QSlider *>("desktopZoomSlider")->setValue(60);
+            QTRY_VERIFY(matches());
+            fixture.window.findChild<QCheckBox *>("desktopZoomAutomatic")->setChecked(true);
+            start->releaseOpening();
+        }
+    }
+
     // The status bar sizes the device. Automatic fits it to the window; a
     // fixed zoom gives it a share of its real size and lets the stage scroll.
     void deviceZoom()

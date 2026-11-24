@@ -107,5 +107,6 @@ private:
 
     void buildLibrary();
     void fitLibrary();
+    void fitOpening();
 };
 } // namespace kobalt::standalone
