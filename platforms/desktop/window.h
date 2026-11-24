@@ -13,6 +13,9 @@ class QActionGroup;
 class QAction;
 class QLabel;
 class QPushButton;
+class QCheckBox;
+class QScrollArea;
+class QSlider;
 
 namespace kobalt::standalone {
 class WidgetCanvas;
@@ -61,6 +64,10 @@ private:
     library::Store store;
     // The library entry of the book being read.
     QString openedKey;
+    // The white paper behind the device. It sits in a scroll area, so a
+    // fixed zoom larger than the window can scroll.
+    QWidget *stage;
+    QScrollArea *scroller;
     QStackedWidget *stack;
     DeviceFrame *deviceFrame;
     standalone::StartScreen *start;
@@ -71,6 +78,7 @@ private:
     int screenPreset = 1, renderingDpi = 300, textSize = 100;
     bool touchCursorVisible = false, touchCursorPressed = false;
     void setTouchCursor(bool visible, bool pressed = false);
+    bool overStage(QPoint global) const;
     QTimer resizeTimer;
     QMetaObject::Connection screenChanged, logicalDpiChanged, physicalDpiChanged;
     bool closing = false, repairPending = false, failed = false;
@@ -85,6 +93,15 @@ private:
     void setDeviceAsleep(bool asleep);
     void setPoweredOff(bool off);
     void updateDeviceControls();
+    // The status bar sizes an e-reader or phone preview. Automatic fits it
+    // to the window. A fixed zoom is a percentage of the device's real size
+    // on this display.
+    QCheckBox *zoomAutomatic;
+    QSlider *zoomSlider;
+    QLabel *zoomLabel;
+    int zoomPercent = 0; // 0 is Automatic.
+    qreal realSizeScale() const;
+    void updateZoomControls();
     QSize pixels() const;
     void sizeCanvas();
     void watchScreen(QScreen *screen);

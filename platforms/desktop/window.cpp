@@ -13,6 +13,10 @@
 #include <QAbstractItemView>
 #include <QActionGroup>
 #include <QComboBox>
+#include <QStatusBar>
+#include <QSlider>
+#include <QScrollArea>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -282,11 +286,20 @@ public:
 
     // Returns the reader's part of the screen. Only the phone in landscape
     // keeps part of its screen outside the reader.
+    // The whole device, in device pixels at 300 PPI.
+    static QSize bodySize(int preset, bool landscape)
+    {
+        const QSize body = preset == 2 ? QSize(1708, 1902)
+                : preset == 3          ? QSize(800, 1680)
+                                       : QSize(1323, 1890);
+        return landscape ? body.transposed() : body;
+    }
+
     QRect layoutScreen(int preset, bool landscape, QRect bounds)
     {
         libra = preset == 2;
         phone = preset == 3;
-        QSize body = libra ? QSize(1708, 1902) : phone ? QSize(800, 1680) : QSize(1323, 1890);
+        QSize body = bodySize(preset, false);
         QRect screen = libra ? QRect(90, 111, 1264, 1680)
                 : phone      ? QRect(40, 40, 720, 1600)
                              : QRect(126, 150, 1072, 1448);
@@ -511,12 +524,40 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     // every mode. Only the preview transform depends on the Mac display.
     readingPpi.store(300);
     ui::setDensity(300);
-    auto *stage = new QWidget(this);
+    stage = new QWidget;
     auto palette = stage->palette();
     palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::Base, Qt::white);
     stage->setPalette(palette);
     stage->setAutoFillBackground(true);
-    setCentralWidget(stage);
+    scroller = new QScrollArea(this);
+    scroller->setObjectName("desktopStageScroller");
+    scroller->setFrameShape(QFrame::NoFrame);
+    scroller->setPalette(palette);
+    // sizeCanvas sets the stage's size.
+    scroller->setWidgetResizable(false);
+    scroller->setWidget(stage);
+    setCentralWidget(scroller);
+    // The status bar's zoom controls. sizeCanvas reads them from the start.
+    zoomAutomatic = new QCheckBox(tr("Automatic"));
+    zoomAutomatic->setObjectName("desktopZoomAutomatic");
+    zoomAutomatic->setToolTip(tr("Fit the device to the window."));
+    zoomAutomatic->setChecked(true);
+    zoomSlider = new QSlider(Qt::Horizontal);
+    zoomSlider->setObjectName("desktopZoomSlider");
+    zoomSlider->setAccessibleName(tr("Device size"));
+    zoomSlider->setToolTip(tr("Size the device as a percentage of its real size on this display."));
+    zoomSlider->setRange(25, 200);
+    zoomSlider->setValue(100);
+    zoomSlider->setSingleStep(5);
+    zoomSlider->setPageStep(25);
+    zoomSlider->setFixedWidth(160);
+    zoomLabel = new QLabel;
+    zoomLabel->setObjectName("desktopZoomLabel");
+    zoomLabel->setFixedWidth(zoomLabel->fontMetrics().horizontalAdvance(tr("%1%").arg(200)));
+    zoomLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    zoomLabel->setText(tr("%1%").arg(zoomSlider->value()));
+    zoomLabel->setEnabled(false);
     deviceFrame = new DeviceFrame(stage);
     deviceFrame->hide();
     stack = new QStackedWidget(stage);
@@ -723,6 +764,40 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     showToolbar->setText(tr("Show Toolbar"));
     showToolbar->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+T")));
     view->addAction(showToolbar);
+    statusBar()->setObjectName("desktopStatusBar");
+    statusBar()->setSizeGripEnabled(false);
+    // The right margin keeps the label clear of the Mac's rounded window corner.
+    auto *zoom = new QWidget;
+    auto *zoomLayout = new QHBoxLayout(zoom);
+    zoomLayout->setContentsMargins(0, 4, 14, 4);
+    zoomLayout->setSpacing(8);
+    // The group keeps its own size, so a wider window does not spread it out.
+    zoom->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    zoomLayout->addWidget(zoomAutomatic);
+    zoomLayout->addWidget(zoomSlider);
+    zoomLayout->addWidget(zoomLabel);
+    statusBar()->addPermanentWidget(zoom);
+    connect(zoomSlider, &QSlider::valueChanged, this, [this](int percent) {
+        // Moving the slider chooses a fixed size.
+        zoomPercent = percent;
+        const QSignalBlocker blocked(zoomAutomatic);
+        zoomAutomatic->setChecked(false);
+        zoomLabel->setText(tr("%1%").arg(percent));
+        updateZoomControls();
+        sizeCanvas();
+    });
+    connect(zoomAutomatic, &QCheckBox::toggled, this, [this](bool automatic) {
+        zoomPercent = automatic ? 0 : zoomSlider->value();
+        updateZoomControls();
+        sizeCanvas();
+    });
+    auto *showStatusBar = new QAction(tr("Show Status Bar"), this);
+    showStatusBar->setObjectName("desktopShowStatusBar");
+    showStatusBar->setCheckable(true);
+    showStatusBar->setChecked(true);
+    showStatusBar->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+S")));
+    connect(showStatusBar, &QAction::toggled, statusBar(), &QStatusBar::setVisible);
+    view->addAction(showStatusBar);
     auto *monitor = view->addAction(tr("Engine Monitor"), this, &Window::engineMonitorRequested);
     monitor->setObjectName("desktopEngineMonitor");
     monitor->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+E")));
@@ -737,6 +812,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     resizeTimer.setSingleShot(true);
     resizeTimer.setInterval(100);
     connect(toolbar, &QToolBar::visibilityChanged, this, [this] { resizeTimer.start(); });
+    connect(showStatusBar, &QAction::toggled, this, [this] { resizeTimer.start(); });
     canvas->viewportResized = [this] {
         sizeCanvas();
         resizeTimer.start();
@@ -812,7 +888,6 @@ QString Window::saveScreenshot(const QString &directory, QString *error)
         return fail(tr("The Desktop folder is unavailable."));
     }
     // One temporary image at the window's display resolution; no screenshot cache is retained.
-    auto *stage = centralWidget();
     const qreal dpr = stage->devicePixelRatioF();
     QImage image(QSize(qRound(stage->width() * dpr), qRound(stage->height() * dpr)),
                  QImage::Format_ARGB32_Premultiplied);
@@ -938,13 +1013,46 @@ QSize Window::pixels() const
              qRound(stack->height() * readerPixelsPerPoint) };
 }
 
+qreal Window::realSizeScale() const
+{
+    const auto *screen = windowHandle() ? windowHandle()->screen() : this->screen();
+    // Window pixels for each 300 PPI device pixel at the device's real size.
+    return screen->physicalDotsPerInch() / 300.0;
+}
+
+// The zoom controls never move while the window resizes. In Automatic they
+// keep the fixed size that turning Automatic off applies, and the
+// percentage is greyed because it is not the current size.
+void Window::updateZoomControls()
+{
+    const bool device = screenPicker->isEnabled() && screenPreset != 0;
+    zoomAutomatic->setEnabled(device);
+    zoomSlider->setEnabled(device);
+    zoomLabel->setEnabled(device && zoomPercent != 0);
+}
+
 void Window::sizeCanvas()
 {
-    auto bounds = centralWidget()->rect();
+    // The device keeps a 20-pixel margin of paper in both zoom modes.
+    constexpr int margin = 20;
+    const QSize viewport = scroller->viewport()->size();
+    const bool landscape = rotateAction->isChecked();
+    QRect bounds(QPoint(), viewport);
+    if (screenPreset && zoomPercent) {
+        const QSize device = (QSizeF(DeviceFrame::bodySize(screenPreset, landscape))
+                              * (realSizeScale() * zoomPercent / 100.0))
+                                     .toSize();
+        stage->resize(viewport.expandedTo(device + QSize(2 * margin, 2 * margin)));
+        bounds = QRect(QPoint((stage->width() - device.width()) / 2,
+                              (stage->height() - device.height()) / 2),
+                       device);
+    } else {
+        stage->resize(viewport);
+        if (screenPreset)
+            bounds.adjust(margin, margin, -margin, -margin);
+    }
     if (screenPreset) {
-        bounds.adjust(20, 20, -20, -20);
-        const auto screen =
-                deviceFrame->layoutScreen(screenPreset, rotateAction->isChecked(), bounds);
+        const auto screen = deviceFrame->layoutScreen(screenPreset, landscape, bounds);
         deviceFrame->lower();
         stack->setGeometry(screen.translated(deviceFrame->pos()));
         deviceFrame->raiseMask();
@@ -981,8 +1089,10 @@ void Window::selectScreen(int index)
         return;
     setTouchCursor(false);
     screenPreset = index;
-    setTouchCursor(screenPreset && underMouse(), QApplication::mouseButtons() & Qt::LeftButton);
+    setTouchCursor(screenPreset && underMouse() && overStage(QCursor::pos()),
+                   QApplication::mouseButtons() & Qt::LeftButton);
     rotateAction->setEnabled(screenPicker->isEnabled() && screenPreset != 0);
+    updateZoomControls();
     sizeCanvas();
     updateDeviceControls();
     if (auto *reader = controller.window())
@@ -997,6 +1107,7 @@ void Window::setPreviewControlsEnabled(bool enabled)
     resolutionPicker->setEnabled(enabled);
     textSizePicker->setEnabled(enabled);
     rotateAction->setEnabled(enabled && screenPreset != 0);
+    updateZoomControls();
     screenActions->setEnabled(enabled);
     resolutionActions->setEnabled(enabled);
     textSizeActions->setEnabled(enabled);
@@ -1120,6 +1231,14 @@ Window::~Window()
     delete start;
 }
 
+// The touch pointer belongs to the stage. The toolbar and the status bar
+// are Mac controls and keep the normal pointer.
+bool Window::overStage(QPoint global) const
+{
+    const auto *viewport = scroller->viewport();
+    return viewport->rect().contains(viewport->mapFromGlobal(global));
+}
+
 void Window::setTouchCursor(bool visible, bool pressed)
 {
     if (!visible) {
@@ -1173,8 +1292,7 @@ bool Window::eventFilter(QObject *object, QEvent *event)
             const auto *mouse = dynamic_cast<QMouseEvent *>(event);
             const QPoint global = mouse ? mouse->globalPosition().toPoint() : QCursor::pos();
             const bool leaving = object == this && (type == QEvent::Leave || type == QEvent::Hide);
-            setTouchCursor(screenPreset && isVisible() && !leaving
-                                   && rect().contains(mapFromGlobal(global)),
+            setTouchCursor(screenPreset && isVisible() && !leaving && overStage(global),
                            mouse ? bool(mouse->buttons() & Qt::LeftButton)
                                  : bool(QApplication::mouseButtons() & Qt::LeftButton));
         }

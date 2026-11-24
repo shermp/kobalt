@@ -5,6 +5,10 @@
 #include "app/reader/panels/activity_view.h"
 #include "storage/record_writer.h"
 #include "scenario/files.h"
+#include <QStatusBar>
+#include <QSlider>
+#include <QScrollBar>
+#include <QScrollArea>
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
 #include "ui/controls/rows.h"
@@ -9004,18 +9008,28 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     void touchCursorOutsideReader()
     {
-        // E-reader presets use the touch pointer across the whole window,
-        // including the preview toolbar and the space around the device.
+        // E-reader presets use the touch pointer across the stage, including
+        // the space around the device. The toolbar and the status bar keep
+        // the normal pointer.
         Fixture fixture(false);
         QVERIFY(fixture.prepared);
         auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
-        QVERIFY(start && picker);
+        auto *statusBar = fixture.window.findChild<QStatusBar *>("desktopStatusBar");
+        auto *stage = fixture.window.findChild<QScrollArea *>("desktopStageScroller")->viewport();
+        QVERIFY(start && picker && statusBar && stage);
         const auto hover = [](QWidget *target) {
             const QPoint point = target->rect().center();
             QMouseEvent move(QEvent::MouseMove, point, target->mapToGlobal(point), Qt::NoButton,
                              Qt::NoButton, Qt::NoModifier);
             QApplication::sendEvent(target, &move);
+        };
+        // A point on the paper beside the device.
+        const auto hoverPaper = [stage] {
+            const QPoint point(4, stage->height() / 2);
+            QMouseEvent move(QEvent::MouseMove, point, stage->mapToGlobal(point), Qt::NoButton,
+                             Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(stage, &move);
         };
         const auto touchPointer = [] {
             const auto *cursor = QApplication::overrideCursor();
@@ -9024,24 +9038,28 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         hover(start);
         QVERIFY(touchPointer());
         hover(picker);
+        QVERIFY(!touchPointer());
+        hoverPaper();
         QVERIFY(touchPointer());
+        hover(statusBar);
+        QVERIFY(!touchPointer());
         start->showLibrary();
         auto *library = start->libraryCanvas();
         QTRY_VERIFY(library->isVisible());
         hover(library->viewport());
         QVERIFY(touchPointer());
         hover(picker);
-        QVERIFY(touchPointer());
+        QVERIFY(!touchPointer());
         hover(&fixture.window);
         QVERIFY(touchPointer());
         // The seven-inch preset follows the same rule.
         picker->setCurrentIndex(2);
-        hover(picker);
+        hoverPaper();
         QVERIFY(touchPointer());
         QEvent leave(QEvent::Leave);
         QApplication::sendEvent(&fixture.window, &leave);
         QVERIFY(!touchPointer());
-        hover(picker);
+        hoverPaper();
         QVERIFY(touchPointer());
         QEvent deactivate(QEvent::WindowDeactivate);
         QApplication::sendEvent(&fixture.window, &deactivate);
@@ -18474,6 +18492,72 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(!fixture.visible("search"));
             }
         }
+    }
+
+    // The status bar sizes the device. Automatic fits it to the window; a
+    // fixed zoom gives it a share of its real size and lets the stage scroll.
+    void deviceZoom()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto *automatic = fixture.window.findChild<QCheckBox *>("desktopZoomAutomatic");
+        auto *slider = fixture.window.findChild<QSlider *>("desktopZoomSlider");
+        auto *label = fixture.window.findChild<QLabel *>("desktopZoomLabel");
+        auto *frame = fixture.window.findChild<QWidget *>("desktopDeviceFrame");
+        auto *scroller = fixture.window.findChild<QScrollArea *>("desktopStageScroller");
+        auto *statusBar = fixture.window.findChild<QStatusBar *>("desktopStatusBar");
+        auto *showStatusBar = fixture.window.findChild<QAction *>("desktopShowStatusBar");
+        QVERIFY(automatic && slider && label && frame && scroller && statusBar && showStatusBar);
+        QVERIFY(automatic->isChecked());
+        QTRY_VERIFY(frame->isVisible());
+        const auto fits = [&] {
+            const QRect viewport(QPoint(), scroller->viewport()->size());
+            return scroller->widget()->size() == viewport.size()
+                    && viewport.contains(frame->geometry());
+        };
+        QTRY_VERIFY(fits());
+        // Automatic keeps the fixed size still, greyed, while the window resizes.
+        QCOMPARE(slider->value(), 100);
+        QCOMPARE(label->text(), QStringLiteral("100%"));
+        QVERIFY(!label->isEnabled());
+        const int fitted = frame->width();
+        fixture.window.resize(fixture.window.minimumSize());
+        QTRY_VERIFY(frame->width() < fitted && fits());
+        QCOMPARE(slider->value(), 100);
+        QCOMPARE(label->text(), QStringLiteral("100%"));
+
+        // Clara is 1323 device pixels wide at 300 PPI.
+        const qreal real = 1323 * fixture.window.screen()->physicalDotsPerInch() / 300.0;
+        automatic->setChecked(false);
+        QVERIFY(label->isEnabled());
+        QTRY_VERIFY(qAbs(frame->width() - real) <= 1);
+        const int fixedWidth = frame->width();
+        slider->setValue(200);
+        QVERIFY(!automatic->isChecked());
+        QCOMPARE(label->text(), QStringLiteral("200%"));
+        QTRY_VERIFY(qAbs(frame->width() - 2 * real) <= 1);
+        // The stage outgrows the small window and keeps the margin around the device.
+        QVERIFY(scroller->widget()->width() >= frame->width() + 40);
+        QVERIFY(scroller->horizontalScrollBar()->maximum() > 0);
+        slider->setValue(100);
+        QTRY_COMPARE(frame->width(), fixedWidth);
+
+        automatic->setChecked(true);
+        QTRY_VERIFY(fits());
+        QVERIFY(!label->isEnabled());
+        // Moving the slider leaves Automatic.
+        slider->setValue(150);
+        QVERIFY(!automatic->isChecked());
+        QTRY_VERIFY(qAbs(frame->width() - 1.5 * real) <= 1);
+
+        // Fill window has no device to size.
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(0);
+        QTRY_VERIFY(!slider->isEnabled() && !automatic->isEnabled() && !label->isEnabled());
+
+        showStatusBar->trigger();
+        QTRY_VERIFY(!statusBar->isVisible());
+        showStatusBar->trigger();
+        QTRY_VERIFY(statusBar->isVisible());
     }
 
     // An e-reader preview sleeps, wakes and powers off through the reader
