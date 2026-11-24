@@ -208,7 +208,13 @@ void ReaderController::begin(BookOpen book)
         body.rheight() -= safe.top + safe.bottom;
     }
     const auto viewport = readerInterface().readingViewport(body, settings);
-    opening = std::make_unique<ReaderSession>(fonts, placeholder);
+    // A kept session still has this book loaded; another book needs a new one.
+    if (kept && keptPath == path)
+        opening = std::move(kept);
+    else
+        opening = std::make_unique<ReaderSession>(fonts, placeholder);
+    kept.reset();
+    keptPath.clear();
     QPointer<ReaderController> guard(this);
     OpenRequest request{ identity, path, viewport, saved, {}, lease, source->resources(lease) };
 #ifdef Q_OS_ANDROID
@@ -319,6 +325,16 @@ void ReaderController::begin(BookOpen book)
                     // the reader and queued resource cleanup begins.
                     if (guard)
                         guard->notifyRetirement();
+                    if (guard && std::exchange(guard->reloading, false)) {
+                        // Reopen the same book on the session that still has it loaded.
+                        guard->kept = std::move(retained);
+                        guard->keptPath = guard->current;
+                        QTimer::singleShot(0, guard, [guard] {
+                            if (guard)
+                                guard->retire();
+                        });
+                        return;
+                    }
                     retained.reset();
                     if (guard)
                         QTimer::singleShot(0, guard, [guard] {
@@ -379,9 +395,22 @@ void ReaderController::begin(BookOpen book)
             });
 }
 
+bool ReaderController::reload(QSize pixels)
+{
+    if (phase != Phase::Reading || !window_ || !window_->canReload())
+        return false;
+    reloading = true;
+    pending = { current, currentSourceKey, {}, pixels, false };
+    window_->close();
+    return true;
+}
+
 void ReaderController::close()
 {
     pending = {};
+    reloading = false;
+    kept.reset();
+    keptPath.clear();
     if (idle())
         emit closed();
     else

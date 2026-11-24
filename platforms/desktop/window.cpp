@@ -574,6 +574,10 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     offScreen->setAutoFillBackground(true);
     offScreen->setPalette(palette);
     offScreen->hide();
+    reloadFrame = new QLabel(stage);
+    reloadFrame->setObjectName("desktopReloadFrame");
+    reloadFrame->setScaledContents(true);
+    reloadFrame->hide();
     connect(deviceFrame->previous, &QPushButton::clicked, this, [this] { turnPage(-1, true); });
     connect(deviceFrame->next, &QPushButton::clicked, this, [this] { turnPage(1, true); });
     auto *toolbar = addToolBar(tr("Preview Toolbar"));
@@ -602,7 +606,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     textSizePicker->setAccessibleName(tr("Text size"));
     textSizePicker->setToolTip(
             tr("Enlarge interface text, as the system text size does on Kobo and Android. "
-               "Applies to the Library at once and to a book when it opens."));
+               "Applies to the Library and an open book at once."));
     for (const int percent : { 100, 125, 150 })
         textSizePicker->addItem(tr("%1%").arg(percent), percent);
     textSizePicker->setCurrentIndex(textSizePicker->findData(textSize));
@@ -689,10 +693,22 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     start->setKeyboardFactory(readerHostServices().keyboard);
     connect(textSizePicker, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
         textSize = textSizePicker->currentData().toInt();
-        // An open book keeps its size until it closes, and the Library takes
-        // the new size when it is shown again.
-        if (!controller.window())
+        // The Library takes the new size at once. An open book gets a new
+        // reader window, and its old page stays on screen until that window
+        // is ready. While the reader saves or exits, the size waits for the
+        // next opening.
+        if (!controller.window()) {
             start->applyTextSize();
+            return;
+        }
+        const auto frame = stack->grab();
+        if (!controller.reload(pixels()))
+            return;
+        reloadFrame->setPixmap(frame);
+        reloadFrame->setGeometry(stack->geometry());
+        reloadFrame->show();
+        reloadFrame->raise();
+        setPreviewControlsEnabled(false);
     });
     start->applyLibraryTheme(controller.preferences(), controller.fontSources());
     connect(start, &standalone::StartScreen::bookRequested, this,
@@ -843,6 +859,8 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         canvas->setContent(reader, renderingDpi != 0, renderingDpi ? renderingDpi / 300.0 : 1.0);
         stack->setCurrentWidget(canvas);
         start->releaseOpening();
+        reloadFrame->hide();
+        reloadFrame->clear();
         sizeCanvas();
         reader->show();
         setUpdatesEnabled(true);
@@ -852,6 +870,8 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     });
     connect(&controller, &standalone::ReaderController::failed, this, [this](const QString &error) {
         failed = true;
+        reloadFrame->hide();
+        reloadFrame->clear();
         start->showLibraryError(error);
         stack->setCurrentWidget(start);
         emit bookFailed(error);
@@ -1078,6 +1098,7 @@ void Window::sizeCanvas()
     canvas->setTransform(QTransform::fromScale(scale, scale));
     canvas->setSceneRect(QRectF(QPointF(), pixels()));
     offScreen->setGeometry(stack->geometry());
+    reloadFrame->setGeometry(stack->geometry());
     // The library uses the reader's controls, so it gets the reader's size and scale.
     // Android shows its status bar over the Library, so the phone's camera
     // band stays outside it.

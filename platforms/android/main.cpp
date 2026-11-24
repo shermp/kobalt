@@ -3,6 +3,7 @@
 #include "app/reader/views/annotation_exporter.h"
 #include "platforms/standalone/reader.h"
 #include "platforms/standalone/start_screen.h"
+#include "ui/style/scale.h"
 #include "services.h"
 #include "runtime.h"
 #include "platforms/standalone/canvas.h"
@@ -243,11 +244,16 @@ public:
         connect(qApp, &QCoreApplication::aboutToQuit, this,
                 [] { android::setPageButtonsAvailable(false); });
         connect(qApp, &QGuiApplication::applicationStateChanged, this,
-                [this](Qt::ApplicationState state) {
+                [this, textScale = services.textScale](Qt::ApplicationState state) {
                     // The system font size can change in Settings while Kobalt is in the background.
                     if (state == Qt::ApplicationActive && layout->currentWidget() == start
                         && start->libraryShown())
                         start->applyTextSize();
+                    // An open book gets a new reader window with the new size.
+                    if (state == Qt::ApplicationActive && layout->currentWidget() == canvas
+                        && controller.window() && textScale
+                        && ui::largeTextScale(textScale()) != ui::textScale())
+                        controller.reload(pixels());
                     syncPageButtons();
                     if (state != Qt::ApplicationActive && controller.window())
                         controller.window()->checkpoint();

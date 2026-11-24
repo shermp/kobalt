@@ -24,6 +24,12 @@ public:
               bool restartAtStart = false, QString position = {});
 
     void close();
+    // Builds a new reader window for the open book, for example after the
+    // interface text size changed. The old window closes and saves as when
+    // leaving the book. The engine keeps the book loaded, so the new window
+    // opens at the same place without reading the book again. Returns false,
+    // and does nothing, while the window cannot close at once.
+    bool reload(QSize pixels);
     QJsonObject lastBook() const;
     // The state the reader saved for the book at this path.
     QJsonObject savedState(const QString &path) const;
@@ -57,18 +63,24 @@ private:
     storage::Paths paths;
     EngineFontInputs fonts;
     QString placeholder, current, currentSourceKey, openingPosition;
+
     struct BookOpen
     {
         QString path, sourceKey, position;
         QSize pixels;
         bool restartAtStart = false;
     } pending;
+
     std::shared_ptr<ReadingHistory::Profile> historyProfile;
     bool restartAtStart = false;
     std::function<ReaderHostServices()> services;
     ReaderOrientation orientation;
     std::unique_ptr<native::PublicationEndpoint> source;
     std::unique_ptr<ReaderSession> opening;
+    // The engine session a reload keeps for the reopening of the same book.
+    std::unique_ptr<ReaderSession> kept;
+    QString keptPath;
+    bool reloading = false;
     QPointer<ReaderWindow> window_;
     std::shared_ptr<SourceLease> lease;
     void begin(BookOpen request);

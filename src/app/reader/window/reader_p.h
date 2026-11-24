@@ -137,6 +137,7 @@ public:
     void finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed = true) override;
     void setOpeningSaveState(OpeningSaveState state) override;
     bool openingSaveParked() const override;
+    bool canReload() const override;
     void prepareUsb(std::function<void()> finished, bool save = false) override;
     void showShutdownNotice(bool restarting) override;
     void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) override;

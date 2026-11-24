@@ -56,6 +56,10 @@ public:
 
     virtual bool openingSaveParked() const { return false; }
 
+    // Whether a close now would hand the book back at once, so a host can
+    // build a new window for it. False while a save or an exit is under way.
+    virtual bool canReload() const { return false; }
+
     // With save, try the final save for at most usbSaveMilliseconds. Then
     // abandon queued saves and release after active storage users have finished.
     static constexpr int usbSaveMilliseconds = 3000;

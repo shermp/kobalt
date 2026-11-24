@@ -1796,6 +1796,12 @@ void Reader::resizeEvent(QResizeEvent *)
     syncNavigation();
 }
 
+bool Reader::canReload() const
+{
+    return openingSaveState == OpeningSaveState::Inactive && !exitPending && !closeSaveError
+            && !closing;
+}
+
 void Reader::closeEvent(QCloseEvent *event)
 {
     // The host disposes this window from the opening save's completion.

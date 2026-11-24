@@ -76,12 +76,19 @@ private:
     int value;
 };
 
-// Applies a platform's text size setting. Text grows up to 150%: controls
-// keep their size, and larger text no longer fits their fixed cells and
-// caption columns. Icons in cells grow less, to 120% at the largest step.
+// The text scale a platform's text size setting gives. Text grows up to
+// 150%: controls keep their size, and larger text no longer fits their fixed
+// cells and caption columns.
+inline qreal largeTextScale(qreal requested)
+{
+    return qBound<qreal>(1, requested, 1.5);
+}
+
+// Applies a platform's text size setting. Icons in cells grow less than the
+// text, to 120% at the largest step.
 inline void setLargeText(qreal requested)
 {
-    const qreal text = qBound<qreal>(1, requested, 1.5);
+    const qreal text = largeTextScale(requested);
     setTextScale(text);
     setIconScale(1 + (text - 1) * 0.4);
 }

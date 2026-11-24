@@ -18524,6 +18524,44 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    // A text size change while reading builds a new reader window at the same
+    // place. The old page covers the screen until the new window is ready.
+    void liveTextSize()
+    {
+        if (largeTextVariant())
+            QSKIP("This check starts at 100% interface text.");
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        // Leave the first page, so the position shows the reader kept its place.
+        const auto first = fixture.state().value("position");
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_VERIFY(fixture.state().value("position") != first);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto position = fixture.state().value("position");
+        QPointer<ReaderWindow> old = fixture.window.readerWindow();
+        auto *textSize = fixture.window.findChild<QComboBox *>("desktopTextSizePicker");
+        auto *frame = fixture.window.findChild<QLabel *>("desktopReloadFrame");
+        QVERIFY(textSize && frame);
+        textSize->setCurrentIndex(textSize->findData(125));
+        QVERIFY(frame->isVisible());
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!old);
+        QVERIFY(fixture.window.readerWindow());
+        QVERIFY(!frame->isVisible());
+        QCOMPARE(ui::textScale(), 1.25);
+        QCOMPARE(fixture.state().value("position"), position);
+        textSize->setCurrentIndex(textSize->findData(100));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 3, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(ui::textScale(), 1.0);
+        QCOMPARE(fixture.state().value("position"), position);
+    }
+
     // The status bar sizes the device. Automatic fits it to the window; a
     // fixed zoom gives it a share of its real size and lets the stage scroll.
     void deviceZoom()

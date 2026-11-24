@@ -88,6 +88,8 @@ private:
     // shutdown behavior can be checked on the Mac.
     QPushButton *sleepButton, *powerButton;
     QLabel *offScreen;
+    // The old page, shown while a text size change builds a new reader window.
+    QLabel *reloadFrame;
     bool deviceAsleep = false, poweredOff = false;
     bool ereaderPreview() const;
     void setDeviceAsleep(bool asleep);
