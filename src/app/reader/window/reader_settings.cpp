@@ -90,8 +90,8 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
                                                        : session->chapterTitle();
     values.chapterPage = session->chapterPage();
     values.chapterPages = session->chapterPages();
-    values.page = session->page() + 1;
-    values.pages = session->pages();
+    values.page = session->usesWebKit() ? session->bookPage() + 1 : session->page() + 1;
+    values.pages = session->usesWebKit() ? session->bookPages() : session->pages();
     // An engine with the text of only a part of the book shows rough page
     // numbers from its page estimate. The chapter is the spine item. Before
     // the estimate has a total, each page field shows its percent form.
@@ -151,6 +151,9 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
     values.approximateTime = remainingTime::approximate(preferences);
     values.decimalPercentages = headerfooter::decimalPercentages(preferences);
     values.pageTurnMilliseconds = pageTurnMilliseconds;
+    // WPE keeps one spine item laid out even after it knows the exact book total.
+    if (session->usesWebKit())
+        return values;
     if (state.contains("chapter_load_ms"))
         values.chapterLoadMilliseconds = qint64(state.value("chapter_load_ms").toDouble());
     values.wholeBook = !state.contains("book_fraction");
@@ -225,8 +228,8 @@ bool Reader::menuShowsPagination() const
 void Reader::syncStatusTimer()
 {
     const auto needed = [this] {
-        return isVisible() && !lifecycleHidden && !closing && !services.suspended()
-                && bookStatusShown();
+        return !session->usesWebKit() && isVisible() && !lifecycleHidden && !closing
+                && !services.suspended() && bookStatusShown();
     };
     if (!needed()) {
         if (statusTimer)
@@ -494,6 +497,8 @@ bool Reader::hideNativeStatus() const
 
 void Reader::openSettings()
 {
+    if (session->usesWebKit())
+        return;
     if (session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
@@ -1154,8 +1159,8 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
     }
     if (zenMode() != next.value("zen_mode").toBool(false))
         flashAfterZenSwitch = true;
-    const bool pageLabelsChanged =
-            publisherPagesEnabled() != next.value("publisher_page_numbers").toBool();
+    const bool pageLabelsChanged = !session->usesWebKit()
+            && publisherPagesEnabled() != next.value("publisher_page_numbers").toBool();
     preferences = next;
     session->setPublisherPageNumbers(publisherPagesEnabled());
     if (pageLabelsChanged) {
@@ -1304,6 +1309,8 @@ void Reader::toggleZenStats()
 
 void Reader::applyDarkMode(bool enabled)
 {
+    if (session->usesWebKit())
+        return;
     // A page that is still rendering keeps its mode; the next refresh puts
     // the box back.
     if (pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
@@ -1502,6 +1509,8 @@ void Reader::resizeText()
 
 void Reader::selectPanel(int index)
 {
+    if (session->usesWebKit())
+        return;
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();

@@ -807,7 +807,7 @@ private:
     void syncLocationUnits();
     bool publisherPagesEnabled() const
     {
-        return preferences.value("publisher_page_numbers").toBool();
+        return !session->usesWebKit() && preferences.value("publisher_page_numbers").toBool();
     }
 
     QString currentPrintedPage() const
@@ -884,6 +884,7 @@ private:
     void dismissLookup(bool keepGesture = false);
     void dismissDictionary();
     void lookupSelection();
+    void lookupWebKitWord(QPoint point);
     // My Words. Null with the JSON diagnostic backend, which has no database.
     std::unique_ptr<kobalt::SavedWords> savedWords;
     // Activity: the reading history behind Stats. The store reads on the

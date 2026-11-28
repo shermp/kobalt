@@ -136,6 +136,7 @@ public:
                     bool *exact = nullptr) const override;
     // The engine position of a shared location, or empty when unresolved.
     QString positionOf(const Location &location, Restoration *restoration = nullptr) const override;
+    bool goToLocation(const Location &location, Restoration *restoration = nullptr) override;
     // The page of each position in the current layout, or -1 where a
     // position no longer resolves.
     QVector<int> pagesOf(const QStringList &positions, bool rangeEndpoints = false,

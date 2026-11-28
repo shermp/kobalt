@@ -431,7 +431,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     // Remember this book's layout as the last layout in the shared profile.
     if ((savedSettings.status == kobalt::storage::ReadStatus::Ok
          || savedSettings.status == kobalt::storage::ReadStatus::Missing)
-        && !session->temporaryTypography()) {
+        && !session->usesWebKit() && !session->temporaryTypography()) {
         auto global = appearance::globalPreferences(preferences);
         appearance::rememberTextLayout(global, session->state());
         appearance::rememberPageMargins(global, session->state());
@@ -619,7 +619,9 @@ void Reader::buildReadingPage()
         this->session->goTo(hit.start, true);
     };
     page->held = [this](QPoint point) {
-        if (beginAnnotationDrag(point, -1))
+        if (this->session->usesWebKit())
+            lookupWebKitWord(point);
+        else if (beginAnnotationDrag(point, -1))
             finishAnnotationDrag(false);
     };
     imageViewer = new ImageViewer(this);
@@ -641,8 +643,8 @@ void Reader::buildReadingPage()
         progressTick();
     };
     page->imageHeld = [this](QPoint point) {
-        if (session->busy() || lifecycleHidden || closing || exitPending || exportRunning
-            || annotationSaving || services.suspended() || book->deviceTransition()
+        if (session->usesWebKit() || session->busy() || lifecycleHidden || closing || exitPending
+            || exportRunning || annotationSaving || services.suspended() || book->deviceTransition()
             || appearanceEdit.panelOpen() || settingsVisible() || searchPanel->isVisible()
             || linksActive() || !pageImageAtPoint(page->image, point))
             return false;
@@ -662,6 +664,8 @@ void Reader::buildReadingPage()
     const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     page->chrome = chrome.layout;
+    if (session->usesWebKit())
+        page->chrome.progressBar = false;
 }
 
 void Reader::openImagePreview(QPoint point, const QString &resource)
@@ -938,6 +942,24 @@ void Reader::buildToolbar()
                        });
     toolbarComposition.settings->setCheckable(true);
     toolbarButtons.settings = toolbarComposition.settings;
+    if (session->usesWebKit()) {
+        for (auto *action :
+             { toolbarButtons.typography, toolbarButtons.layout, toolbarButtons.graph,
+               toolbarComposition.sync, toolbarComposition.settings })
+            action->setEnabled(false);
+        toolbarComposition.readingActions.append(toolbarComposition.bookmarks);
+        toolbarComposition.readingActions.append(toolbarComposition.search);
+        toolbarComposition.readingActions.append(toolbarComposition.annotate);
+        for (const int delta : { -2, 2 }) {
+            auto *button = new ui::Button(delta < 0 ? QStringLiteral("A−") : QStringLiteral("A+"),
+                                          topControls);
+            button->setObjectName(delta < 0 ? "rrWpeFontSmaller" : "rrWpeFontLarger");
+            toolbarComposition.readingActions.append(button);
+            top->addWidget(button);
+            connect(button, &QPushButton::clicked, this,
+                    [this, delta] { session->adjustWebKitFont(delta); });
+        }
+    }
     toolbarComposition.clock = menuClock;
     toolbarComposition.session = menuSession;
     toolbarComposition.battery = menuBattery;
@@ -945,7 +967,8 @@ void Reader::buildToolbar()
          topControls->findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         if (button == back)
             continue;
-        if (button->objectName() != "readingMenuSettings"
+        if (!toolbarComposition.readingActions.contains(button)
+            && button->objectName() != "readingMenuSettings"
             && button->objectName() != "readingMenuBookmarks"
             && button->objectName() != "readingMenuAnnotate"
             && button->objectName() != "formattingWarning"
@@ -994,7 +1017,7 @@ void Reader::buildBottomControls()
     pageScrubber->previewRequested = [this](int target, QSize bounds) {
         if (closing || lifecycleHidden || services.suspended())
             return;
-        if (session->state().contains("book_fraction")) {
+        if (session->usesWebKit() || session->state().contains("book_fraction")) {
             const int current =
                     int(session->page() > 0 || session->state().value("continues_before").toBool());
             pageScrubber->setCurrentPageBookmarked(page->bookmarked);
@@ -1063,7 +1086,8 @@ void Reader::buildBottomControls()
     pageScrubber->accepted = [this](int target) {
         if (session->busy() || closing || lifecycleHidden || services.suspended())
             return;
-        if (session->state().contains("book_fraction") || target == session->page()) {
+        if (session->usesWebKit() || session->state().contains("book_fraction")
+            || target == session->page()) {
             dismissControls();
             return;
         }

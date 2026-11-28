@@ -4,6 +4,8 @@
 #include "support/percentage_text.h"
 #include "reader_session.h"
 #include "opening_job.h"
+#include "publication/source_position.h"
+#include "publication/web_resources.h"
 #include "sync/kosync.h"
 #include "engine/engine_worker.h"
 #include "render/highlight_paint.h"
@@ -29,6 +31,9 @@
 #include <QRegion>
 #include <QThread>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QUrl>
 #include <utility>
 
 namespace kobalt {
@@ -731,6 +736,7 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     result.links = engine.pageLinks();
     took("links_ms");
     result.state = engine.state();
+    engine.locationOf(result.state.value("position").toString(), &result.sourceLocation);
     took("state_ms");
     result.nativePosition = engine.platformPosition(positions, &result.nativePositionError);
     took("position_ms");
@@ -796,6 +802,10 @@ ReaderSession::ReaderSession(std::shared_ptr<Engine> retainedEngine, QString pla
 
 std::unique_ptr<ReaderSession> ReaderSession::retained()
 {
+    if (usesWebKit()) {
+        cancelSource();
+        return {};
+    }
     if (running || !openingResult_.ready() || !frame.error.isEmpty() || fingerprint.isEmpty())
         return {};
     // Stop background image work before queuing eviction. The existing close
@@ -893,6 +903,10 @@ void ReaderSession::cancelSource()
     cancelPendingTurn();
     if (lease_)
         lease_->cancel();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (auto *client = std::exchange(webKitClient_, nullptr))
+        client->close();
+#endif
     clearRenderProgress();
 }
 
@@ -905,6 +919,10 @@ void ReaderSession::revokeSource()
     cancelPendingTurn();
     if (lease_)
         lease_->revoke();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (auto *client = std::exchange(webKitClient_, nullptr))
+        client->close();
+#endif
     clearRenderProgress();
 }
 
@@ -912,7 +930,19 @@ void ReaderSession::drain(std::function<void()> finished)
 {
     kobalt::qt::invoke(
             engineWorker(),
-            [finished] { kobalt::qt::invoke(qApp, finished, Qt::QueuedConnection); },
+            [finished] {
+                kobalt::qt::invoke(
+                        qApp,
+                        [finished] {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                            webkit::BookClient::drain(finished);
+#else
+                            finished();
+#endif
+                        },
+                        Qt::QueuedConnection);
+            },
+
             Qt::QueuedConnection);
 }
 
@@ -923,6 +953,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     quietTurns_ = 0;
     background_->count.store(false);
     fullDocumentPending_ = false;
+    deferredOpeningSource_ = {};
     syncDigest_.clear();
     syncFilename_ = QFileInfo(request.syncFilename.isNull() ? request.path : request.syncFilename)
                             .fileName();
@@ -1048,65 +1079,49 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     Qt::QueuedConnection);
         };
     opening.current = current;
+    webKitPositionChanged_ = false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    auto renderer = QFile::decodeName(qgetenv("KOBALT_WPE_RENDERER"));
+    if (renderer.isEmpty())
+        renderer = std::move(request.webKitRenderer);
+    webKit_ = !renderer.isEmpty();
+#else
+    webKit_ = false;
+#endif
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, opening = std::move(opening), identity, finished, lease, job]() mutable {
+            [guard, opening = std::move(opening), identity, finished, lease, job
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+             ,
+             renderer
+#endif
+    ]() mutable {
                 EngineJob activity;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                auto output = renderer.isEmpty() ? runOpening(opening) : runWebKitOpening(opening);
+#else
                 auto output = runOpening(opening);
+#endif
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(output.frame), outcome = output.outcome,
-                         digest = output.digest, syncDigest = output.syncDigest, identity,
-                         savedMatches = output.savedMatches, finished, lease, job,
-                         customPins = std::move(output.customPins)]() mutable {
-                            if (!guard) {
+                        [guard, output = std::move(output), identity, finished, lease, job
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                         ,
+                         renderer
+#endif
+                ]() mutable {
+                            if (!guard)
+                                return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+                            if (!renderer.isEmpty() && output.outcome.ready() && lease
+                                && !lease->revoked() && guard->revision == job
+                                && guard->lease_ == lease) {
+                                guard->openWebKit(renderer, std::move(output), identity, finished);
                                 return;
                             }
-                            guard->completeFrameMarkup(
-                                    std::move(result), job, lease,
-                                    [guard, outcome, digest, syncDigest, identity, savedMatches,
-                                     finished, lease, job, customPins](ReaderFrame result) mutable {
-                                        if (!guard || guard->revision != job
-                                            || guard->lease_ != lease)
-                                            return;
-                                        if (!lease || lease->revoked()) {
-                                            result = {};
-                                            outcome = OpeningResult::failed(
-                                                    lease
-                                                                    && lease->end()
-                                                                            == SourceLease::End::
-                                                                                    Revoked
-                                                            ? OpeningFailureKind::Revoked
-                                                            : OpeningFailureKind::Cancelled,
-                                                    strings::key("error.opening_interrupted"));
-                                        }
-                                        guard->documentAuthor = result.author;
-                                        guard->documentCover = result.cover;
-                                        guard->running = false;
-                                        guard->frame = result;
-                                        guard->openingResult_ = outcome;
-                                        guard->layoutReady_ = outcome.ready();
-                                        guard->customPins_ = outcome.ready()
-                                                ? customPins
-                                                : storage::CustomPins();
-                                        guard->desired = result.state;
-                                        guard->fingerprint = digest;
-                                        guard->syncDigest_ =
-                                                outcome.ready() ? syncDigest : QByteArray();
-                                        if (!outcome.ready()) {
-                                            guard->syncFilenameDigest_.clear();
-                                            guard->syncFilename_.clear();
-                                        }
-                                        guard->savedMatched = savedMatches;
-                                        guard->identity_ = identity;
-                                        finished(outcome);
-                                        if (guard) {
-                                            guard->startPendingSearch();
-                                            // Let opening callbacks build the window and queue
-                                            // its presentation work before idle rendering.
-                                            guard->resumeIdleWork(1, job);
-                                        }
-                                    });
+#endif
+                            guard->completeOpening(std::move(output), identity, finished, lease,
+                                                   job);
                         },
                         Qt::QueuedConnection);
             },
@@ -1123,10 +1138,246 @@ appearance::Patch ReaderSession::OpeningPreview::fontEdit() const
     return {};
 }
 
+void ReaderSession::completeOpening(OpeningOutput output, const QString &identity,
+                                    std::function<void(OpeningResult)> finished,
+                                    const std::shared_ptr<SourceLease> &lease, quint64 job)
+{
+    QPointer<ReaderSession> guard(this);
+    completeFrameMarkup(
+            std::move(output.frame), job, lease,
+            [guard, outcome = output.outcome, digest = output.digest,
+             syncDigest = output.syncDigest, identity, savedMatches = output.savedMatches, finished,
+             lease, job, deferredSource = std::move(output.deferredSource),
+             customPins = std::move(output.customPins)](ReaderFrame result) mutable {
+                if (!guard || guard->revision != job || guard->lease_ != lease)
+                    return;
+                if (!lease || lease->revoked()) {
+                    result = {};
+                    const auto kind = lease && lease->end() == SourceLease::End::Revoked
+                            ? OpeningFailureKind::Revoked
+                            : OpeningFailureKind::Cancelled;
+                    outcome =
+                            OpeningResult::failed(kind, strings::key("error.opening_interrupted"));
+                }
+                guard->documentAuthor = result.author;
+                guard->documentCover = result.cover;
+                guard->running = false;
+                guard->frame = result;
+                guard->openingResult_ = outcome;
+                guard->deferredOpeningSource_ = outcome.ready() ? deferredSource : Location{};
+                guard->layoutReady_ = outcome.ready();
+                guard->customPins_ = outcome.ready() ? customPins : storage::CustomPins();
+                guard->desired = result.state;
+                guard->fingerprint = digest;
+                guard->syncDigest_ = outcome.ready() ? syncDigest : QByteArray();
+                if (!outcome.ready()) {
+                    guard->syncFilenameDigest_.clear();
+                    guard->syncFilename_.clear();
+                }
+                guard->savedMatched = savedMatches;
+                guard->identity_ = identity;
+                finished(outcome);
+                if (guard) {
+                    guard->startPendingSearch();
+                    // Let the opening callback queue presentation before idle rendering.
+                    guard->resumeIdleWork(1, job);
+                }
+            });
+}
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+namespace {
+void applyWebKitPage(ReaderFrame &frame, const webkit::Page &page, quint64 job, int fontPixels,
+                     int delta, const QByteArray &fingerprint)
+{
+    frame.image = page.image;
+    frame.pageInfo = page.pages;
+    if (page.pages.bookPages.exact() && page.pages.bookPage.exact())
+        frame.pageInfo.bookProgress = Query<double>::exact(
+                pageProgressFraction(page.pages.bookPage.value(), page.pages.bookPages.value()),
+                page.pages.bookPages.generation());
+    frame.sourceLocation = page.anchor;
+    frame.links = page.links;
+    frame.pageStart = sourcePositionToken(page.anchor, fingerprint);
+    frame.state["position"] = frame.pageStart;
+    frame.markup = {};
+    frame.renderId = job;
+    frame.turnDirection = delta;
+    frame.error.clear();
+    const auto column = page.pages.chapterPage.value();
+    const auto columns = page.pages.chapterPages.value();
+    frame.state["font_pixels"] = fontPixels;
+    frame.state["page"] = column;
+    frame.state["pages"] = columns;
+    frame.state["chapter_page"] = column + 1;
+    frame.state["chapter_pages"] = columns;
+    frame.contentsSelection = {};
+    for (int i = 0; i < frame.chapters.size(); ++i) {
+        auto path = QUrl(frame.chapters[i].position).path(QUrl::FullyDecoded);
+        if (path.startsWith('/'))
+            path.remove(0, 1);
+        if (path == page.anchor.href) {
+            frame.contentsSelection = { i, i + 1 < frame.chapters.size() ? i + 1 : -1, column + 1,
+                                        columns };
+            break;
+        }
+    }
+    frame.state["chapter_title"] = frame.contentsSelection.current < 0
+            ? QString()
+            : frame.chapters[frame.contentsSelection.current].title;
+    frame.state["continues_before"] = page.before;
+    frame.state["continues_after"] = page.after;
+    frame.state["next_page"] = column + 1 < columns ? column + 1 : column;
+    diagnostic("wpe-frame",
+               { { "render_id", double(job) },
+                 { "column", column },
+                 { "spine", page.spineIndex },
+                 { "font_pixels", fontPixels },
+                 { "turn", delta } },
+               false);
+    if (page.requestId)
+        diagnostic("frame-ready",
+                   { { "render_id", double(job) },
+                     { "page", column },
+                     { "renderer_pid", double(page.rendererPid) },
+                     { "wpe_request", double(page.requestId) } },
+                   false);
+}
+} // namespace
+
+void ReaderSession::openWebKit(const QString &renderer, OpeningOutput output,
+                               const QString &identity, std::function<void(OpeningResult)> finished)
+{
+    const auto size = desiredSize;
+    QSize capacity = size;
+    if (auto *screen = QGuiApplication::primaryScreen()) {
+        const auto screenSize = screen->size();
+        if (qint64(screenSize.width()) * screenSize.height() > qint64(size.width()) * size.height()
+            && spike::validGeometry(screenSize.width(), screenSize.height(), spike::maxFrameBytes))
+            capacity = screenSize;
+    }
+    const auto lease = lease_;
+    const auto job = revision;
+    const auto pixels = output.frame.state.value("font_pixels").toInt();
+    webKitClient_ = new webkit::BookClient(renderer, std::move(output.webSource), capacity);
+    const auto anchor = webKitClient_->contains(output.webStart) ? output.webStart : Location{};
+    QPointer<ReaderSession> guard(this);
+    webKitClient_->render(
+            size, pixels, 0, newestLayout->load(),
+            [guard, lease, job, pixels, identity, finished,
+             output = std::move(output)](webkit::Page page) mutable {
+                if (!guard || guard->revision != job || guard->lease_ != lease)
+                    return;
+                if (!page.error.isEmpty() || page.image.isNull()) {
+                    output.outcome = OpeningResult::failed(OpeningFailureKind::Io,
+                                                           "opening.wpe-render", page.error);
+                } else {
+                    guard->webKitClient_->accept(page);
+                    applyWebKitPage(output.frame, page, job, pixels, 0, output.digest);
+                }
+                guard->completeOpening(std::move(output), identity, finished, lease, job);
+            },
+            anchor);
+}
+
+void ReaderSession::dispatchWebKit()
+{
+    if (!webKitClient_ || !lease_ || lease_->revoked())
+        return;
+    webKitClient_ = webKitClient_->recover();
+    running = true;
+    const auto delta = std::exchange(pageDelta, 0);
+    turning = delta != 0;
+    QString fragment;
+    const auto target = std::exchange(destination, {});
+    const auto anchor = webKitClient_->destination(target, fingerprint, &fragment);
+    const auto lease = lease_;
+    const auto job = revision;
+    const auto pixels = desired.value("font_pixels").toInt(18);
+    QPointer<ReaderSession> guard(this);
+    webKitClient_->render(
+            desiredSize, pixels, delta, newestLayout->load(),
+            [guard, lease, job, pixels, delta, target](webkit::Page result) {
+                if (!guard || guard->lease_ != lease)
+                    return;
+                guard->running = false;
+                guard->turning = false;
+                if (lease->revoked())
+                    return;
+                if (guard->revision != job) {
+                    // A reflow supersedes the pixels, while an unfinished jump
+                    // still needs to reach its destination in the new layout.
+                    if (guard->destination.isEmpty())
+                        guard->destination = target;
+                    return guard->dispatchWebKit();
+                }
+                if (!result.image.isNull()) {
+                    guard->webKitClient_->accept(result);
+                    guard->webKitPositionChanged_ |= delta != 0 || !target.isEmpty();
+                    applyWebKitPage(guard->frame, result, job, pixels, delta, guard->fingerprint);
+                } else if (!result.boundary) {
+                    guard->frame.error = result.error;
+                    guard->cancelPendingTurn();
+                }
+                guard->layoutReady_ = !guard->frame.image.isNull();
+                guard->desired = guard->frame.state;
+                guard->clearRenderProgress();
+                if (!guard || guard->lease_ != lease || guard->revision != job)
+                    return;
+                if (result.boundary && guard->turnBoundary)
+                    guard->turnBoundary(delta);
+                if (guard && guard->updated)
+                    guard->updated();
+                if (guard && !guard->busy() && guard->revision == job)
+                    guard->startPendingSearch();
+                if (!guard || !guard->pendingTurn || guard->revision != job)
+                    return;
+                QTimer::singleShot(0, guard, [guard, lease, job] {
+                    if (!guard || guard->lease_ != lease || guard->revision != job)
+                        return;
+                    const int direction = std::exchange(guard->pendingTurn, 0);
+                    if (direction && !guard->turn(direction) && guard->turnBoundary)
+                        guard->turnBoundary(direction);
+                });
+            },
+            anchor, fragment);
+}
+#endif
+
+bool ReaderSession::adjustWebKitFont(int delta)
+{
+    if (!usesWebKit() || !openingResult_.ready() || frame.image.isNull() || !lease_
+        || lease_->revoked() || temporaryTypography())
+        return false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    const auto old = desired.value("font_pixels").toInt(18);
+    return setWebKitFontPixels(qBound(8, old + delta, 96));
+#else
+    Q_UNUSED(delta);
+    return false;
+#endif
+}
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+bool ReaderSession::setWebKitFontPixels(int pixels)
+{
+    if (pixels == desired.value("font_pixels").toInt(18))
+        return false;
+    desired["font_pixels"] = pixels;
+    request(true, RenderReason::Appearance);
+    return true;
+}
+#endif
+
 void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                                 std::function<void(QString)> finished,
                                 std::function<void(ReaderSession &)> firstEdit)
 {
+    if (source.usesWebKit()) {
+        QTimer::singleShot(0, this,
+                           [finished] { finished(strings::get("error.no_section_to_preview")); });
+        return;
+    }
     if (ownsLease_)
         cancelSource();
     ownsLease_ = false;
@@ -1289,6 +1540,7 @@ void ReaderSession::showFullDocument(quint64 job)
 
 void ReaderSession::setPublisherPageNumbers(bool enabled)
 {
+    enabled = enabled && !usesWebKit();
     if (usePublisherPageNumbers == enabled)
         return;
     usePublisherPageNumbers = enabled;
@@ -1301,6 +1553,10 @@ void ReaderSession::setPublisherPageNumbers(bool enabled)
 void ReaderSession::printedPageLabels(QStringList positions,
                                       std::function<void(QHash<QString, QString>)> finished)
 {
+    if (usesWebKit()) {
+        finished({});
+        return;
+    }
     const auto lease = lease_;
     QPointer<ReaderSession> guard(this);
     qt::invoke(
@@ -1327,6 +1583,24 @@ void ReaderSession::printedPageLabels(QStringList positions,
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
                                       int chapterMode)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (!webKitClient_ || !lease_ || lease_->revoked() || frame.image.isNull())
+            return;
+        auto next = desired;
+        if (!temporaryTypography())
+            settings.replaceIn(next);
+        const auto pixels = qBound(8, next.value("font_pixels").toInt(18), 96);
+        if (size.isValid() && size != desiredSize) {
+            desiredSize = size;
+            desired["font_pixels"] = pixels;
+            request(true, RenderReason::PageLayout);
+        } else {
+            setWebKitFontPixels(pixels);
+        }
+        return;
+    }
+#endif
     // While the appearance changes, a count would be thrown away.
     quietTurns_ = 0;
     background_->count.store(false);
@@ -1410,6 +1684,8 @@ bool ReaderSession::style(int pixels, int spacing, const QString &face, int marg
 
 void ReaderSession::setDarkMode(bool enabled)
 {
+    if (usesWebKit())
+        return;
     if (temporaryTypography())
         return;
     if (desired.value("dark_mode").toBool(false) == enabled)
@@ -1557,6 +1833,8 @@ bool ReaderSession::turn(int direction)
 
 bool ReaderSession::go(int target)
 {
+    if (usesWebKit())
+        return false;
     // The worker may already have left the slice whose numbers are on screen.
     if (running && frame.state.contains("book_fraction"))
         return false;
@@ -1572,6 +1850,8 @@ bool ReaderSession::go(int target)
 
 bool ReaderSession::goToFraction(double fraction)
 {
+    if (usesWebKit())
+        return false;
     if (!(fraction >= 0 && fraction <= 1))
         return false;
     fractionTarget = fraction;
@@ -1582,8 +1862,22 @@ bool ReaderSession::goToFraction(double fraction)
     return true;
 }
 
+bool ReaderSession::canNavigateSourcePosition(const QString &position) const
+{
+    if (!usesWebKit())
+        return sourcePositionFromToken(position, fingerprint).valid();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    return webKitClient_ && lease_ && !lease_->revoked()
+            && webKitClient_->destination(position, fingerprint).valid();
+#else
+    return false;
+#endif
+}
+
 bool ReaderSession::goTo(const QString &anchor, bool keepLayout)
 {
+    if (usesWebKit() && (busy() || !canNavigateSourcePosition(anchor)))
+        return false;
     if (anchor.isEmpty())
         return false;
     keepDestinationLayout = keepLayout;
@@ -1601,6 +1895,8 @@ bool ReaderSession::goToChapter(int index)
     const auto list = chapters();
     if (index < 0 || index >= list.size() || list[index].position.isEmpty())
         return false;
+    if (usesWebKit())
+        return goTo(list[index].position);
     keepDestinationLayout = false;
     destination = list[index].position;
     chapterTarget = index;
@@ -1625,6 +1921,8 @@ bool ReaderSession::goToSyncedPosition(const QString &position,
 bool ReaderSession::importPosition(const QString &location, bool native,
                                    std::function<void(QString)> finished)
 {
+    if (usesWebKit())
+        return false;
     if (running || retiring || !lease_ || lease_->revoked() || !layoutReady_)
         return false;
     cancelPendingTurn();
@@ -1680,6 +1978,9 @@ bool ReaderSession::importPosition(const QString &location, bool native,
                                             });
                                             return;
                                         }
+                                        if (error.isEmpty()
+                                            && guard->frame.sourceLocation != result.sourceLocation)
+                                            guard->deferredOpeningSource_ = {};
                                         guard->frame = result;
                                         finished(error);
                                         if (!guard || guard->lease_ != lease || lease->revoked()
@@ -1702,6 +2003,12 @@ bool ReaderSession::importPosition(const QString &location, bool native,
 void ReaderSession::describeSyncedPosition(const QString &position,
                                            std::function<void(SyncedPositionDescription)> finished)
 {
+    if (usesWebKit()) {
+        SyncedPositionDescription result;
+        result.comparison.error = strings::get("error.cannot_compare_the_reading_positions");
+        finished(result);
+        return;
+    }
     const auto engine = engine_;
     const auto lease = lease_;
     const auto job = revision;
@@ -1743,6 +2050,12 @@ void ReaderSession::describeSyncedPosition(const QString &position,
 void ReaderSession::compareNativePosition(const QString &location,
                                           std::function<void(PositionComparison)> finished)
 {
+    if (usesWebKit()) {
+        PositionComparison result;
+        result.error = strings::get("error.no_supported_native_reading_position");
+        finished(result);
+        return;
+    }
     auto engine = engine_;
     const auto positions = positions_;
     QPointer<ReaderSession> guard(this);
@@ -1787,18 +2100,37 @@ void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage, QFi
 {
     auto engine = engine_;
     const auto lease = lease_;
+    const bool webKit = usesWebKit();
+    const auto resources = webResources();
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, lease, maximumSize, preferredPath, preferEmbedded, finished] {
+            [engine, guard, lease, maximumSize, preferredPath, preferEmbedded, webKit, resources,
+             finished] {
                 EngineJob activity;
                 QFileInfo before(preferredPath);
                 const auto bytes = before.size();
                 const auto modified = before.lastModified();
                 QString usedPath;
-                auto image = lease && !lease->revoked()
-                        ? engine->coverImage(maximumSize, preferredPath, &usedPath, preferEmbedded)
-                        : QImage();
+                QImage image;
+                if (lease && !lease->revoked()) {
+                    if (!webKit) {
+                        image = engine->coverImage(maximumSize, preferredPath, &usedPath,
+                                                   preferEmbedded);
+                    } else {
+                        if (preferEmbedded && resources)
+                            image = resources->coverImage(maximumSize);
+                        if (image.isNull() && !lease->revoked() && !preferredPath.isEmpty()) {
+                            auto hostCover =
+                                    engine->coverImage(maximumSize, preferredPath, &usedPath);
+                            // A retained Blaze cover can belong to a previous publication.
+                            if (!usedPath.isEmpty())
+                                image = std::move(hostCover);
+                        }
+                        if (image.isNull() && !preferEmbedded && resources)
+                            image = resources->coverImage(maximumSize);
+                    }
+                }
                 const QFileInfo after(usedPath);
                 const auto source = !usedPath.isEmpty() && before.isAbsolute() && before.isFile()
                                 && bytes == after.size() && modified == after.lastModified()
@@ -1927,6 +2259,35 @@ void ReaderSession::bookmarkLocations(QStringList positions,
                                       bool rangeEndpoints, bool sourceOrder,
                                       std::shared_ptr<std::atomic_bool> cancelled, bool wantPrinted)
 {
+    if (usesWebKit()) {
+        const auto anchor = sourcePositionToken(frame.sourceLocation, fingerprint);
+        const auto href = frame.sourceLocation.href;
+        const auto chapter = chapterTitle();
+        const auto current = page();
+        const auto absolute = bookPage();
+        const auto render = renderId();
+        QTimer::singleShot(
+                0, this,
+                [this, positions, finished, anchor, current, absolute, render, href, chapter,
+                 cancelled] {
+                    BookmarkLocations locations;
+                    if (render == renderId() && lease_ && !lease_->revoked()
+                        && (!cancelled || !cancelled->load())) {
+                        for (const auto &position : positions) {
+                            const auto location = sourcePositionFromToken(position, fingerprint);
+                            const bool sameItem = location.valid() && location.href == href;
+                            const bool atPageStart = !anchor.isEmpty() && position == anchor;
+                            locations.pages.append(atPageStart ? current : -1);
+                            locations.order.append(-1);
+                            locations.bookPages.append(atPageStart ? absolute : -1);
+                            locations.chapters.append(sameItem ? chapter : QString());
+                        }
+                    }
+                    finished(std::move(locations));
+                });
+        return;
+    }
+    const auto digest = fingerprint;
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
@@ -1936,16 +2297,23 @@ void ReaderSession::bookmarkLocations(QStringList positions,
     kobalt::qt::invoke(
             engineWorker(),
             [engine, guard, positions, finished, job, latest, lease, ready, rangeEndpoints,
-             sourceOrder, cancelled, printed = wantPrinted && usePublisherPageNumbers] {
+             sourceOrder, cancelled, digest, printed = wantPrinted && usePublisherPageNumbers] {
                 EngineJob activity;
                 BookmarkLocations locations;
                 const auto current = [latest, job, lease, ready, cancelled] {
                     return ready && latest->load() == job && lease && !lease->revoked()
                             && (!cancelled || !cancelled->load());
                 };
-                if (current())
-                    locations = captureBookmarkLocations(*engine, positions, rangeEndpoints,
+                if (current()) {
+                    auto anchors = positions;
+                    for (QString &position : anchors) {
+                        const auto location = sourcePositionFromToken(position, digest);
+                        if (location.valid())
+                            position = engine->positionOf(location);
+                    }
+                    locations = captureBookmarkLocations(*engine, anchors, rangeEndpoints,
                                                          sourceOrder, current, printed);
+                }
                 kobalt::qt::invoke(
                         qApp,
                         [guard, locations, finished, job, lease, cancelled] {
@@ -1995,6 +2363,18 @@ void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> 
 
 void ReaderSession::pageSummary(int page, std::function<void(PageSummary)> finished)
 {
+    if (usesWebKit()) {
+        PageSummary summary;
+        if (page == this->page()) {
+            summary.start = frame.pageStart;
+            summary.chapter = chapterTitle();
+            summary.bookPage = bookPage();
+        }
+        QTimer::singleShot(0, this, [this, finished, summary, job = revision] {
+            finished(!busy() && currentSourceFrame(job) ? summary : PageSummary{});
+        });
+        return;
+    }
     const bool pairedWindow =
             frame.state.contains("book_fraction") && frame.state.value("columns").toInt() == 2;
     const auto shown = page == this->page() ? frame.pageStart : QString();
@@ -2041,7 +2421,40 @@ void ReaderSession::pageSummary(int page, std::function<void(PageSummary)> finis
 void ReaderSession::cancelPagePreview()
 {
     newestPreview->fetch_add(1);
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (webKitClient_)
+        webKitClient_->cancelPreview();
+#endif
 }
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+void ReaderSession::scaleWebKitPreview(QImage image, QSize bounds, quint64 request, quint64 job,
+                                       std::function<void(QImage)> finished)
+{
+    const auto token = newestPreview;
+    const auto latest = newest;
+    const auto lease = lease_;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [guard, image = std::move(image), bounds, request, job, token, latest, lease,
+             finished] {
+                if (token->load() != request || latest->load() != job || lease->revoked())
+                    return;
+                const auto scaled =
+                        image.scaled(bounds, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, scaled, request, job, token, latest, lease, finished] {
+                            if (guard && token->load() == request && latest->load() == job
+                                && !lease->revoked())
+                                finished(scaled);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+#endif
 
 void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImage)> finished)
 {
@@ -2049,6 +2462,13 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
     if (running || retiring || !lease_ || lease_->revoked() || page < 0 || page >= pages()
         || bounds.isEmpty() || qint64(bounds.width()) * bounds.height() > 1024 * 1024)
         return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (page == this->page())
+            scaleWebKitPreview(frame.image, bounds, newestPreview->load(), revision, finished);
+        return;
+    }
+#endif
     const auto request = newestPreview->load();
     const auto token = newestPreview;
     const auto latest = newest;
@@ -2115,6 +2535,36 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
     if (running || retiring || !lease_ || lease_->revoked() || (direction != -1 && direction != 1)
         || bounds.isEmpty() || qint64(bounds.width()) * bounds.height() > 1024 * 1024)
         return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit() && webKitClient_) {
+        const auto job = revision;
+        const auto request = newestPreview->load();
+        QPointer<ReaderSession> guard(this);
+        if (!frame.image.isNull() && !frame.error.isEmpty()) {
+            finished({}, false);
+            return;
+        }
+        webKitClient_->render(
+                frame.image.size(), fontSize(), direction, newestLayout->load(),
+                [guard, job, request, bounds, bookmarkPositions, finished](webkit::Page page) {
+                    if (!guard || !guard->currentSourceFrame(job)
+                        || request != guard->newestPreview->load())
+                        return;
+                    if (page.image.isNull()) {
+                        finished({}, false);
+                        return;
+                    }
+                    const bool marked = bookmarkPositions.contains(
+                            sourcePositionToken(page.anchor, guard->fingerprint));
+                    guard->scaleWebKitPreview(std::move(page.image), bounds, request, job,
+                                              [finished, marked](QImage image) {
+                                                  finished(std::move(image), marked);
+                                              });
+                },
+                {}, {}, true);
+        return;
+    }
+#endif
     const auto request = newestPreview->load();
     const auto token = newestPreview;
     const auto latest = newest;
@@ -2272,6 +2722,10 @@ void ReaderSession::appearancePage(PreviewPage kind, int cropTop, int inset,
 
 void ReaderSession::nativePosition(std::function<void(QString, QString)> finished)
 {
+    if (usesWebKit()) {
+        finished({}, {});
+        return;
+    }
     auto engine = engine_;
     const auto positions = positions_;
     QPointer<ReaderSession> guard(this);
@@ -2297,6 +2751,15 @@ void ReaderSession::nativePosition(std::function<void(QString, QString)> finishe
             Qt::QueuedConnection);
 }
 
+std::shared_ptr<WebResources> ReaderSession::webResources() const
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (webKitClient_)
+        return webKitClient_->resources();
+#endif
+    return {};
+}
+
 void ReaderSession::intersectingRanges(const QString &start, const QString &end,
                                        QVector<QPair<QString, QString>> ranges,
                                        std::function<void(QVector<int>)> finished)
@@ -2307,22 +2770,24 @@ void ReaderSession::intersectingRanges(const QString &start, const QString &end,
     const auto job = latest->load();
     const auto lease = lease_;
     const bool ready = layoutReady_;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, latest, lease, ready, start, end, ranges = std::move(ranges),
+            [engine, web, guard, job, latest, lease, ready, start, end, ranges = std::move(ranges),
              finished] {
                 EngineJob activity;
                 const auto result = ready && latest->load() == job && lease && !lease->revoked()
-                        ? engine->intersectingRanges(start, end, ranges)
+                        ? (web ? web->intersectingRanges(start, end, ranges)
+                               : engine->intersectingRanges(start, end, ranges))
                         : QVector<int>();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, job, lease, result, finished] {
+                        [guard, job, lease, result, finished, web] {
                             if (guard) {
                                 finished(guard->layoutRevision() == job && guard->lease_ == lease
                                                          && lease && !lease->revoked()
                                                  ? result
-                                                 : QVector<int>());
+                                                 : (web ? QVector<int>{ -1 } : QVector<int>()));
                             }
                         },
                         Qt::QueuedConnection);
@@ -2337,6 +2802,10 @@ bool ReaderSession::currentSourceFrame(quint64 job) const
 
 void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)> finished)
 {
+    if (usesWebKit()) {
+        finished({});
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2361,6 +2830,14 @@ void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)>
 void ReaderSession::annotationTokenAt(QPoint point, std::function<void(AnnotationToken)> finished,
                                       const QString &boundary, bool start)
 {
+    if (usesWebKit()) {
+        wordAt(point, [finished](WordSelection word) {
+            AnnotationToken token;
+            static_cast<WordSelection &>(token) = std::move(word);
+            finished(std::move(token));
+        });
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2394,14 +2871,20 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     const auto latest = newest;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, startTokenStart, startTokenEnd, endTokenStart, endTokenEnd,
+            [engine, web, guard, job, startTokenStart, startTokenEnd, endTokenStart, endTokenEnd,
              finished, endTokenPolicy, startTokenPolicy, latest] {
                 EngineJob activity;
-                const auto result = engine->annotationRange(
-                        startTokenStart, startTokenEnd, endTokenStart, endTokenEnd, endTokenPolicy,
-                        startTokenPolicy, [latest, job] { return latest->load() == job; });
+                const auto result = web
+                        ? (latest->load() == job
+                                   ? web->selectionRange({ startTokenStart, startTokenEnd,
+                                                           endTokenStart, endTokenEnd })
+                                   : TextRange{})
+                        : engine->annotationRange(startTokenStart, startTokenEnd, endTokenStart,
+                                                  endTokenEnd, endTokenPolicy, startTokenPolicy,
+                                                  [latest, job] { return latest->load() == job; });
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, result, finished] {
@@ -2417,6 +2900,10 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
 void ReaderSession::annotationRange(const QString &start, const QString &end,
                                     std::function<void(TextRange)> finished)
 {
+    if (usesWebKit()) {
+        textRange(start, end, std::move(finished), false);
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2446,12 +2933,14 @@ void ReaderSession::textRange(const QString &start, const QString &end,
     const auto job = latest->load();
     const auto lease = lease_;
     const bool ready = layoutReady_;
+    const auto web = webResources();
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, latest, lease, ready, start, end, finished, withContext] {
+            [engine, web, guard, job, latest, lease, ready, start, end, finished, withContext] {
                 EngineJob activity;
                 const auto result = ready && latest->load() == job && lease && !lease->revoked()
-                        ? engine->textRange(start, end, withContext)
+                        ? (web ? web->textRange(start, end, withContext)
+                               : engine->textRange(start, end, withContext))
                         : TextRange();
                 kobalt::qt::invoke(
                         qApp,
@@ -2470,6 +2959,21 @@ void ReaderSession::textRange(const QString &start, const QString &end,
 
 void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->wordAt(point, [guard, job = revision, finished](WordSelection word) {
+            if (guard)
+                finished(guard->currentSourceFrame(job) && !guard->busy() ? std::move(word)
+                                                                          : WordSelection{});
+        });
+        return;
+    }
+#endif
     if (running)
         return;
     auto engine = engine_;
@@ -2520,7 +3024,31 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished,
 void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished,
                                 std::function<bool()> current)
 {
-    if (running || !lease_ || lease_->revoked())
+    if (!lease_ || lease_->revoked())
+        return;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        const auto link =
+                std::find_if(frame.links.cbegin(), frame.links.cend(),
+                             [&source](const PageLink &entry) { return source == entry.source; });
+        if (!webKitClient_ || busy() || link == frame.links.cend()) {
+            QTimer::singleShot(0, this, [finished, current] {
+                if (!current || current())
+                    finished({});
+            });
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->linkDetails(*link,
+                                   [guard, job = revision, finished, current](LinkDetails result) {
+                                       if (guard && guard->currentSourceFrame(job) && !guard->busy()
+                                           && (!current || current()))
+                                           finished(std::move(result));
+                                   });
+        return;
+    }
+#endif
+    if (running)
         return;
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
@@ -2608,6 +3136,10 @@ void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, co
 {
     if (running || retiring || !lease_ || lease_->revoked())
         return;
+    if (usesWebKit()) {
+        finished(std::move(hits));
+        return;
+    }
     const auto engine = engine_;
     const auto lease = lease_;
     const auto job = revision;
@@ -2640,11 +3172,22 @@ void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, co
 
 void ReaderSession::prepareSearch()
 {
+    if (usesWebKit())
+        return;
     if (running || searchCancelled || !searchQuery.isEmpty() || retiring || !lease_
         || lease_->revoked())
         return;
     searchCancelled = std::make_shared<std::atomic_bool>(false);
     prepareSearchNext(revision, searchCancelled);
+}
+
+bool ReaderSession::hasPageSearchBoundary() const
+{
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit())
+        return webKitClient_ && webKitClient_->hasPageSearchBoundary();
+#endif
+    return true;
 }
 
 void ReaderSession::prepareSearchNext(quint64 job, std::shared_ptr<std::atomic_bool> cancelled)
@@ -2691,10 +3234,35 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
     const bool needsBookPages = cursor.prepareWholeBook && frame.state.contains("book_fraction")
             && !frame.state.value("whole_book_ready").toBool();
     QPointer<ReaderSession> guard(this);
+    const auto publish = [guard, query, count, job, cancelled, finished, reset,
+                          lease](SearchBatch result) {
+        if (!guard || cancelled->load() || !lease || lease->revoked() || guard->lease_ != lease
+            || guard->revision != job || guard->running)
+            return;
+        // Keep the UI subscription after completion so reflow can replace
+        // its anchors and details. Eager callers remain one-shot searches.
+        if (result.done && guard->searchWithDetails) {
+            guard->searchQuery.clear();
+            guard->searchFinished = {};
+            guard->searchCancelled.reset();
+        }
+        result.reset = reset;
+        finished(result);
+        if (guard && !cancelled->load() && !lease->revoked() && !result.done
+            && guard->searchCancelled == cancelled && guard->revision == job && !guard->running)
+            guard->searchNext(query, result.cursor, count + result.hits.size(), job, cancelled,
+                              finished, false);
+    };
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit() && webKitClient_) {
+        webKitClient_->searchText(query, cursor, scope, reset, cancelled, publish);
+        return;
+    }
+#endif
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, query, cursor, count, job, cancelled, finished, reset, lease, scope,
-             origin, details, latest, needsBookPages] {
+            [engine, guard, query, cursor, count, job, cancelled, lease, scope, origin, details,
+             latest, needsBookPages, publish] {
                 if (cancelled->load() || !lease || lease->revoked())
                     return;
                 EngineJob activity;
@@ -2710,29 +3278,8 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
                 };
                 if (needsBookPages && currentFrame() && engine->fullDocumentReady())
                     publishPageEstimate(*engine, currentFrame, guard, job, lease);
-                result.reset = reset;
                 kobalt::qt::invoke(
-                        qApp,
-                        [guard, query, count, job, cancelled, finished, result, lease] {
-                            if (!guard || cancelled->load() || lease->revoked()
-                                || guard->lease_ != lease || guard->revision != job
-                                || guard->running)
-                                return;
-                            // Keep the UI subscription after completion so reflow can replace
-                            // its anchors and details. Eager callers remain one-shot searches.
-                            if (result.done && guard->searchWithDetails) {
-                                guard->searchQuery.clear();
-                                guard->searchFinished = {};
-                                guard->searchCancelled.reset();
-                            }
-                            finished(result);
-                            if (guard && !cancelled->load() && !lease->revoked() && !result.done
-                                && guard->searchCancelled == cancelled && guard->revision == job
-                                && !guard->running)
-                                guard->searchNext(query, result.cursor, count + result.hits.size(),
-                                                  job, cancelled, finished, false);
-                        },
-                        Qt::QueuedConnection);
+                        qApp, [publish, result] { publish(result); }, Qt::QueuedConnection);
             },
             Qt::QueuedConnection);
 }
@@ -2741,8 +3288,8 @@ void ReaderSession::completeFrameMarkup(ReaderFrame result, quint64 job,
                                         const std::shared_ptr<SourceLease> &lease,
                                         std::function<void(ReaderFrame)> finished)
 {
-    if (revision != job || lease_ != lease || !lease || lease->revoked() || result.image.isNull()
-        || !result.error.isEmpty()) {
+    if (usesWebKit() || revision != job || lease_ != lease || !lease || lease->revoked()
+        || result.image.isNull() || !result.error.isEmpty()) {
         finished(std::move(result));
         return;
     }
@@ -2834,6 +3381,51 @@ void ReaderSession::captureMarkup(std::function<void(bool)> finished)
         finished(true);
         return;
     }
+    if (usesWebKit()) {
+        QPointer<ReaderSession> guard(this);
+        const auto job = revision;
+        QVector<QPair<QString, QString>> ranges;
+        for (const auto &item : request.saved)
+            ranges.append({ item.start, item.end });
+        rangeRectGroups(std::move(ranges),
+                        [guard, request, generation, imageKey, job,
+                         finished](QVector<QVector<QRect>> groups) {
+                            if (!guard)
+                                return;
+                            if (!guard->currentSourceFrame(job) || guard->busy()
+                                || guard->markupGeneration_ != generation
+                                || groups.size() != request.saved.size()) {
+                                finished(false);
+                                return;
+                            }
+                            ReaderMarkupFrame markup;
+                            markup.request = request;
+                            markup.generation = generation;
+                            markup.imageKey = imageKey;
+                            for (int i = 0; i < groups.size(); ++i)
+                                markup.saved.append({ std::move(groups[i]), request.saved[i].color,
+                                                      request.saved[i].style });
+                            if (request.draftStart.isEmpty()) {
+                                guard->frame.markup = std::move(markup);
+                                finished(true);
+                                return;
+                            }
+                            guard->annotationGeometry(
+                                    request.draftStart, request.draftEnd,
+                                    [guard, generation, job, markup = std::move(markup),
+                                     finished](AnnotationGeometry draft) mutable {
+                                        const bool current = guard && guard->currentSourceFrame(job)
+                                                && !guard->busy()
+                                                && guard->markupGeneration_ == generation;
+                                        if (current) {
+                                            markup.draft = std::move(draft);
+                                            guard->frame.markup = std::move(markup);
+                                        }
+                                        finished(current);
+                                    });
+                        });
+        return;
+    }
     const auto engine = engine_;
     const auto job = revision;
     const auto lease = lease_;
@@ -2870,6 +3462,23 @@ void ReaderSession::captureMarkup(std::function<void(bool)> finished)
 void ReaderSession::annotationGeometry(const QString &start, const QString &end,
                                        std::function<void(AnnotationGeometry)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->rangeGeometry(
+                start, end, [guard, job = revision, finished](AnnotationGeometry geometry) {
+                    if (guard)
+                        finished(guard->currentSourceFrame(job) && !guard->busy()
+                                         ? std::move(geometry)
+                                         : AnnotationGeometry{});
+                });
+        return;
+    }
+#endif
     if (running) {
         return;
     }
@@ -2896,6 +3505,23 @@ void ReaderSession::annotationGeometry(const QString &start, const QString &end,
 void ReaderSession::rangeRects(const QString &start, const QString &end,
                                std::function<void(QVector<QRect>)> finished)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit()) {
+        if (busy() || !webKitClient_) {
+            finished({});
+            return;
+        }
+        QPointer<ReaderSession> guard(this);
+        webKitClient_->rangeRects(start, end,
+                                  [guard, job = revision, finished](QVector<QRect> rects) {
+                                      if (guard)
+                                          finished(guard->currentSourceFrame(job) && !guard->busy()
+                                                           ? std::move(rects)
+                                                           : QVector<QRect>{});
+                                  });
+        return;
+    }
+#endif
     if (running)
         return;
     auto engine = engine_;
@@ -2956,6 +3582,43 @@ void ReaderSession::rangeRectGroups(QVector<QPair<QString, QString>> ranges,
         finished({});
         return;
     }
+    if (usesWebKit()) {
+        struct Batch
+        {
+            QVector<QPair<QString, QString>> ranges;
+            QVector<QVector<QRect>> groups;
+        };
+
+        auto batch = std::make_shared<Batch>();
+        batch->ranges = std::move(ranges);
+        batch->groups.reserve(batch->ranges.size());
+        auto step = std::make_shared<std::function<void()>>();
+        QPointer<ReaderSession> guard(this);
+        *step = [guard, job = revision, batch, finished,
+                 again = std::weak_ptr<std::function<void()>>(step)] {
+            if (!guard)
+                return;
+            if (!guard->currentSourceFrame(job) || guard->busy()) {
+                finished({});
+                return;
+            }
+            const auto index = batch->groups.size();
+            if (index == batch->ranges.size()) {
+                finished(std::move(batch->groups));
+                return;
+            }
+            const auto &range = batch->ranges[index];
+            guard->rangeRects(range.first, range.second,
+                              [guard, batch, next = again.lock()](QVector<QRect> rects) {
+                                  if (!guard)
+                                      return;
+                                  batch->groups.append(std::move(rects));
+                                  QTimer::singleShot(0, guard, [next] { (*next)(); });
+                              });
+        };
+        (*step)();
+        return;
+    }
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -2995,7 +3658,7 @@ void ReaderSession::resize(QSize size)
     // Hybrid rendering: another page size goes back to the chapter, as
     // another appearance does in requestAppearance(). Laying out the whole
     // book again would hold up the reader; it follows in the background.
-    if (!preview_ && renderingMode::countsInBackground()) {
+    if (!usesWebKit() && !preview_ && renderingMode::countsInBackground()) {
         quietTurns_ = 0;
         background_->count.store(false);
         fullDocumentPending_ = false;
@@ -3037,7 +3700,8 @@ int ReaderSession::mainPercent() const
 // Resolve only the rows and scrubber positions the interface asks to display.
 QString ReaderSession::navigationPrintedPage(int index, bool chapter)
 {
-    if (index < 0 || frame.printedPages.isEmpty() || !layoutReady_ || busy() || !lease_)
+    if (usesWebKit() || index < 0 || frame.printedPages.isEmpty() || !layoutReady_ || busy()
+        || !lease_)
         return {};
     const auto layout = layoutRevision();
     const bool window = frame.state.contains("book_fraction");
@@ -3105,6 +3769,8 @@ QString ReaderSession::displayPageLabel(int absolute, const QString &style) cons
 
 QString ReaderSession::displayBookPosition(const QString &style) const
 {
+    if (usesWebKit() && !frame.pageInfo.bookProgress.ready())
+        return {};
     if (bookPages() <= 0)
         return strings::percentage(mainPercent());
     const auto label = displayPageLabel(bookPage(), style);
@@ -3118,6 +3784,11 @@ QString ReaderSession::displayBookPosition(const QString &style) const
 void ReaderSession::chapterBoundaryActions(
         int index, std::function<void(QVector<ChapterBoundaryAction>)> finished)
 {
+    // WebKit can navigate the TOC, but has no main-text boundary model.
+    if (usesWebKit()) {
+        finished({});
+        return;
+    }
     const auto links = frame.chapters;
     if (index < 0 || index >= links.size() || links[index].position.isEmpty() || !lease_)
         return;
@@ -3226,6 +3897,8 @@ void ReaderSession::applyChapterMarks(const QJsonObject &marks)
 
 void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph)
 {
+    if (usesWebKit())
+        return;
     const auto positions = positions_;
     const auto lease = lease_;
     auto engine = engine_;
@@ -3348,7 +4021,8 @@ void ReaderSession::loadImages()
 
 void ReaderSession::resumeIdleWork(int direction, quint64 job)
 {
-    if (running || pendingTurn || retiring || !currentSourceFrame(job) || !frame.error.isEmpty())
+    if (usesWebKit() || running || pendingTurn || retiring || !currentSourceFrame(job)
+        || !frame.error.isEmpty())
         return;
     loadImages();
     if (loadingImage || preview_ || !openingResult_.ready())
@@ -3505,6 +4179,10 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
 
 void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
 {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    if (usesWebKit())
+        return dispatchWebKit();
+#endif
     running = true;
     turning = pageTurn;
     const auto positions = positions_;
@@ -3519,6 +4197,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     // adoption succeeds, so a superseded try cannot request a full load.
     const auto chapterMode = desiredChapterMode;
     const auto size = desiredSize;
+    const auto sourceAnchor = sourcePositionFromToken(destination, fingerprint);
     const auto anchor = std::exchange(destination, {});
     const int chapter = std::exchange(chapterTarget, -1);
     const auto delta = std::exchange(pageDelta, 0);
@@ -3570,8 +4249,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     kobalt::qt::invoke(
             engineWorker(),
             [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta,
-             target, fraction, job, lease, latest, layouts, progress, positions, markup,
-             markupGeneration, afterFrame, printed = usePublisherPageNumbers] {
+             sourceAnchor, target, fraction, job, lease, latest, layouts, progress, positions,
+             markup, markupGeneration, afterFrame, printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -3656,8 +4335,9 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                         turned = engine->turnTarget(oldPage, delta);
                     }
                     if (!anchor.isEmpty()
-                        && !(chapter >= 0 ? engine->goToChapter(chapter, anchor)
-                                          : engine->goTo(anchor)))
+                        && !(sourceAnchor.valid()   ? engine->goToLocation(sourceAnchor)
+                                     : chapter >= 0 ? engine->goToChapter(chapter, anchor)
+                                                    : engine->goTo(anchor)))
                         result.error = strings::get("error.could_not_find_that_passage");
                     else if (target >= 0 && !numberedHandoff)
                         engine->go(target);
@@ -3727,7 +4407,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 kobalt::qt::invoke(
                         qApp,
                         [guard, result = std::move(result), job, lease, delta, failed, afterFrame,
-                         layouts, adopted] {
+                         layouts, adopted,
+                         navigating = delta || !anchor.isEmpty() || target >= 0 || fraction >= 0] {
                             // Results of queries that ran before this render
                             // reached the GUI before this frame and describe
                             // the chapter that is still shown. Once the whole
@@ -3741,8 +4422,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, job, lease, delta, failed,
-                                     afterFrame](ReaderFrame result) {
+                                    [guard, job, lease, delta, failed, afterFrame,
+                                     navigating](ReaderFrame result) {
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->running = false;
@@ -3756,6 +4437,9 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                                             guard->dispatch(false, afterFrame);
                                             return;
                                         }
+                                        if (navigating && !failed
+                                            && guard->frame.sourceLocation != result.sourceLocation)
+                                            guard->deferredOpeningSource_ = {};
                                         guard->frame = result;
                                         // Explicit mode is pending intent, not the mode of
                                         // completed frames. Later requests use that frame.

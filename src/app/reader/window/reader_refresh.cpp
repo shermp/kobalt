@@ -692,8 +692,9 @@ void Reader::syncStaleControls()
 // The part of syncReadingControls() that does not depend on a visible control.
 void Reader::syncReadingState()
 {
+    const bool chapterBar = session->usesWebKit() || session->state().contains("book_fraction");
     if (session->busy()) {
-        if (seekOpen && session->state().contains("book_fraction"))
+        if (seekOpen && chapterBar)
             pageScrubber->beginNavigation();
         else
             pageScrubber->cancel();
@@ -708,13 +709,13 @@ void Reader::syncReadingState()
 
 void Reader::syncReadingControls()
 {
+    const bool chapterBar = session->usesWebKit() || session->state().contains("book_fraction");
     if (session->busy()) {
-        if (seekOpen && session->state().contains("book_fraction"))
+        if (seekOpen && chapterBar)
             pageScrubber->beginNavigation();
         else
             pageScrubber->cancel();
     }
-    const bool chapterBar = session->state().contains("book_fraction");
     QVector<QPair<int, QString>> chapters;
     for (const auto &chapter : session->chapters())
         chapters.append({ chapter.page, chapter.title });
@@ -736,10 +737,10 @@ void Reader::syncReadingControls()
         QVector<int> chapterPages;
         for (const auto &chapter : chapters)
             chapterPages.append(chapter.first);
-        pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
-                                         session->chapterTitle(), session->mainPercent(),
-                                         session->bookPage(), session->bookPages(), chapterPages,
-                                         currentPrintedPage());
+        pageScrubber->setChapterPosition(
+                session->contentsSelection().current, chapters.size(), session->chapterTitle(),
+                session->usesWebKit() && session->bookPages() == 0 ? -1 : session->mainPercent(),
+                session->bookPage(), session->bookPages(), chapterPages, currentPrintedPage());
     } else {
         pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size(),
                               session->firstMainPage(), session->lastMainPage(),
@@ -760,11 +761,12 @@ void Reader::syncReadingControls()
     toolbarButtons.light->setChecked(lightPopup->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Light);
-    toolbarButtons.typography->setEnabled(!session->busy());
-    toolbarButtons.layout->setEnabled(!session->busy());
+    toolbarButtons.typography->setEnabled(!session->usesWebKit() && !session->busy());
+    toolbarButtons.layout->setEnabled(!session->usesWebKit() && !session->busy());
     // Settings applies the newest draft, or waits for the preview to open.
     // Its click handler ignores taps while a panel's changes apply.
-    toolbarButtons.settings->setEnabled(!session->busy() || appearanceEdit.applying());
+    toolbarButtons.settings->setEnabled(!session->usesWebKit()
+                                        && (!session->busy() || appearanceEdit.applying()));
     toolbarButtons.typography->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
                                           && panels->currentIndex() == 0);
     toolbarButtons.layout->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
@@ -772,13 +774,15 @@ void Reader::syncReadingControls()
                                               != int(kobalt::reader::AppearancePage::Typography));
     toolbarButtons.settings->setChecked(settingsVisible());
     const bool settingsOpen = settingsVisible();
+    const bool standardActions = !session->usesWebKit();
     // Zen mode moves Search, Annotate and Bookmarks to the bottom tabs.
     const bool zen = zenMode();
     for (auto *action : std::initializer_list<QWidget *>{ toolbarComposition.exitAction,
                                                           toolbarComposition.settings })
         if (action)
-            action->setVisible(!settingsOpen);
-    toolbarComposition.search->setVisible(!settingsOpen && !zen);
+            action->setVisible(!settingsOpen
+                               && (standardActions || action == toolbarComposition.exitAction));
+    toolbarComposition.search->setVisible(!settingsOpen && (!zen || !standardActions));
     const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
     const bool annotationsShown = features::enabled(preferences, features::Annotations);
     const bool wordsShown = savedWords && features::enabled(preferences, features::Words);
@@ -797,12 +801,14 @@ void Reader::syncReadingControls()
                     { bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
                       ui::IconRendition::Action });
     }
-    toolbarComposition.annotate->setVisible(!settingsOpen && !zen && usesAnnotationToggle());
-    toolbarComposition.bookmarks->setVisible(!settingsOpen && !zen
+    toolbarComposition.annotate->setVisible(!settingsOpen && (!zen || !standardActions)
+                                            && usesAnnotationToggle());
+    toolbarComposition.bookmarks->setVisible(!settingsOpen && (!zen || !standardActions)
                                              && (bookmarksShown || annotationsShown || wordsShown));
-    toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen
+    toolbarComposition.formattingWarning->setVisible(standardActions && !settingsOpen && !zen
                                                      && session->formattingWarning());
-    toolbarButtons.graph->setEnabled(!session->busy() && !appearanceEdit.applying());
+    toolbarButtons.graph->setEnabled(standardActions && !session->busy()
+                                     && !appearanceEdit.applying());
     toolbarButtons.graph->setChecked(chapterGraph->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Stats);

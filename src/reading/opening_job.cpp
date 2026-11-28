@@ -1,4 +1,5 @@
 #include "opening_job.h"
+#include "publication/source_position.h"
 #include "dictionaries/stardict.h"
 #include "appearance_settings.h"
 #include "engine/engine_activity.h"
@@ -240,6 +241,8 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     if (!job.pinnedAppearance.isEmpty())
         appearance::copy(saved, job.pinnedAppearance);
     state.restart = job.restartAtStart || !saved.value("finished_position").toString().isEmpty();
+    if (!state.restart)
+        state.sourceLocation = savedSourcePosition(saved, state.digest, true);
     // Keep the saved position until the document loads: it selects
     // the DOM version used by existing bookmarks and annotations.
     if (state.restart)
@@ -247,6 +250,19 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     state.initial = !state.restart && saved.value("position").toString().isEmpty()
             ? job.nativeLocation
             : QString();
+}
+
+static void restoreSharedPosition(OpeningJob &job, OpeningState &state)
+{
+    if (!state.outcome.ready() || job.cancelled() || !state.sourceLocation.valid())
+        return;
+    Restoration restoration = Restoration::Unresolved;
+    if (job.engine->goToLocation(state.sourceLocation, &restoration)
+        && restoration == Restoration::Exact)
+        state.sourceLocation = {};
+    // A legacy fallback must not overwrite a valid companion position,
+    // even if this layout could not resolve it.
+    state.outcome.recoveredPosition = false;
 }
 
 void openRetained(OpeningJob &job, OpeningState &state)
@@ -265,6 +281,7 @@ void openRetained(OpeningJob &job, OpeningState &state)
         locate(job, state, state.initial);
     else if (!job.saved.value("position").toString().isEmpty())
         state.outcome = engine->restoreSavedPosition(job.saved.value("position").toString());
+    restoreSharedPosition(job, state);
     if (state.outcome.ready() && !job.cancelled()) {
         state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration,
                               job.printed);
@@ -301,6 +318,7 @@ void openCold(OpeningJob &job, OpeningState &state)
             restartBook(job, state);
         else if (!state.initial.isEmpty())
             locate(job, state, state.initial);
+        restoreSharedPosition(job, state);
         if (outcome.ready()) {
             job.report(OpeningStage::Ready, 0);
             state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration,
@@ -353,7 +371,7 @@ OpeningOutput runOpening(OpeningJob &job)
             openRetained(job, state);
         else if (outcome.ready())
             openCold(job, state);
-        if (outcome.ready() && obsoletePosition)
+        if (outcome.ready() && obsoletePosition && !state.sourceLocation.valid())
             outcome.recoveredPosition = true;
         // From here only the engine keeps the resources, if it opened them.
         state.resources.reset();
@@ -386,10 +404,80 @@ OpeningOutput runOpening(OpeningJob &job)
             outcome = job.interrupted();
     }
     output.frame = std::move(state.frame);
+    output.deferredSource = state.sourceLocation;
     output.outcome = outcome;
     output.digest = state.digest;
     output.syncDigest = state.syncDigest;
     output.savedMatches = state.savedMatches;
     return output;
 }
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+OpeningOutput runWebKitOpening(OpeningJob &job)
+{
+    OpeningState state;
+    state.timer.start();
+    inspectSource(job, state);
+    OpeningOutput output;
+    if (state.outcome.ready()) {
+        const auto sourceStart = savedSourcePosition(job.saved, state.digest);
+        mergeSavedState(job, state);
+        auto cache = job.factory(state.publication.sizes(), job.systemFont, state.contentRejected);
+        QString error;
+        auto scope = WebResources::open(state.publication, std::move(cache), job.lease, &error);
+        if (scope) {
+            auto &source = output.webSource;
+            source.lease = job.lease;
+            source.spine = scope->spine();
+            for (const auto &href : source.spine) {
+                const auto uri = scope->url(href);
+                if (uri.size() > int(spike::maxBookHref)
+                    || href.toUtf8().size() > int(spike::maxBookHref)) {
+                    state.outcome = OpeningResult::failed(OpeningFailureKind::Unsupported,
+                                                          "opening.wpe-spine-path");
+                    break;
+                }
+                source.uris.append(uri);
+            }
+            source.resources = std::move(scope);
+            if (!state.restart)
+                output.webStart = sourceStart;
+            output.savedMatches = state.savedMatches;
+            output.frame.state["font_pixels"] =
+                    qBound(8, job.saved.value("font_pixels").toInt(18), 96);
+            output.frame.title = source.resources->title();
+            if (output.frame.title.isEmpty())
+                output.frame.title = QFileInfo(job.path).completeBaseName();
+            output.frame.author = source.resources->author();
+            output.frame.chapters = source.resources->chapters();
+            if (output.frame.chapters.isEmpty()) {
+                for (int i = 0; i < source.uris.size(); ++i)
+                    output.frame.chapters.append({ QFileInfo(source.spine[i]).completeBaseName(),
+                                                   QString::fromUtf8(source.uris[i]) });
+            }
+            output.frame.state["title"] = output.frame.title;
+            output.customPins = storage::readCustomPins(job.customPinsPath);
+            if (!job.dictionariesPath.isEmpty())
+                FolderDictionaries::prepare(job.dictionariesPath,
+                                            [&job] { return job.cancelled(); });
+            if (!job.coverPath.isEmpty() && job.coverReady && !job.cancelled()) {
+                QString usedPath;
+                auto cover = job.engine->coverImage({ 2048, 2048 }, job.coverPath, &usedPath);
+                job.coverReady(usedPath.isEmpty() ? QImage() : std::move(cover));
+            }
+        } else {
+            const auto kind = state.publication.protectedBook() ? OpeningFailureKind::Protected
+                                                                : OpeningFailureKind::Unsupported;
+            state.outcome = OpeningResult::failed(kind, "opening.wpe-admission", error);
+        }
+    }
+    if (job.cancelled())
+        state.outcome = job.interrupted();
+    if (!state.outcome.ready())
+        output.webSource = {};
+    output.outcome = state.outcome;
+    output.digest = state.digest;
+    return output;
+}
+#endif
 } // namespace kobalt

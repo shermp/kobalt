@@ -769,7 +769,7 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const
         if (publisherPagesEnabled())
             row.printedPage = bookmarks->printedPage(row.position);
         row.current = pages.value(i, -1) >= 0 && pages.value(i, -1) == session->page();
-        row.pagePending = pagePending;
+        row.pagePending = pagePending || session->canNavigateSourcePosition(row.position);
         row.pinName = list[i].name;
         row.pinIcon = list[i].icon;
         rows.append(row);

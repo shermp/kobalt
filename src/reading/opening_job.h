@@ -1,6 +1,8 @@
 #pragma once
 #include "reader_session.h"
 #include "publication/publication.h"
+#include <QFileInfo>
+#include "engine/webkit/book_client.h"
 #include <QElapsedTimer>
 #include <QFile>
 
@@ -57,9 +59,14 @@ struct OpeningOutput
 {
     storage::CustomPins customPins;
     ReaderFrame frame;
+    Location deferredSource;
     OpeningResult outcome;
     QByteArray digest, syncDigest;
     bool savedMatches = false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    webkit::Source webSource;
+    Location webStart;
+#endif
 };
 
 // The values that the stages of one opening share. Lives on the engine worker.
@@ -74,6 +81,7 @@ struct OpeningState
     bool savedMatches = false;
     // Set by mergeSavedState. `initial` is the host position to open at, if any.
     bool restart = false;
+    Location sourceLocation;
     QString initial;
     std::shared_ptr<ResourceCache> resources;
     std::shared_ptr<std::atomic_bool> contentRejected = std::make_shared<std::atomic_bool>(false);
@@ -103,6 +111,9 @@ void logOpeningPhases(const OpeningJob &job, const OpeningState &state);
 
 // Runs on the engine worker, inside an EngineJob.
 OpeningOutput runOpening(OpeningJob &job);
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+OpeningOutput runWebKitOpening(OpeningJob &job);
+#endif
 
 // Defined in reader_session.cpp, which uses them for every later frame too.
 void captureChapters(ReaderFrame &result, Engine &engine,

@@ -1,4 +1,9 @@
 #include "reader_inputs.h"
+#include "book_fixtures.h"
+#include "reading/reading_book.h"
+#include "reading/bookmark_session.h"
+#include "reading/highlight_session.h"
+#include "publication/source_position.h"
 #include "reading/reader_session.h"
 #include "reading/rendering_mode.h"
 #include "sync/kosync.h"
@@ -30,6 +35,9 @@
 #include <QFile>
 #include <QUrl>
 #include <functional>
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#  include <signal.h>
+#endif
 
 using namespace kobalt;
 
@@ -2681,9 +2689,736 @@ int run(int argc, char **argv)
     return result;
 }
 
+// Runs explicitly with --webkit and a controlled EPUB fixture.
+static int webKitReader(int argc, char **argv)
+{
+    QGuiApplication app(argc, argv);
+    QTimer::singleShot(65000, &app, [] { require(false, "WPE reader test timed out"); });
+    require(!qgetenv("KOBALT_WPE_RENDERER").isEmpty(), "Missing WPE renderer launcher");
+    const auto path = QFileInfo(QString::fromLocal8Bit(argv[2])).absoluteFilePath();
+    const auto identity = QUrl::fromLocalFile(path).toString();
+    QTimer::singleShot(0, &app, [&] {
+        const auto launcher = qgetenv("KOBALT_WPE_RENDERER");
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        QTemporaryDir child;
+        QFile recorder(child.filePath("run"));
+        require(child.isValid() && recorder.open(QIODevice::WriteOnly),
+                "Could not write the renderer test launcher");
+        const QByteArray launchScript = "#!/bin/sh\n"
+                                        "printf '%s\\n' \"$$\" > \"$KOBALT_TEST_WPE_PID\"\n"
+                                        "exec \"$KOBALT_TEST_WPE_COMMAND\" \"$@\"\n";
+        require(recorder.write(launchScript) == launchScript.size()
+                        && recorder.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                                   | QFileDevice::ExeOwner),
+                "Could not prepare the renderer test launcher");
+        recorder.close();
+        QFile pidFile(child.filePath("pid"));
+        qputenv("KOBALT_TEST_WPE_PID", QFile::encodeName(pidFile.fileName()));
+        qputenv("KOBALT_TEST_WPE_COMMAND", launcher);
+        qputenv("KOBALT_WPE_RENDERER", QFile::encodeName(recorder.fileName()));
+        const auto rendererPid = [&] {
+            require(pidFile.open(QIODevice::ReadOnly), "Could not read the renderer PID");
+            const auto pid = pidFile.readAll().trimmed().toInt();
+            pidFile.close();
+            require(pid > 1, "Invalid test renderer PID");
+            return pid;
+        };
+#endif
+        auto reader =
+                std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+        auto lease = std::make_shared<SourceLease>();
+        QEventLoop finished;
+        OpeningResult outcome;
+        const QSize firstSize(320, 260);
+        reader->open(
+                { identity, path, firstSize, {}, {}, lease, localResourceFactory(path, lease) },
+                [&](OpeningResult result) {
+                    outcome = result;
+                    finished.quit();
+                });
+        finished.exec();
+        require(outcome.ready(), qPrintable(openingMessage(outcome)));
+        require(reader->usesWebKit() && reader->image().size() == firstSize && reader->pages() > 0
+                        && reader->bookPages() == 0,
+                "WPE did not publish a first frame or reported an unknown total as a number");
+        const auto first = reader->image().copy();
+        const auto layout = reader->layoutRevision();
+        reader->setPublisherPageNumbers(true);
+        reader->editAppearance(appearance::Patch({ { "line_spacing", 150 } }), firstSize);
+        require(!reader->busy() && reader->layoutRevision() == layout
+                        && reader->displayBookPosition({}).isEmpty(),
+                "Unsupported WPE settings changed the layout or exposed an unmeasured position");
+        bool labelsUnavailable = false, boundariesUnavailable = false;
+        reader->printedPageLabels(
+                { reader->state().value("position").toString() },
+                [&](const auto &labels) { labelsUnavailable = labels.isEmpty(); });
+        reader->chapterBoundaryActions(
+                0, [&](const auto &actions) { boundariesUnavailable = actions.isEmpty(); });
+        require(labelsUnavailable && boundariesUnavailable,
+                "WPE supplied unsupported publisher labels or main-text boundaries");
+        ReaderSession appearancePreview(test::readerFonts(), test::readerPlaceholder());
+        QString previewError;
+        appearancePreview.openPreview(*reader, firstSize, [&](QString error) {
+            previewError = std::move(error);
+            finished.quit();
+        });
+        finished.exec();
+        require(!previewError.isEmpty() && reader->image() == first,
+                "WPE opened an unsupported appearance preview or replaced the visible frame");
+        const auto wait = [&] {
+            if (reader->busy())
+                finished.exec();
+            require(reader->error().isEmpty(), qPrintable(reader->error()));
+        };
+        reader->updated = [&] { finished.quit(); };
+        QTemporaryDir covers;
+        const auto hostPath = covers.filePath("host-cover.png");
+        QImage hostCover(64, 96, QImage::Format_RGB32);
+        hostCover.fill(Qt::red);
+        require(covers.isValid() && hostCover.save(hostPath),
+                "Could not write a host cover fixture");
+        QImage cover;
+        QFileInfo coverSource;
+        const auto readCover = [&](const QString &preferred, bool embeddedFirst) {
+            reader->coverImage(
+                    QSize(120, 180),
+                    [&](QImage image, QFileInfo source) {
+                        cover = std::move(image);
+                        coverSource = std::move(source);
+                        finished.quit();
+                    },
+                    preferred, embeddedFirst);
+            finished.exec();
+        };
+        readCover(hostPath, false);
+        require(cover == hostCover && coverSource.filePath() == hostPath,
+                "WebKit did not honor the host cover preference and provenance");
+        readCover(hostPath, true);
+        require(!cover.isNull() && cover != hostCover && !coverSource.exists(),
+                "WebKit did not prefer the admitted embedded cover");
+        const auto embeddedCover = cover;
+        readCover(covers.filePath("missing.png"), false);
+        require(cover == embeddedCover && reader->image() == first,
+                "Cover fallback changed the displayed page or lost the embedded cover");
+
+        const QSize thumbnailBounds(160, 130);
+        const auto firstPosition = reader->state().value("position");
+        QImage preview;
+        reader->previewAdjacentPage(1, thumbnailBounds, {}, [&](QImage image, bool) {
+            preview = std::move(image);
+            finished.quit();
+        });
+        finished.exec();
+        require(preview.size() == thumbnailBounds && reader->image() == first
+                        && reader->state().value("position") == firstPosition,
+                "WPE preview replaced the confirmed reading position or pixels");
+        require(reader->turn(1), "WPE rejected a forward turn");
+        wait();
+        require(reader->image() != first
+                        && reader->image().scaled(thumbnailBounds, Qt::KeepAspectRatio,
+                                                  Qt::SmoothTransformation)
+                                == preview,
+                "WPE preview did not match the target page");
+        require(reader->turn(-1), "WPE rejected a reverse turn");
+        wait();
+        require(reader->page() == 0 && reader->image() == first, "WPE first page did not restore");
+        bool cancelledPreview = false;
+        reader->previewAdjacentPage(1, thumbnailBounds, {},
+                                    [&](QImage, bool) { cancelledPreview = true; });
+        reader->cancelPagePreview();
+        require(reader->turn(1), "WPE did not queue a turn behind an in-flight preview");
+        wait();
+        require(!cancelledPreview && reader->image() != first,
+                "WPE published a cancelled preview or discarded the queued turn");
+        require(reader->turn(-1), "WPE rejected a reverse turn after a cancelled preview");
+        wait();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        const auto originalPosition = reader->state().value("position");
+        const auto retained = reader->image();
+        const auto pid = rendererPid();
+        require(::kill(pid, SIGSTOP) == 0 && reader->turn(1) && reader->busy()
+                        && ::kill(pid, SIGKILL) == 0,
+                "Could not kill a renderer with a turn outstanding");
+        finished.exec();
+        require(!reader->busy() && !reader->error().isEmpty() && reader->image() == first
+                        && reader->state().value("position") == originalPosition,
+                "Renderer failure replaced the last confirmed position or pixels");
+        require(reader->turn(1), "WPE rejected a turn after renderer failure");
+        wait();
+        require(rendererPid() != pid && reader->image() != first && retained == first,
+                "WPE recovery did not use fresh slots or replaced a retained image");
+        require(reader->turn(-1), "WPE rejected a reverse turn after recovery");
+        wait();
+        require(reader->image() == first, "WPE recovery changed the original page");
+#endif
+        const auto target = QStringLiteral("OEBPS/chapter1.xhtml");
+        require(reader->title().contains("Type Tester") && !reader->author().isEmpty()
+                        && reader->chapters().size() > 2
+                        && reader->chapters()[2].title.contains("Room to Breathe"),
+                "WPE did not read EPUB 3 metadata and TOC");
+        require(reader->goToChapter(2), "WPE rejected a TOC entry");
+        reader->editAppearance(appearance::Patch({ { "font_pixels", 19 } }), firstSize);
+        wait();
+        require(reader->sourceLocation().href == target && reader->fontSize() == 19,
+                "A WPE reflow dropped the in-flight chapter jump or font request");
+        const auto beforeReflow = reader->image().copy();
+        require(reader->adjustWebKitFont(+3), "WPE rejected font size");
+        require(reader->adjustWebKitFont(+2), "WPE rejected newer font size");
+        wait();
+        require(reader->fontSize() == 24 && reader->image() != beforeReflow
+                        && reader->sourceLocation().href == target,
+                "WPE did not publish the latest font size and pixels");
+        reader->resize(QSize(320, 240));
+        wait();
+        require(reader->image().size() == QSize(320, 240), "WPE viewport did not reflow");
+        const auto savedLocation = reader->sourceLocation();
+        const auto bookmark = reader->state().value("position").toString();
+        const auto digest = reader->sourceHash();
+        require(sourcePositionFromToken(bookmark, digest) == savedLocation
+                        && !sourcePositionFromToken(bookmark, QByteArray("another-book")).valid(),
+                "Bookmark location did not belong to its publication");
+        Location unlaidChapter, unlistedChapter;
+        unlaidChapter.href = QStringLiteral("OEBPS/chapter2.xhtml");
+        unlistedChapter.href = QStringLiteral("OEBPS/unknown.xhtml");
+        auto otherColumn = savedLocation;
+        otherColumn.offset += 500;
+        const auto deferred = sourcePositionToken(unlaidChapter, digest);
+        require(reader->canNavigateSourcePosition(deferred)
+                        && !reader->canNavigateSourcePosition(
+                                sourcePositionToken(unlistedChapter, digest))
+                        && !reader->canNavigateSourcePosition(
+                                sourcePositionToken(unlaidChapter, "other-publication")),
+                "WebKit confused a deferred chapter mark with an invalid position");
+        reader->pageSummary(reader->page(), [&](PageSummary summary) {
+            require(summary.start == bookmark && summary.bookPage == reader->bookPage(),
+                    "WebKit substituted a local page number in a new bookmark");
+            finished.quit();
+        });
+        finished.exec();
+        reader->bookmarkLocations(
+                { bookmark, sourcePositionToken(otherColumn, digest), deferred },
+                [&](BookmarkLocations locations) {
+                    require(locations.pages == QVector<int>({ reader->page(), -1, -1 })
+                                    && locations.bookPages
+                                            == QVector<int>({ reader->bookPage(), -1, -1 }),
+                            "WebKit labeled unmeasured mark pages");
+                    finished.quit();
+                },
+                true, false);
+        finished.exec();
+        qunsetenv("KOBALT_WPE_RENDERER");
+        const auto openAgain = [&](const QString &book, const QJsonObject &saved, QSize size) {
+            auto reopened =
+                    std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+            const auto fresh = std::make_shared<SourceLease>();
+            reopened->open({ QUrl::fromLocalFile(book).toString(),
+                             book,
+                             size,
+                             saved,
+                             {},
+                             fresh,
+                             localResourceFactory(book, fresh) },
+                           [&](OpeningResult result) {
+                               outcome = result;
+                               finished.quit();
+                           });
+            finished.exec();
+            require(outcome.ready(), qPrintable(openingMessage(outcome)));
+            reopened->updated = [&finished] { finished.quit(); };
+            return reopened;
+        };
+        auto blaze = openAgain(path, {}, firstSize);
+        const auto legacy = blaze->state().value("position");
+        const auto domVersion = blaze->state().value("dom_version");
+        require(!legacy.toString().isEmpty() && domVersion.isDouble(),
+                "Default engine must supply an XPointer and DOM version");
+        blaze.reset();
+        QTemporaryDir profile;
+        require(profile.isValid(), "Could not create M6 test profile");
+        const storage::Paths paths{ profile.path() };
+        const ReadingProgress nickelUnread{ identity, {}, 1234, 0, true };
+        QJsonObject legacyState{ { "book", identity },
+                                 { "schema", 1 },
+                                 { "fingerprint", QString::fromLatin1(digest) },
+                                 { "position", legacy },
+                                 { "dom_version", domVersion } };
+        require(storage::writeBookState(paths, identity, legacyState),
+                "Could not seed legacy state");
+        {
+            auto book = std::make_unique<ReadingBook>(std::move(reader), paths.bookState(identity),
+                                                      paths, identity, digest, nullptr,
+                                                      nickelUnread, nickelUnread);
+            bool saved = false;
+            book->checkpointForClose([&](bool ok) {
+                saved = ok;
+                finished.quit();
+            });
+            finished.exec();
+            require(saved, "WPE close did not checkpoint its position");
+            require(book->session()->turn(1), "WPE rejected turn before close");
+        }
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+        require(lease->revoked(), "WPE kept the source lease after close");
+        const auto record = storage::readBookState(paths, identity).object;
+        require(record.value("position") == legacy && record.value("dom_version") == domVersion
+                        && savedSourcePosition(record, digest) == savedLocation,
+                "WPE changed legacy fields or lost the source location");
+        auto nativeCheck = record;
+        require(!resetNativeUnread(nativeCheck, nickelUnread) && nativeCheck == record,
+                "An unchanged unread Nickel baseline cleared WPE progress");
+        auto future = record;
+        auto unsupported = future.value(sourcePositionKey).toObject();
+        unsupported["version"] = 19;
+        future[sourcePositionKey] = unsupported;
+        require(!rememberSourcePosition(future, savedLocation, digest, QStringLiteral("wpe"))
+                        && future.value(sourcePositionKey) == unsupported,
+                "An unsupported source record was replaced");
+        auto olderEdit = record;
+        olderEdit["position"] = QStringLiteral("/later-native-pointer");
+        require(!savedSourcePosition(olderEdit, digest).valid(),
+                "A stale companion overrode a later legacy position");
+        qputenv("KOBALT_WPE_RENDERER", launcher);
+        reader = openAgain(path, record, firstSize);
+        require(reader->usesWebKit() && reader->sourceLocation().href == target,
+                "WPE did not reopen the saved chapter with a different viewport");
+        reader.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+        qunsetenv("KOBALT_WPE_RENDERER");
+        auto withLostLegacy = record;
+        withLostLegacy["position"] = QStringLiteral("/body/DocFragment[9999]/p[99].4");
+        require(rememberSourcePosition(withLostLegacy, savedLocation, digest,
+                                       QStringLiteral("wpe")),
+                "Could not bind the shared position to the stale legacy position");
+        {
+            QTemporaryDir deferredProfile;
+            require(deferredProfile.isValid(), "Could not create the deferred-position profile");
+            const storage::Paths deferredPaths{ deferredProfile.path() };
+            auto unresolved = savedLocation;
+            unresolved.path = { 65535 };
+            auto deferredRecord = withLostLegacy;
+            require(rememberSourcePosition(deferredRecord, unresolved, digest,
+                                           QStringLiteral("wpe"))
+                            && storage::writeBookState(deferredPaths, identity, deferredRecord),
+                    "Could not seed a shared position outside Blaze's source tree");
+            auto fallback = openAgain(path, deferredRecord, firstSize);
+            require(!fallback->recoveredOpeningPosition()
+                            && fallback->deferredOpeningSource() == unresolved,
+                    "Blaze marked an unresolved companion for recovery");
+            auto book = std::make_unique<ReadingBook>(
+                    std::move(fallback), deferredPaths.bookState(identity), deferredPaths, identity,
+                    digest, nullptr, ReadingProgress{}, ReadingProgress{});
+            bool saved = false;
+            book->checkpointForClose([&](bool ok) {
+                saved = ok;
+                finished.quit();
+            });
+            finished.exec();
+            const auto afterClose = storage::readBookState(deferredPaths, identity).object;
+            require(saved && savedSourcePosition(afterClose, digest) == unresolved,
+                    "Closing a fallback view discarded its unresolved companion");
+        }
+        blaze = openAgain(path, withLostLegacy, firstSize);
+        require(!blaze->usesWebKit() && blaze->sourceLocation().href == target
+                        && !blaze->recoveredOpeningPosition(),
+                "Blaze's legacy fallback displaced or marked a valid WPE position for replacement");
+        require(blaze->goTo(bookmark), "Blaze rejected a WPE source bookmark");
+        finished.exec();
+        require(blaze->error().isEmpty() && blaze->sourceLocation().href == target,
+                "Blaze could not resolve the WPE source bookmark");
+        Location chapterTwo;
+        chapterTwo.href = QStringLiteral("OEBPS/chapter2.xhtml");
+        require(blaze->goTo(sourcePositionToken(chapterTwo, digest)),
+                "Blaze rejected a typed second chapter");
+        finished.exec();
+        require(blaze->error().isEmpty() && blaze->sourceLocation().href == chapterTwo.href,
+                "Blaze could not address another chapter by source location");
+        {
+            auto book = std::make_unique<ReadingBook>(std::move(blaze), paths.bookState(identity),
+                                                      paths, identity, digest, nullptr,
+                                                      ReadingProgress{}, ReadingProgress{});
+            bool saved = false;
+            book->checkpointForClose([&](bool ok) {
+                saved = ok;
+                finished.quit();
+            });
+            finished.exec();
+            require(saved, "Blaze checkpoint with a shared location failed");
+        }
+        const auto fromBlaze = storage::readBookState(paths, identity).object;
+        require(savedSourcePosition(fromBlaze, digest).href == chapterTwo.href
+                        && !fromBlaze.value("position").toString().isEmpty(),
+                "Blaze checkpoint lost its native or shared location");
+        qputenv("KOBALT_WPE_RENDERER", launcher);
+        reader = openAgain(path, fromBlaze, QSize(320, 240));
+        require(reader->usesWebKit() && reader->sourceLocation().href == chapterTwo.href,
+                "WPE could not switch from the saved Blaze location");
+        reader.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+
+        QTemporaryDir fixture;
+        require(fixture.isValid()
+                        && test::writeBook(fixture.path(), "songs.epub", test::songbook(15)),
+                "Could not stage the EPUB navigation fixture");
+        auto songs = openAgain(fixture.filePath("songs.epub"), {}, firstSize);
+        require(songs->title() == "Large songbook" && songs->chapters().size() == 15
+                        && songs->chapters()[10].title == "Song 11",
+                "WPE did not read EPUB NCX chapter labels");
+        require(songs->goToChapter(10), "WPE rejected an NCX fragment target");
+        finished.exec();
+        require(songs->error().isEmpty() && songs->page() > 0 && !songs->pageLinks().isEmpty(),
+                "WPE did not land on the linked column");
+        const auto returnAnchor = songs->state().value("position").toString();
+        const auto link = songs->pageLinks().first().source;
+        LinkDetails details;
+        songs->linkDetails(link, [&](LinkDetails result) {
+            details = result;
+            finished.quit();
+        });
+        finished.exec();
+        require(details.kind == LinkKind::Passage && songs->goTo(details.target),
+                "WPE did not resolve an internal EPUB link");
+        finished.exec();
+        require(songs->error().isEmpty() && songs->goTo(returnAnchor),
+                "WPE did not accept the return location");
+        finished.exec();
+        require(songs->error().isEmpty()
+                        && songs->state().value("position").toString() == returnAnchor,
+                "WPE did not return to the recorded source location");
+        songs.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+
+        auto files = test::linkBook();
+        files["OEBPS/first.xhtml"].replace(
+                "</body>",
+                "<p><a href='#inline-note'>Inline reference</a>"
+                "<a epub:type='noteref' href='second.xhtml#absent-note'>Missing note</a></p>"
+                "<aside id='inline-note' role='doc-footnote'>Fish &lt; Chips</aside></body>");
+        files["OEBPS/second.xhtml"].replace("</body>",
+                                            "<p>needle <em>through</em> markup</p></body>");
+        require(test::writeBook(fixture.path(), "links.epub", files),
+                "Could not stage the WPE footnote fixture");
+        auto links = openAgain(fixture.filePath("links.epub"), {}, QSize(540, 760));
+        require(links->usesWebKit() && links->goToChapter(0),
+                "WPE could not open the links chapter");
+        finished.exec();
+        const auto shown = links->pageLinks();
+        const auto findLink = [&shown](const QString &fragment) {
+            for (const auto &link : shown)
+                if (QUrl(link.source).fragment() == fragment)
+                    return link;
+            return PageLink{};
+        };
+        const auto detailsFor = [&](const QString &source) {
+            LinkDetails result;
+            links->linkDetails(source, [&](LinkDetails details) {
+                result = std::move(details);
+                finished.quit();
+            });
+            finished.exec();
+            return result;
+        };
+        const auto note = findLink(QStringLiteral("short"));
+        require(note.kind == LinkKind::Footnote && note.tappable("footnotes")
+                        && !note.rectangles.isEmpty(),
+                "WPE did not classify an explicit cross-chapter note");
+        const auto reference = note.rectangles.first();
+        const auto point = QPoint(reference.left() + 3, reference.center().y());
+        WordSelection selected;
+        QEventLoop queried;
+        links->wordAt(point, [&](WordSelection word) {
+            selected = std::move(word);
+            QTimer::singleShot(0, &queried, &QEventLoop::quit);
+        });
+        queried.exec();
+        const auto begin = sourcePositionFromToken(selected.start, links->sourceHash());
+        const auto end = sourcePositionFromToken(selected.end, links->sourceHash());
+        require(selected.text == "short" && !selected.rectangles.isEmpty()
+                        && selected.rectangles.first().contains(point) && begin.valid()
+                        && end.valid() && begin.href == links->sourceLocation().href
+                        && end.href == begin.href
+                        && end.offset - begin.offset == selected.text.size(),
+                "WPE word query did not return visible geometry and counted source boundaries");
+        WordSelection lastWord;
+        links->wordAt(QPoint(reference.right() - 3, reference.center().y()),
+                      [&](WordSelection word) {
+                          lastWord = std::move(word);
+                          QTimer::singleShot(0, &queried, &QEventLoop::quit);
+                      });
+        queried.exec();
+        require(lastWord.text == "note", "WPE did not hit the second word");
+        TextRange selection;
+        links->annotationRange(lastWord.start, lastWord.end, selected.start, selected.end,
+                               [&](TextRange range) {
+                                   selection = std::move(range);
+                                   queried.quit();
+                               });
+        queried.exec();
+        require(selection.text == "short note" && selection.start == selected.start
+                        && selection.end == lastWord.end,
+                "WPE lost a token when reversing a multiword selection");
+        AnnotationGeometry selectionGeometry;
+        links->annotationGeometry(selection.start, selection.end, [&](AnnotationGeometry geometry) {
+            selectionGeometry = std::move(geometry);
+            queried.quit();
+        });
+        queried.exec();
+        require(!selectionGeometry.rectangles.isEmpty() && selectionGeometry.start.visible
+                        && selectionGeometry.end.visible
+                        && selectionGeometry.start.outward == QPoint(-1, 0)
+                        && selectionGeometry.end.outward == QPoint(1, 0),
+                "WPE did not return the visible selection endpoints");
+        QTemporaryDir annotationRoot;
+        const auto annotationIdentity = QStringLiteral("file:///webkit-annotations.epub");
+        const auto highlightLayout = [] { return QStringLiteral("webkit-range"); };
+        require(annotationRoot.isValid(), "Could not create isolated annotation storage");
+        {
+            HighlightSession annotations(*links, highlightLayout, annotationRoot.path(),
+                                         annotationIdentity, links->sourceHash(), links->title());
+            bool saved = false;
+            annotations.save(selection.start, selection.end, {}, [&](bool accepted) {
+                saved = accepted;
+                queried.quit();
+            });
+            queried.exec();
+            require(saved && annotations.highlights().size() == 1,
+                    "WPE did not persist the multiword selection");
+            const auto waitForWriter = [&] {
+                if (!annotations.saving())
+                    return;
+                QTimer poll;
+                QObject::connect(&poll, &QTimer::timeout, &queried, [&] {
+                    if (!annotations.saving())
+                        queried.quit();
+                });
+                poll.start(5);
+                queried.exec();
+            };
+            waitForWriter();
+            require(annotations.recolor(annotations.highlights().first().id, "pink"),
+                    "WPE could not recolor the saved highlight");
+            waitForWriter();
+            bool overlap = true;
+            annotations.save(lastWord.start, lastWord.end, {}, [&](bool accepted) {
+                overlap = accepted;
+                queried.quit();
+            });
+            queried.exec();
+            require(!overlap && annotations.error() == "overlap",
+                    "WPE allowed overlapping persistent highlights");
+        }
+        {
+            HighlightSession reopened(*links, highlightLayout, annotationRoot.path(),
+                                      annotationIdentity, links->sourceHash(), links->title());
+            require(reopened.highlights().size() == 1
+                            && reopened.highlights()[0].start == selection.start
+                            && reopened.highlights()[0].end == selection.end
+                            && reopened.highlights()[0].color == "pink",
+                    "WPE did not restore the saved range from storage");
+            ReaderMarkupRequest markup;
+            markup.saved.append({ selection.start, selection.end, QStringLiteral("gray") });
+            links->setMarkup(markup);
+            bool drawn = false;
+            links->captureMarkup([&](bool ready) {
+                drawn = ready;
+                queried.quit();
+            });
+            queried.exec();
+            require(drawn && links->markup().imageKey == links->image().cacheKey()
+                            && !links->markup().saved.first().rectangles.isEmpty(),
+                    "WPE did not redraw the reopened highlight on its current frame");
+        }
+        const auto passage = findLink(QStringLiteral("destination"));
+        require(passage.kind == LinkKind::Passage && !passage.tappable("footnotes")
+                        && detailsFor(passage.source).kind == LinkKind::Passage,
+                "WPE treated a regular passage as a note");
+        const auto noteOrigin = links->state().value("position").toString();
+        const auto shortNote = detailsFor(note.source);
+        require(shortNote.kind == LinkKind::Footnote
+                        && shortNote.html.contains(QString::fromUtf8("café &amp; tea"))
+                        && shortNote.html.contains("</p><p>Second paragraph")
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE did not preview the cross-chapter note without moving");
+        const auto inlineNote = findLink(QStringLiteral("inline-note"));
+        require(inlineNote.kind == LinkKind::Footnote
+                        && detailsFor(inlineNote.source).html == "<p>Fish &lt; Chips</p>",
+                "WPE did not classify and escape a same-chapter note");
+        const auto oversized = detailsFor(findLink(QStringLiteral("oversize")).source);
+        const auto absent = detailsFor(findLink(QStringLiteral("absent-note")).source);
+        require(oversized.kind == LinkKind::Passage && oversized.html.isEmpty()
+                        && absent.kind == LinkKind::Passage && absent.html.isEmpty(),
+                "WPE produced a popup for an oversized or missing note");
+        require(std::none_of(shown.cbegin(), shown.cend(),
+                             [](const PageLink &link) {
+                                 return !link.source.startsWith("kobalt-epub:");
+                             }),
+                "WPE exposed an external or executable book link");
+        bool stalePreview = false;
+        links->linkDetails(note.source, [&](const LinkDetails &) { stalePreview = true; });
+        require(links->goTo(shortNote.target), "WPE could not show the note in the book");
+        finished.exec();
+        require(!stalePreview && links->error().isEmpty()
+                        && links->sourceLocation().href.endsWith("/foot notes.xhtml")
+                        && links->goTo(noteOrigin),
+                "WPE showed a stale note preview or missed its destination");
+        finished.exec();
+        require(links->error().isEmpty()
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE could not return to the note reference");
+        const auto searchText = QStringLiteral("DESTINATION TEXT");
+        int batches = 0;
+        QVector<SearchHit> hits;
+        links->search(searchText, [&](SearchBatch batch) {
+            require(!batch.limited, "WPE stopped a valid whole-book search");
+            hits += batch.hits;
+            if (!batch.hits.isEmpty())
+                ++batches;
+            if (batch.done)
+                finished.quit();
+        });
+        finished.exec();
+        require(hits.size() == 40 && batches > 1
+                        && links->state().value("position").toString() == noteOrigin,
+                "WPE search missed a later chapter or changed the reading position");
+        const auto hit = hits.last();
+        const auto hitLocation = sourcePositionFromToken(hit.start, links->sourceHash());
+        require(hit.page == -1 && hit.text == "destination text"
+                        && hitLocation.href.endsWith("/second.xhtml") && links->goTo(hit.start),
+                "WPE search lost the matched text or its source location");
+        finished.exec();
+        require(links->error().isEmpty() && links->sourceLocation().href == hitLocation.href,
+                "WPE could not open the search result");
+        require(links->bookPages() > links->pages() && links->bookPage() >= links->page(),
+                "WPE did not publish the exact total after observing the complete spine");
+        QVector<QRect> match;
+        links->rangeRects(hit.start, hit.end, [&](QVector<QRect> rects) {
+            match = std::move(rects);
+            QTimer::singleShot(0, &queried, &QEventLoop::quit);
+        });
+        queried.exec();
+        require(!match.isEmpty() && QRect(QPoint(), links->image().size()).contains(match.first()),
+                "WPE could not draw a visible search range");
+        hits.clear();
+        links->search(
+                searchText,
+                [&](SearchBatch batch) {
+                    hits += batch.hits;
+                    links->cancelSearch();
+                    finished.quit();
+                },
+                SearchScope::Chapter);
+        finished.exec();
+        require(!hits.isEmpty() && hits.size() < 40,
+                "WPE did not deliver a bounded chapter batch before cancellation");
+        require(links->goToChapter(1), "WPE could not reset the page search boundary");
+        finished.exec();
+        require(links->hasPageSearchBoundary(), "WPE missed the last visible position");
+        const auto scan = [&](const QString &query, SearchScope scope) {
+            QVector<SearchHit> result;
+            links->search(
+                    query,
+                    [&](SearchBatch batch) {
+                        require(!batch.limited, "WPE did not resolve the page search boundary");
+                        result += batch.hits;
+                        if (batch.done)
+                            finished.quit();
+                    },
+                    scope);
+            finished.exec();
+            return result;
+        };
+        const auto inlineMatch = scan("needle through markup", SearchScope::Book);
+        require(inlineMatch.size() == 1 && inlineMatch.first().text == "needle through markup",
+                "WPE could not search across inline EPUB markup");
+        const auto before = scan(searchText, SearchScope::Before);
+        const auto after = scan(searchText, SearchScope::After);
+        require(!before.isEmpty() && !after.isEmpty() && before.size() + after.size() == 40
+                        && before.last().start != after.first().start,
+                "WPE search scopes did not partition the long chapter at the displayed page");
+        links->resize(QSize(540, 700));
+        finished.exec();
+        require(links->error().isEmpty() && links->bookPages() == 0,
+                "WPE kept exact totals from an earlier viewport");
+        links.reset();
+        ReaderSession::drain([&] { finished.quit(); });
+        finished.exec();
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        qputenv("KOBALT_WPE_RENDERER", QFile::encodeName(recorder.fileName()));
+        const auto descriptors = [] {
+            return QDir("/proc/self/fd")
+                    .entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot)
+                    .size();
+        };
+        const auto initialDescriptors = descriptors();
+        const auto longBook = fixture.filePath("long-book.epub");
+        require(test::writeBook(fixture.path(), "long-book.epub", test::songbook(180)),
+                "Could not stage the long WPE fixture");
+        for (int open = 0; open < 3; ++open) {
+            auto longReader = openAgain(longBook, {}, firstSize);
+            const auto pid = rendererPid();
+            require(longReader->chapters().size() == 180 && longReader->goToChapter(140),
+                    "WPE could not navigate deep into a long book");
+            finished.exec();
+            const auto start = longReader->state().value("position");
+            const auto pixels = longReader->image().copy();
+            for (const int direction : { 1, -1 }) {
+                for (int page = 0; page < 8; ++page) {
+                    require(longReader->turn(direction), "WPE declined a long-book stress turn");
+                    finished.exec();
+                    require(longReader->error().isEmpty(), "WPE failed a long-book stress turn");
+                }
+            }
+            require(longReader->state().value("position") == start && longReader->image() == pixels,
+                    "Repeated WPE turns changed the restored page");
+            longReader->previewAdjacentPage(1, thumbnailBounds, {}, [](QImage, bool) {
+                require(false, "A WPE preview callback escaped session close");
+            });
+            longReader.reset();
+            ReaderSession::drain([&] { finished.quit(); });
+            finished.exec();
+            require(::kill(pid, 0) == -1 && errno == ESRCH,
+                    "The WPE renderer remained after the session drained");
+        }
+        require(descriptors() <= initialDescriptors, "WPE sessions leaked parent descriptors");
+
+        qunsetenv("KOBALT_WPE_RENDERER");
+        renderingMode::setOverride(1);
+        auto chapterReader = openAgain(path, {}, firstSize);
+        renderingMode::setOverride(-1);
+        const auto initialPosition = chapterReader->state().value("position");
+        const auto initialPage = chapterReader->image().copy();
+        require(chapterReader->state().contains("book_fraction")
+                        && chapterReader->sourceLocation().href != savedLocation.href,
+                "Blaze did not start before the saved WPE chapter");
+        auto missingLocation = savedLocation;
+        missingLocation.path.append(1000);
+        require(chapterReader->goTo(sourcePositionToken(missingLocation, digest)),
+                "Blaze rejected the cross-chapter bookmark request");
+        finished.exec();
+        require(!chapterReader->error().isEmpty()
+                        && chapterReader->state().value("position") == initialPosition
+                        && chapterReader->image() == initialPage,
+                "An unresolved WPE bookmark changed the active Blaze chapter");
+        require(chapterReader->goTo(bookmark),
+                "Blaze rejected the valid cross-chapter WPE bookmark request");
+        finished.exec();
+        require(chapterReader->error().isEmpty()
+                        && chapterReader->sourceLocation().href == savedLocation.href,
+                "Blaze could not restore a WPE bookmark in a different chapter window");
+#endif
+        ReaderSession::drain([&app] { app.quit(); });
+    });
+    return app.exec();
+}
+
 // Checks the reader session: opening failures, sync previews and imports, stale results, appearance progress, buffered turns, previews and non-linear pages.
 int main(int argc, char **argv)
 {
+    if (argc == 3 && QByteArray(argv[1]) == "--webkit")
+        return webKitReader(argc, argv);
     const int result = run(argc, argv);
     std::puts(
             "PASS: position comparison status, session typography, retained fresh access, preview lifetime, denied reopen, stale completion and application shutdown");

@@ -170,6 +170,8 @@ void Reader::checkpoint()
 
 void Reader::observeReading()
 {
+    if (session->usesWebKit())
+        return;
     if (closing || exitPending || lifecycleHidden || !isVisible() || services.suspended()) {
         if (!closing && !exitPending && services.suspended())
             book->sleepReading(preferences);
@@ -1975,9 +1977,10 @@ void Reader::openSearch(const QString &query)
     if (searchOriginal.isEmpty()) {
         searchOriginal = session->state().value("position").toString();
         searchOriginalPrintedPage = session->currentPrintedPosition();
-        searchOriginalPage = session->page();
+        searchOriginalPage = session->usesWebKit() ? session->bookPage() : session->page();
     }
     session->prepareSearch();
+    searchPanel->setPageScopesAvailable(session->hasPageSearchBoundary());
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(session->chapters());
     const auto safe = safeArea();
@@ -2078,10 +2081,10 @@ bool Reader::openLink(QPoint point, bool direct)
         || point.y() >= page->height() - page->topHeight() - page->bottomHeight())
         return false;
     const auto links = session->pageLinks();
-    const auto hit = linkAtPoint(links, point,
-                                 direct ? preferences.value("tappable_links").toString("footnotes")
-                                        : QString("all"),
-                                 int(metrics::links::revealPadding), direct ? 0 : ui::px(6));
+    const auto mode =
+            direct ? preferences.value("tappable_links").toString("footnotes") : QString("all");
+    const auto hit = linkAtPoint(links, point, mode, int(metrics::links::revealPadding),
+                                 direct ? 0 : ui::px(6));
     if (hit.index >= 0) {
         const auto &link = links[hit.index];
         const auto bounds = hit.bounds;
@@ -2259,6 +2262,35 @@ void Reader::lookupSelection()
             true);
 }
 
+void Reader::lookupWebKitWord(QPoint point)
+{
+    if (session->busy() || closing || lifecycleHidden || services.suspended()
+        || topControls->isVisible() || readingToolOpen())
+        return;
+    if (openLink(point, false))
+        return;
+    const auto epoch = ++lookupEpoch;
+    lookupPending = true;
+    updateOrientationBlock();
+    QPointer<Reader> guard(this);
+    session->wordAt(point, [guard, epoch](WordSelection word) {
+        if (!guard || guard->lookupEpoch != epoch)
+            return;
+        guard->lookupPending = false;
+        if (!word.text.isEmpty() && !word.rectangles.isEmpty() && !guard->closing
+            && !guard->lifecycleHidden && !guard->services.suspended()) {
+            guard->page->mark(word.rectangles);
+            guard->lookupBounds = word.rectangles.first().translated(
+                    guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
+            guard->lookupPosition = word.start;
+            guard->lookupContext.clear();
+            guard->dictionaryPanel->requested(word.text);
+        }
+        guard->updateOrientationBlock();
+        guard->updateLinkReturn();
+    });
+}
+
 QDateTime Reader::localDateTime() const
 {
     return services.localDateTime ? services.localDateTime() : QDateTime::currentDateTime();
@@ -2374,6 +2406,9 @@ void Reader::configureNavigation()
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
     using Nav = kobalt::NavigationDestination;
+    if (session->usesWebKit() && destination != Nav::Chapters && destination != Nav::Bookmarks
+        && destination != Nav::Light && destination != Nav::Seek && destination != Nav::Annotate)
+        return;
     session->cancelPendingTurn();
     if (destination == Nav::Bookmarks) {
         // The selected tab closes the list, as its close cell does.
@@ -3068,6 +3103,8 @@ void Reader::toggleGraph()
 
 void Reader::openGraph()
 {
+    if (session->usesWebKit())
+        return;
     if (!features::enabled(preferences, features::Stats))
         return;
     session->cancelPendingTurn();
@@ -3266,7 +3303,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
 // The layout that bookmark pages belong to, including the page area size.
 QString Reader::layoutKey() const
 {
-    return bookmarkLayout.key(session->pages(), session->state(), bodySize());
+    const auto key = bookmarkLayout.key(session->pages(), session->state(), bodySize());
+    return session->usesWebKit() ? key + session->state().value("position").toString() : key;
 }
 
 void Reader::syncBookmarks()
@@ -3397,6 +3435,21 @@ void Reader::saveExit(quint64 request)
     }
     if (bookmarks->hasFailedSave() || highlights->hasFailedSave()) {
         failExit(request, strings::get("annotations.change_not_saved"));
+        return;
+    }
+    if (session->usesWebKit()) {
+        QPointer<Reader> guard(this);
+        book->checkpointForClose([guard, request](bool saved) {
+            if (guard)
+                QTimer::singleShot(0, guard, [guard, request, saved] {
+                    if (!guard || request != guard->closeRequest)
+                        return;
+                    if (saved)
+                        guard->finishExitSaved(request);
+                    else
+                        guard->failExit(request);
+                });
+        });
         return;
     }
     diagnostic("exit-checkpoint-start", { { "pending_wait_ms", double(closeStage.elapsed()) } });

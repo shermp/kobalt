@@ -106,6 +106,8 @@ int BookmarkSession::bookPage(int index) const
 {
     if (!resolved() || index < 0 || index >= bookmarks().size())
         return -1;
+    if (session.usesWebKit())
+        return bookPages_.value(bookmarks()[index].position, -1);
     if (!session.state().contains("book_fraction"))
         return page(index);
     if ((!session.state().value("whole_book_ready").toBool()
@@ -189,6 +191,8 @@ bool BookmarkSession::sync()
 // at the page start with the oldest date.
 void BookmarkSession::merge()
 {
+    if (session.usesWebKit())
+        return;
     QMap<int, int> counts;
     for (int p : pages_)
         if (p >= 0)
@@ -536,9 +540,10 @@ BookmarkSession::Toggle BookmarkSession::toggle(int current)
                 else
                     pages.clear();
                 const auto state = guard->session.state();
-                const int bookPage = summary.bookPage >= 0 ? summary.bookPage
-                        : state.contains("book_fraction")  ? state.value("rough_page").toInt(0) - 1
-                                                           : current;
+                const int bookPage = summary.bookPage >= 0 || guard->session.usesWebKit()
+                        ? summary.bookPage
+                        : state.contains("book_fraction") ? state.value("rough_page").toInt(0) - 1
+                                                          : current;
                 guard->printedPages_.insert(summary.start, summary.printedPage);
                 guard->bookPages_.insert(summary.start, bookPage);
                 if (!guard->save(list, pages, "added"))

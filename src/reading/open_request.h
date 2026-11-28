@@ -39,5 +39,7 @@ struct OpenRequest
     QString dictionariesPath{};
     // The Kobo host reuses its original parsed-book cache path.
     bool migrateKoboDocumentCache = false;
+    // Optional out-of-process WPE launcher, supplied by an explicit host opt-in.
+    QString webKitRenderer{};
 };
 } // namespace kobalt

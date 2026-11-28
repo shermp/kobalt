@@ -13,6 +13,14 @@
 #include <memory>
 
 namespace kobalt {
+struct OpeningOutput;
+
+class WebResources;
+
+namespace webkit {
+class BookClient;
+}
+
 struct PageSummary
 {
     QString start, excerpt, chapter, printedPage;
@@ -66,6 +74,8 @@ struct ReaderMarkupFrame
 struct ReaderFrame
 {
     quint64 renderId = 0;
+    PageInfo pageInfo;
+    Location sourceLocation;
     int turnDirection = 0;
     bool formattingWarning = false;
     QImage image;
@@ -179,6 +189,9 @@ public:
 
     bool recoveredOpeningPosition() const { return openingResult_.recoveredPosition; }
 
+    // A shared checkpoint that the current Blaze layout could not place exactly.
+    const Location &deferredOpeningSource() const { return deferredOpeningSource_; }
+
     QJsonObject resourceStats() const { return frame.resources; }
 
     void openPreview(const ReaderSession &source, QSize size, std::function<void(QString)> finished,
@@ -217,6 +230,17 @@ public:
     // Keep at most one turn behind the current turn. The latest direction wins.
     bool turn(int direction);
     bool canTurn() const;
+
+    bool usesWebKit() const { return webKit_; }
+
+    bool webKitPositionChanged() const { return webKitPositionChanged_; }
+
+    const Location &sourceLocation() const { return frame.sourceLocation; }
+
+    // Addressable source positions can be selected before their page is known.
+    bool canNavigateSourcePosition(const QString &position) const;
+
+    bool adjustWebKitFont(int delta);
     void cancelPendingTurn();
     // Suspend optional work for the next Hybrid turn while the reader is closing.
     void pauseHybridTurnPreparation(bool paused);
@@ -328,6 +352,7 @@ public:
     void searchDetails(QVector<SearchHit> hits, SearchScope scope, const QString &origin,
                        std::function<void(QVector<SearchHit>)> finished);
     void prepareSearch();
+    bool hasPageSearchBoundary() const;
     void cancelSearch();
     void annotationGeometry(const QString &start, const QString &end,
                             std::function<void(AnnotationGeometry)> finished);
@@ -411,12 +436,16 @@ public:
     // Display pages cover the whole book. Local pages still drive navigation and geometry.
     int bookPage() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookPage.ready() ? frame.pageInfo.bookPage.value() : -1;
         return frame.state.contains("book_fraction") ? frame.state.value("rough_page").toInt() - 1
                                                      : page();
     }
 
     int bookPages() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookPages.ready() ? frame.pageInfo.bookPages.value() : 0;
         return frame.state.contains("book_fraction") ? frame.state.value("rough_pages").toInt()
                                                      : pages();
     }
@@ -438,6 +467,8 @@ public:
     // The same as a fraction from 0 to 1, for the progress bar.
     double progressFraction() const
     {
+        if (webKit_)
+            return frame.pageInfo.bookProgress.ready() ? frame.pageInfo.bookProgress.value() : 0;
         const auto fraction = frame.state.value("book_fraction");
         return fraction.isDouble() ? qBound(0.0, fraction.toDouble(), 1.0)
                                    : pageProgressFraction(page(), pages());
@@ -445,6 +476,8 @@ public:
 
     int progressPercent() const
     {
+        if (webKit_)
+            return int(progressFraction() * 100);
         const auto fraction = frame.state.value("book_fraction");
         if (fraction.isDouble()) {
             // When the estimate has page counts, keep exact percentages such as 29/50.
@@ -611,6 +644,21 @@ public:
 
 private:
     friend struct ReaderLocationProbe;
+    Location deferredOpeningSource_;
+    bool webKit_ = false;
+    bool webKitPositionChanged_ = false;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    webkit::BookClient *webKitClient_ = nullptr;
+    void openWebKit(const QString &, OpeningOutput, const QString &,
+                    std::function<void(OpeningResult)>);
+    void dispatchWebKit();
+    bool setWebKitFontPixels(int pixels);
+    void scaleWebKitPreview(QImage, QSize, quint64 request, quint64 job,
+                            std::function<void(QImage)>);
+#endif
+    std::shared_ptr<WebResources> webResources() const;
+    void completeOpening(OpeningOutput, const QString &, std::function<void(OpeningResult)>,
+                         const std::shared_ptr<SourceLease> &, quint64);
     // Background pagination only offers a document. A foreground render
     // can adopt it after checking the requested layout and reading position.
     void showFullDocument(quint64 job);

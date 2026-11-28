@@ -401,4 +401,40 @@ QString EngineDocument::positionOf(const Location &location, Restoration *restor
     const auto end = ldomXPointer(nodes.last(), nodes.last()->getText().length());
     return finish(location.offset == counted ? Restoration::Exact : Restoration::Approximate, end);
 }
+
+bool EngineDocument::goToLocation(const Location &location, Restoration *restoration)
+{
+    if (restoration)
+        *restoration = Restoration::Unresolved;
+    if (!location.valid())
+        return false;
+    const int item = spineItems().indexOf(location.href);
+    if (item < 0)
+        return false;
+    const auto place = [&location](EngineDocument &document, Restoration *placed) {
+        const auto anchor = document.positionOf(location, placed);
+        return !anchor.isEmpty() && document.goTo(anchor);
+    };
+    Restoration placed = Restoration::Unresolved;
+    if (windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_)) {
+        const auto unit = slicePages_ > 0
+                ? unitFrom(item)
+                : qMakePair(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
+        auto *next = openAhead(unit.first, {}, unit.second);
+        if (!next || item < next->windowFirst_ || item > next->windowLast_)
+            return false;
+        // Resolve the source anchor before replacing the active chapter.
+        if (!place(*next, &placed))
+            return false;
+        const qint64 loadMs = next->windowLoadMs_;
+        if (!adoptAhead(unit.first, unit.second))
+            return false;
+        windowLoadMs_ = loadMs;
+    } else if (!place(*this, &placed)) {
+        return false;
+    }
+    if (restoration)
+        *restoration = placed;
+    return true;
+}
 } // namespace kobalt

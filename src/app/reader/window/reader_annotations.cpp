@@ -547,7 +547,7 @@ bool Reader::beginAnnotationDrag(QPoint point, int boundary)
     annotationDraft->invalidate();
     annotationPopover->hide();
     annotationDrag.begin(AnnotationDrag::Boundary(boundary), point);
-    if (annotationDrag.handle)
+    if (annotationDrag.handle && !session->usesWebKit())
         loadAnnotationDragEdges();
     else
         requestAnnotationDrag();
@@ -700,9 +700,10 @@ void Reader::requestAnnotationDrag()
     if (!annotationDrag.active() || annotationDrag.requestPending || session->busy()
         || lifecycleHidden || services.suspended())
         return;
-    if (annotationDrag.turn || (annotationDrag.handle && annotationDrag.edges.first.text.isEmpty()))
+    const bool usesPageEdges = annotationDrag.handle && !session->usesWebKit();
+    if (annotationDrag.turn || (usesPageEdges && annotationDrag.edges.first.text.isEmpty()))
         return;
-    if (annotationDrag.handle) {
+    if (usesPageEdges) {
         const int direction = annotationDragPageDirection(annotationDrag.point);
         if (direction != 0) {
             if (!annotationMode
@@ -823,6 +824,10 @@ void Reader::requestAnnotationDrag()
                                     || !guard->annotationDrag.active())
                                     return;
                                 if (!hits.isEmpty()) {
+                                    if (hits.first() < 0) {
+                                        reject();
+                                        return;
+                                    }
                                     guard->annotationDrag.end();
                                     guard->showSavedAnnotation(
                                             ids[hits.first()],
@@ -1345,6 +1350,23 @@ void Reader::syncAnnotations()
     if (annotationPresentationReady) {
         return;
     }
+    if (session->usesWebKit()) {
+        if (annotationFrame == tintFrame || annotationPresentationCapture)
+            return;
+        savedHighlightRects.clear();
+        page->setSavedHighlights({});
+        const auto epoch = ++savedHighlightEpoch;
+        annotationPresentationCapture = true;
+        QPointer<Reader> guard(this);
+        session->captureMarkup([guard, epoch](bool ready) {
+            if (!guard)
+                return;
+            guard->annotationPresentationCapture = false;
+            if (ready && guard->savedHighlightEpoch == epoch)
+                guard->syncAnnotations();
+        });
+        return;
+    }
     if (annotationFrame == tintFrame) {
         if (showActions) {
             annotationShowActionsPending = false;
@@ -1417,8 +1439,9 @@ QVector<BookmarkRow> Reader::annotationRows() const
             row.printedEnd = locations.printedPages.value(i * 2 + 1);
         }
         row.endPage = locations.bookPages.value(i * 2 + 1, -1);
-        row.pagePending = session->state().contains("book_fraction")
-                && session->state().value("rough_pages").toInt() <= 0;
+        row.pagePending = session->usesWebKit() ? session->canNavigateSourcePosition(item.start)
+                                                : session->state().contains("book_fraction")
+                        && session->state().value("rough_pages").toInt() <= 0;
         row.style = item.style;
         row.color = item.color;
         row.sourceOrder = locations.order.value(i * 2, -1);
