@@ -18,10 +18,12 @@ Each book has one record in `kobalt.sqlite`: `book_state(identity, format, revis
 - Display and session values are not saved: chapter titles, page counts, current and next page numbers, the resolved display font, cached-page counts, Fast source-word counts, estimated bookmark and highlight page labels, and the loaded slice start. The next save removes them from older records. Diagnostic snapshots still include them.
 - Older annotations without a chapter label get a display label from their position. The record is not rewritten.
 
+Book records can carry an optional `source_location` for switching between koblaze and WPE. It stores the publication fingerprint and Blaze Location version 1, including the spine href, element path, counted code-point offset and affinity. It also records the unchanged XPointer and `dom_version` from that checkpoint. If an older reader moves the native position, the original and recorded values diverge and the companion is ignored. If Blaze opens at a fallback because it cannot place the shared position exactly, it keeps the companion through appearance changes and checkpoints until the reader moves. WPE updates the companion after a reading move and copies matching observed Nickel progress into the Kobalt record for reconciliation. Koblaze still writes its XPointer and DOM version. Unknown source-location records remain in place. Book-record format and database schema stay unchanged.
+
 ## Mark as unread and reopening
 
 - When Nickel marks a book as unread, Kobalt keeps the book identity and the fields listed below.
-- It removes only reading progress: the position and imported native location, page and chapter fields, percentages, `finished_position`, `suppress_finish_prompt`, `nickel_progress`, `sync_pending` and the native write-back fields.
+- It removes only reading progress: the position, its supported and matching source companion, the imported native location, page and chapter fields, percentages, `finished_position`, `suppress_finish_prompt`, `nickel_progress`, `sync_pending` and the native write-back fields.
 - It keeps everything else: book-specific text preferences and `text_preset`, `dictionary_id`, `image_views`, annotations, `hide_book_on_sleep_screen`, `sleep_positions`, `main_text_marks` (with `fingerprint`) and `page_estimate`. The reopened book keeps its own settings.
 - Reopening a finished book resets only the reading position and the finished status. Book-specific preferences and annotations stay.
 

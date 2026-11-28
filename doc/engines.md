@@ -16,6 +16,20 @@ The Rendering engine setting selects how Blaze lays out the book.
 
 Some content needs whole-book layout even in chapter mode, including linked footnotes when the reader shows them below the text. See [reader settings](reader/settings.md), [navigation](reader/navigation.md) and [layout validation](validation/layout.md).
 
+## Experimental WebKit reader
+
+An explicit launcher selects the standalone WPE renderer on Linux or Kobo. Blaze is the default. WebKit keeps one WebView, follows the shared reader's display refresh and damage rules, and uses shared bookmark, annotation and selection presentation. The reader can preview an adjacent page and return to the confirmed frame.
+
+| Upstream behavior | WebKit integration |
+| --- | --- |
+| Publication metadata and cover preferences | Title, author and contents come from the admitted EPUB. A cover request honors host or embedded preference and uses the other available source as fallback. Embedded covers use the admitted manifest and the shared image decoder. |
+| Deferred navigation | Marks in unloaded spine items remain selectable by their fingerprint-bound source position. A page label appears only when the reader knows it. A confirmed Nickel unread reset clears the supported shared position. Direct Nickel position import and writeback use Blaze. |
+| Appearance previews | The requested font size and viewport reach the first render. Later changes reflow the retained view. Isolated appearance previews and the full typography and layout settings panels remain Blaze features. |
+| Display efficiency | The shared display path batches refreshes and compares the confirmed image with the previous image. Precomputing damage and changing the two-slot buffer would need separate device measurements. |
+| Pagination persistence | WebKit holds confirmed per-spine counts for the current viewport and font size. Reusing the saved record needs a WebKit layout key covering the runtime, fonts and layout inputs. Blaze's saved page estimates, publisher labels and main-text boundaries do not supply WebKit page numbers. |
+
+See the [WebKit implementation plan](webkit/IMPLEMENTATION-PLAN.md) and [DOM-M5 measurements](webkit/WPE-DOM-M5.md).
+
 ## Hybrid on Kobo
 
 Most Kobo models use one processor core, including the Clara BW. KOReader’s device table marks only the Elipsa, the Sage, the Elipsa 2E, the Libra Colour and the Clara Colour as multi-core. On one core, the reader window, the engine worker and the whole-book build share that core with each other and with Nickel. A Kobo is about 25 to 40 times slower than the Mac for layout work (see [Cost](engines/migration.md#cost)). Hybrid stays fast on these devices because of the rules below. Keep them when you change Blaze, its adapter or the reading session.

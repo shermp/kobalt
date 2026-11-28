@@ -34,7 +34,7 @@
 
 ## Bookmarks and pins
 
-- Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Positions are canonical CREngine XPointers, not page numbers. Dates are UTC ISO 8601.
+- Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Blaze stores CREngine XPointers. WPE stores fingerprint-bound version 1 source locations in the same field. Older readers can retain these bookmarks as unresolved entries. Dates are UTC ISO 8601.
 - Optional `name` and `icon` are limited to 128 and 64 UTF-16 code units. Without them, the bookmark is an ordinary bookmark.
 - A non-empty `icon` pins the bookmark. Each book allows eight pins.
 - An unknown icon keeps its stored value and shows a star.
@@ -60,6 +60,7 @@
 ## Highlights and notes
 
 - Each highlight stores `id`, `start`, `end`, `text`, `chapter` and `created`.
+- WPE stores fingerprint-bound `Location` tokens in the existing `start` and `end` fields. Ranges the active engine cannot resolve stay in storage.
 - Optional `color` is `gray` (default), `yellow`, `green`, `blue` or `pink`. Optional `style` is `shaded` (default), `underline` or `dotted`. Unknown values stay through edits and show a fallback.
 - Optional `sentence_start` and `sentence_end` objects record endpoint provenance with `enabled` and `chosen_start` or `chosen_end`.
 - Optional `note` is plain text. A missing note is empty. Notes keep Unicode and line breaks. Passage edits and appearance changes keep the note.
