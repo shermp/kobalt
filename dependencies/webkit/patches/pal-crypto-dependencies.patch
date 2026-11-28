@@ -1,0 +1,8 @@
+--- a/Source/WebCore/PAL/pal/PlatformWPE.cmake
++++ b/Source/WebCore/PAL/pal/PlatformWPE.cmake
+@@ -20,4 +20,4 @@
+     text/KillRing.cpp
+ )
+ 
+-list(APPEND PAL_LIBRARIES GLib::GLib)
++list(APPEND PAL_LIBRARIES GLib::GLib LibGcrypt::LibGcrypt Tasn1::Tasn1)

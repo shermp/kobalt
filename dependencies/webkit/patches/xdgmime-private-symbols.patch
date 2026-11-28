@@ -1,0 +1,12 @@
+--- a/Source/ThirdParty/xdgmime/CMakeLists.txt
++++ b/Source/ThirdParty/xdgmime/CMakeLists.txt
+@@ -18,6 +18,9 @@
+ 
+ include_directories("${XDGMIME_INCLUDE_DIRECTORIES}")
+ add_definitions(-DXDG_PREFIX=_wk_xdg)
++# These private symbols are outside xdgmime's XDG_PREFIX macros.
++add_definitions(-D_caches=_wk_xdg_caches
++    -D_xdg_binary_or_text_fallback=_wk_xdg_binary_or_text_fallback)
+ add_library(xdgmime STATIC ${XDGMIME_SOURCES})
+ 
+ if (CMAKE_CXX_BYTE_ORDER STREQUAL "LITTLE_ENDIAN")
