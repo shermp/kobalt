@@ -1,9 +1,8 @@
 #include "book_metadata.h"
+#include "publication/image_policy.h"
 #include "publication/publication.h"
 #include "publication/zip_resource.h"
-#include <QBuffer>
 #include <QDir>
-#include <QImageReader>
 #include <QUrl>
 #include <QXmlStreamReader>
 
@@ -151,21 +150,6 @@ QString packagePath(const QByteArray &container)
     return {};
 }
 
-QImage decodeCover(const QByteArray &bytes)
-{
-    QBuffer buffer;
-    buffer.setData(bytes);
-    buffer.open(QIODevice::ReadOnly);
-    QImageReader reader(&buffer);
-    const auto size = reader.size();
-    // Refuse images that would need a very large decode buffer.
-    if (!size.isValid() || size.width() > 8192 || size.height() > 8192 || size.isEmpty())
-        return {};
-    if (size.width() > coverSize.width() || size.height() > coverSize.height())
-        reader.setScaledSize(size.scaled(coverSize, Qt::KeepAspectRatio));
-    auto image = reader.read();
-    return image.isNull() ? QImage() : image.convertToFormat(QImage::Format_RGB32);
-}
 } // namespace
 
 BookMetadata readBookMetadata(QIODevice &source)
@@ -199,7 +183,8 @@ BookMetadata readBookMetadata(QIODevice &source, const Publication &publication)
     metadata.seriesIndex = parsed.seriesIndex;
     const auto cover = resolve(package, parsed.coverHref);
     if (!cover.isEmpty())
-        metadata.cover = decodeCover(member(source, publication, cover, imageLimit));
+        metadata.cover =
+                decodePublicationCover(member(source, publication, cover, imageLimit), coverSize);
     return metadata;
 }
 } // namespace kobalt::library

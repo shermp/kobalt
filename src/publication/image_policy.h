@@ -1,6 +1,7 @@
 #pragma once
 #include "support/qt_compat.h"
 #include <QByteArray>
+#include <QImage>
 #include <QSize>
 #include <QString>
 
@@ -19,5 +20,6 @@ struct ImageHeader
 
 ImageHeader inspectImageHeader(const QByteArray &prefix);
 bool imageFileName(const QString &name);
+QImage decodePublicationCover(const QByteArray &bytes, QSize maximumSize);
 QByteArray imagePlaceholder(QSize original = {}, const QString &systemFont = "sans-serif");
 } // namespace kobalt

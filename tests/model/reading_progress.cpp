@@ -1,5 +1,6 @@
 #include "support/qt_compat.h"
 #include "reading/reading_progress.h"
+#include "publication/source_position.h"
 #include "platforms/kobo/common/progress_policy.h"
 #include "platforms/kobo/common/native_location.h"
 #include "platforms/kobo/common/local_book_path.h"
@@ -182,6 +183,20 @@ int main(int argc, char **argv)
     require(resetNativeUnread(reset, unread)
                     && reset == QJsonObject({ { "book", first.book }, { "font_pixels", 42 } }),
             "Nickel's unread status did not reset the position, or reset book settings");
+    auto shared = checkpoint;
+    shared.remove("position");
+    Location source;
+    source.href = QStringLiteral("chapter.xhtml");
+    require(rememberSourcePosition(shared, source, "fingerprint", QStringLiteral("wpe")),
+            "Could not seed WebKit-only progress");
+    reset = shared;
+    require(resetNativeUnread(reset, unread) && !reset.contains(sourcePositionKey),
+            "Nickel's unread status left WebKit-only progress active");
+    auto future = shared.value(sourcePositionKey).toObject();
+    future["version"] = 19;
+    shared[sourcePositionKey] = future;
+    require(resetNativeUnread(shared, unread) && shared.value(sourcePositionKey) == future,
+            "Mark as unread discarded an unsupported source companion");
     reset = {};
     auto unreadWithBookmark = unread;
     unreadWithBookmark.location = first.location;

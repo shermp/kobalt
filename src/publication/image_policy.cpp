@@ -1,5 +1,7 @@
 #include "image_policy.h"
 #include "support/strings.h"
+#include <QBuffer>
+#include <QImageReader>
 #include <QtEndian>
 #include <cstring>
 #include <webp/decode.h>
@@ -87,6 +89,24 @@ bool imageFileName(const QString &name)
     const auto suffix = name.mid(name.lastIndexOf('.') + 1).toLower();
     return suffix == "png" || suffix == "jpg" || suffix == "jpeg" || suffix == "gif"
             || suffix == "svg" || suffix == "webp";
+}
+
+QImage decodePublicationCover(const QByteArray &bytes, QSize maximumSize)
+{
+    if (maximumSize.isEmpty())
+        return {};
+    QBuffer buffer;
+    buffer.setData(bytes);
+    buffer.open(QIODevice::ReadOnly);
+    QImageReader reader(&buffer);
+    const auto size = reader.size();
+    // Refuse images that would need a very large decode buffer.
+    if (!size.isValid() || size.width() > 8192 || size.height() > 8192 || size.isEmpty())
+        return {};
+    if (size.width() > maximumSize.width() || size.height() > maximumSize.height())
+        reader.setScaledSize(size.scaled(maximumSize, Qt::KeepAspectRatio));
+    auto image = reader.read();
+    return image.isNull() ? QImage() : image.convertToFormat(QImage::Format_RGB32);
 }
 
 QByteArray imagePlaceholder(QSize original, const QString &systemFont)

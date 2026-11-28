@@ -1,6 +1,7 @@
 #include "check.h"
 #include "publication/local_resources.h"
 #include "publication/publication.h"
+#include "publication/web_resources.h"
 #include "support/strings.h"
 
 #include <QCoreApplication>
@@ -9,6 +10,7 @@
 #include <QtEndian>
 
 #include <thread>
+#include <tuple>
 
 #include <zlib.h>
 
@@ -91,6 +93,133 @@ QByteArray zip(const QMap<QString, QByteArray> &files, bool deflated = false, bo
     u16(bytes, 0);
     return bytes;
 }
+void checkWebResources(const QString &fixture, const QString &scratch)
+{
+    auto checkBook = [](const QString &path) {
+        QFile file(path);
+        Publication publication;
+        QString error;
+        require(file.open(QIODevice::ReadOnly) && publication.inspect(file, &error),
+                qPrintable(error));
+        auto lease = std::make_shared<SourceLease>();
+        auto cache = localResourceFactory(path, lease)(publication.sizes(), {}, {});
+        auto resources = WebResources::open(publication, cache, lease, &error);
+        require(resources && resources->fingerprint() == publication.fingerprint(),
+                qPrintable(error));
+        return std::make_tuple(std::move(resources), std::move(cache), std::move(lease));
+    };
+
+    auto [book, cache, lease] = checkBook(fixture);
+    require(book->spine().contains(QStringLiteral("OEBPS/chapter1.xhtml"))
+                    && book->navigation() == QStringLiteral("OEBPS/nav.xhtml"),
+            "Type Tester has incorrect manifest order or navigation");
+    const auto chapter = book->url("OEBPS/chapter1.xhtml");
+    const int before = cache->statistics()["requests"].toInt();
+    const auto reading = book->read(chapter);
+    require(reading.mediaType == "application/xhtml+xml" && reading.bytes.contains("<p"),
+            "Type Tester chapter did not load");
+    require(book->read(chapter).bytes == reading.bytes
+                    && cache->statistics()["requests"].toInt() == before + 1,
+            "Scoped request extracted the same chapter twice");
+    require(book->read(book->url("OEBPS/styles.css")).mediaType == "text/css"
+                    && book->read(book->url("OEBPS/cover.png")).mediaType == "image/png",
+            "Declared stylesheet or image did not load");
+    const QSize coverBounds(120, 180);
+    const auto cover = book->coverImage(coverBounds);
+    require(!cover.isNull() && cover.width() <= coverBounds.width()
+                    && cover.height() <= coverBounds.height(),
+            "The admitted cover did not fit its requested bounds");
+    const auto prefix = chapter.left(chapter.indexOf("/OEBPS/"));
+    const auto requests = cache->statistics()["requests"].toInt();
+    for (const auto &url : {QByteArray("https://example.org/OEBPS/chapter1.xhtml"),
+                            QByteArray("file:///OEBPS/chapter1.xhtml"),
+                            prefix + "/OEBPS/../OEBPS/chapter1.xhtml",
+                            prefix + "/OEBPS/%2e%2e/OEBPS/chapter1.xhtml",
+                            prefix + "/OEBPS%2Fchapter1.xhtml",
+                            prefix + "/META-INF/container.xml",
+                            prefix + "/OEBPS/toc.ncx", chapter + "?x", chapter + "#anchor"}) {
+        require(book->read(url).bytes.isNull(), "Unauthorized URI was served");
+    }
+    auto [other, otherCache, otherLease] = checkBook(fixture);
+    require(other->read(chapter).bytes.isNull()
+                    && cache->statistics()["requests"].toInt() == requests,
+            "Cross-opening URL or rejected resource reached the archive");
+    lease->revoke();
+    require(book->read(chapter).bytes.isNull() && book->coverImage(coverBounds).isNull(),
+            "Revoked opening served cached publication bytes");
+
+    QMap<QString, QByteArray> files{
+        {"mimetype", "application/epub+zip"},
+        {"META-INF/container.xml",
+         "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container'><rootfiles>"
+         "<rootfile full-path='OPS/book.opf' media-type='application/oebps-package+xml'/>"
+         "</rootfiles></container>"},
+        {"OPS/ch ap.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><body>Test</body></html>"},
+        {"OPS/spoof.png", "<html>not a bitmap</html>"},
+        {"OPS/big.css", QByteArray(2 * 1024 * 1024 + 1, 'x')},
+        {"OPS/font.woff2", QByteArray("wOF2fixture")},
+        {"OPS/hidden.xhtml", "<html>undeclared</html>"},
+    };
+    const QByteArray opf =
+            "<package xmlns='http://www.idpf.org/2007/opf'><manifest>"
+            "<item id='c' href='ch%20ap.xhtml' media-type='application/xhtml+xml'/>"
+            "<item id='i' href='spoof.png' media-type='image/png' properties='cover-image'/>"
+            "<item id='s' href='big.css' media-type='text/css'/>"
+            "<item id='f' href='font.woff2' media-type='font/woff2'/>"
+            "<item id='m' href='wrong.png' media-type='text/css'/>"
+            "</manifest><spine><itemref idref='c'/></spine></package>";
+    files["OPS/wrong.png"] = "body{}";
+    auto openSynthetic = [&](const QByteArray &package, bool expectedAdmission = true) {
+        files["OPS/book.opf"] = package;
+        const auto bytes = zip(files, true);
+        QFile file(scratch);
+        require(file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                        && file.write(bytes) == bytes.size(), "write scoped EPUB");
+        file.close();
+        Publication publication;
+        QString error;
+        require(publication.inspect(bytes, &error) == expectedAdmission, "Unexpected ZIP admission");
+        return openLocalWebResources(scratch, std::make_shared<SourceLease>(), &error);
+    };
+    auto scoped = openSynthetic(opf);
+    require(scoped && !scoped->read(scoped->url("OPS/ch ap.xhtml")).bytes.isNull()
+                    && scoped->read(scoped->url("OPS/font.woff2")).mediaType == "font/woff2",
+            "Canonical escaped name or supported font failed");
+    for (const auto *member : {"OPS/big.css", "OPS/wrong.png", "OPS/hidden.xhtml"}) {
+        require(scoped->url(QString::fromLatin1(member)).isEmpty(),
+                "Oversized, mistyped or unlisted member was authorized");
+    }
+    require(scoped->read(scoped->url("OPS/spoof.png")).bytes.isNull()
+                    && scoped->coverImage(coverBounds).isNull(),
+            "MIME signature mismatch was accepted");
+    const auto pinnedChapter = scoped->url("OPS/ch ap.xhtml");
+    auto rewritten = opf;
+    require(bool(openSynthetic(rewritten)), "Replacement fixture did not open");
+    require(scoped->read(pinnedChapter).bytes.isNull(), "Changed EPUB served cached resource bytes");
+    files["OPS/legacy.png"] = other->read(other->url("OEBPS/cover.png")).bytes;
+    auto legacyOpf = opf;
+    legacyOpf.replace("<manifest>",
+                      "<metadata><meta name='cover' content='i'/></metadata><manifest>");
+    legacyOpf.replace("href='spoof.png' media-type='image/png' properties='cover-image'",
+                      "href='legacy.png' media-type='image/png'");
+    auto legacy = openSynthetic(legacyOpf);
+    require(legacy && legacy->coverImage(coverBounds) == cover,
+            "The declared EPUB 2 cover did not resolve through the admitted manifest");
+    for (const auto *href : {"../../outside.xhtml", "%2e%2e/ch.xhtml",
+                             "dir%2fch.xhtml", "https://example.org/a.xhtml", "//remote/a.xhtml"}) {
+        auto invalid = opf;
+        require(!openSynthetic(invalid.replace("ch%20ap.xhtml", href)),
+                "Malformed or external manifest URL was admitted");
+    }
+    auto unknownSpine = opf;
+    require(!openSynthetic(unknownSpine.replace("idref='c'", "idref='missing'")),
+            "Missing spine member was admitted");
+    files["META-INF/license.lcpl"] = "{}";
+    require(!openSynthetic(opf, false), "Protected book opened through the web scope");
+    files.remove("META-INF/license.lcpl");
+    files["META-INF/encryption.xml"] = "<encryption><EncryptedData/></encryption>";
+    require(!openSynthetic(opf, false), "Unsupported encryption metadata was admitted");
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -98,6 +227,8 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     QTemporaryDir directory;
     require(directory.isValid(), "temporary directory");
+    require(argc == 2, "Expected the Type Tester EPUB path");
+    checkWebResources(QString::fromLocal8Bit(argv[1]), directory.path() + "/scoped.epub");
     const auto path = directory.path() + "/book#part?name%20.kepub.epub";
     QMap<QString, QByteArray> files{ { "mimetype", "application/epub+zip" },
                                      { "META-INF/container.xml", "<container/>" },

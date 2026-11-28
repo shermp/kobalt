@@ -1,5 +1,6 @@
 #include "support/qt_compat.h"
 #include "reading_progress.h"
+#include "publication/source_position.h"
 #include "support/strings.h"
 
 namespace kobalt {
@@ -157,6 +158,10 @@ bool resetNativeUnread(QJsonObject &checkpoint, const ReadingProgress &current)
             && (saved.book != current.book
                 || (saved.status == 0 && !preferNativeProgress(current, saved)))))
         return false;
+    const auto companion = checkpoint.value(sourcePositionKey).toObject();
+    const auto fingerprint = companion.value("fingerprint").toString().toLatin1();
+    if (savedSourcePosition(checkpoint, fingerprint).valid())
+        checkpoint.remove(sourcePositionKey);
     // Marking a book as unread resets where the reader is, not how the book
     // is set up. Remove only reading progress; text settings, the text
     // preset, the dictionary and every other choice stay.

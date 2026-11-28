@@ -16,6 +16,7 @@ class LocalResources
 {
 public:
     QString path, systemFont;
+    std::unique_ptr<QFile> pinnedFile;
     QMap<QString, qint64> sizes;
     std::shared_ptr<SourceLease> lease;
     std::shared_ptr<std::atomic_bool> contentRejected;
@@ -23,7 +24,10 @@ public:
     ZipResourceIndex index;
     qint64 requests = 0, failures = 0, readNs = 0, sinkNs = 0, xmlNs = 0;
 
-    bool cancelled() const { return !lease || lease->revoked(); }
+    bool cancelled() const
+    {
+        return !lease || lease->revoked() || (pinnedFile && !index.stillPinned(*pinnedFile));
+    }
 
     QJsonObject statistics() const
     {
@@ -70,7 +74,9 @@ private:
             return !cancelled() && sink(placeholder.constData(), placeholder.size());
         }
         ZipResource stream;
-        if (!stream.open(path, name, index, ResourceCache::budgetBytes)) {
+        const bool opened = pinnedFile ? stream.open(*pinnedFile, name, index, ResourceCache::budgetBytes)
+                                       : stream.open(path, name, index, ResourceCache::budgetBytes);
+        if (!opened) {
             return fail("error.could_not_load_a_book_resource");
         }
         if (stream.size() != sizes.value(name)) {
@@ -162,6 +168,28 @@ private:
         return true;
     }
 };
+std::shared_ptr<ResourceCache> makeLocalCache(const std::shared_ptr<LocalResources> &access)
+{
+    auto load = [access](const QString &name, const ResourceCache::Sink &sink, QString *error) {
+        return access->read(name, sink, error);
+    };
+    auto probe = [access](const QString &name) {
+        if (!imageFileName(name) || name.endsWith(".svg", Qt::CaseInsensitive)
+            || access->sizes.value(name) < 256 * 1024
+            || access->sizes.value(name) > ResourceCache::budgetBytes) {
+            return QSize();
+        }
+        QSize dimensions;
+        QString error;
+        access->read(name, [](const char *, qint64) { return true; }, &error, &dimensions);
+        return dimensions;
+    };
+    return std::make_shared<ResourceCache>(
+            access->sizes.keys(),
+            ResourceCache::Access{ std::move(load), [access] { return access->cancelled(); },
+                                   [access] { return access->statistics(); },
+                                   std::move(probe) });
+}
 } // namespace
 
 ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> lease)
@@ -175,26 +203,28 @@ ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> 
         access->sizes = sizes;
         access->lease = lease;
         access->contentRejected = std::move(contentRejected);
-        auto load = [access](const QString &name, const ResourceCache::Sink &sink, QString *error) {
-            return access->read(name, sink, error);
-        };
-        auto probe = [access](const QString &name) {
-            if (!imageFileName(name) || name.endsWith(".svg", Qt::CaseInsensitive)
-                || access->sizes.value(name) < 256 * 1024
-                || access->sizes.value(name) > ResourceCache::budgetBytes) {
-                return QSize();
-            }
-            QSize dimensions;
-            QString error;
-            access->read(name, [](const char *, qint64) { return true; }, &error, &dimensions);
-            return dimensions;
-        };
-        return std::make_shared<ResourceCache>(
-                sizes.keys(),
-                ResourceCache::Access{ std::move(load), [access] { return access->cancelled(); },
-                                       [access] { return access->statistics(); },
-                                       std::move(probe) });
+        return makeLocalCache(access);
     };
+}
+
+std::unique_ptr<WebResources> openLocalWebResources(const QString &path,
+                                                    std::shared_ptr<SourceLease> lease,
+                                                    QString *error)
+{
+    auto access = std::make_shared<LocalResources>();
+    access->lease = lease;
+    access->pinnedFile = std::make_unique<QFile>(path);
+    Publication publication;
+    if (!lease || lease->revoked() || !access->pinnedFile->open(QIODevice::ReadOnly)
+        || !access->index.pin(*access->pinnedFile)) {
+        if (error)
+            *error = QStringLiteral("Cannot pin EPUB source");
+        return {};
+    }
+    if (!publication.inspect(*access->pinnedFile, error))
+        return {};
+    access->sizes = publication.sizes();
+    return WebResources::open(publication, makeLocalCache(access), std::move(lease), error);
 }
 
 namespace native {
